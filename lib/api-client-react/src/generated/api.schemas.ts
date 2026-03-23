@@ -108,6 +108,8 @@ export interface ParseTranscriptBody {
 export interface ParseTranscriptResponse {
   exercises: Exercise[];
   rawTranscript: string;
+  /** Human-readable list of what changed (e.g. "Updated bench press sets to 5", "Removed lat pulldown") */
+  changes?: string[];
 }
 
 export interface TranscribeResponse {

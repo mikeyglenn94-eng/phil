@@ -93,9 +93,28 @@ export default function SessionEditor() {
         data: { transcript, existingExercises: exercises }
       });
       setExercises(response.exercises);
-      toast({ title: "Exercises parsed from voice!" });
+
+      // Show a meaningful description of what changed
+      const changes = (response as any).changes as string[] | undefined;
+      if (changes && changes.length > 0) {
+        toast({
+          title: changes.length === 1 ? changes[0] : `${changes.length} changes applied`,
+          description: changes.length > 1 ? changes.join(" · ") : undefined,
+        });
+      } else {
+        const before = exercises.length;
+        const after = response.exercises.length;
+        const diff = after - before;
+        toast({
+          title: diff > 0
+            ? `Added ${diff} exercise${diff !== 1 ? "s" : ""}`
+            : diff < 0
+            ? `Removed ${Math.abs(diff)} exercise${Math.abs(diff) !== 1 ? "s" : ""}`
+            : "Session updated",
+        });
+      }
     } catch {
-      toast({ title: "Failed to parse voice input", variant: "destructive" });
+      toast({ title: "Failed to parse input", variant: "destructive" });
     }
   };
 
@@ -203,10 +222,18 @@ export default function SessionEditor() {
 
           {/* Voice Input */}
           <div className="mb-8">
-            <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Voice Builder</h2>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase">Voice / Edit</h2>
+              {exercises.length > 0 && (
+                <span className="text-[10px] text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+                  Add · Edit · Remove · Reorder
+                </span>
+              )}
+            </div>
             <VoiceInput
               onTranscriptComplete={handleTranscriptComplete}
               isProcessing={parseMutation.isPending}
+              editMode={exercises.length > 0}
             />
           </div>
 

@@ -8,11 +8,12 @@ import { useToast } from "@/hooks/use-toast";
 interface VoiceInputProps {
   onTranscriptComplete: (text: string) => void;
   isProcessing?: boolean;
+  editMode?: boolean;
 }
 
 type InputMode = "voice" | "text";
 
-export function VoiceInput({ onTranscriptComplete, isProcessing }: VoiceInputProps) {
+export function VoiceInput({ onTranscriptComplete, isProcessing, editMode = false }: VoiceInputProps) {
   const [mode, setMode] = useState<InputMode>("voice");
   const [isRecording, setIsRecording] = useState(false);
   const [interimText, setInterimText] = useState("");
@@ -235,14 +236,37 @@ export function VoiceInput({ onTranscriptComplete, isProcessing }: VoiceInputPro
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Describe the session in plain language, e.g.\n"Back squat 4x6 RPE 8, Romanian deadlift 3x10, leg press 3x15 rest 2 mins"`}
+              placeholder={editMode
+                ? `Edit the session in plain language, e.g.\n"Change the bench press to 5 sets of 5"\n"Remove the lat pulldown"\n"Add RPE 9 to the deadlift"\n"Move squats to the start"`
+                : `Describe the session in plain language, e.g.\n"Back squat 4x6 RPE 8, Romanian deadlift 3x10, leg press 3x15 rest 2 mins"`}
               className="min-h-[130px] resize-none text-sm bg-muted/30 border-transparent hover:border-input focus:bg-background rounded-xl"
               disabled={isProcessing}
               autoFocus
             />
+            {editMode && (
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  "Change X to 4 sets of 8",
+                  "Remove X",
+                  "Add RPE 9 to X",
+                  "Move X to the end",
+                  "Swap X for Y",
+                  "Set all rests to 2 min",
+                ].map(hint => (
+                  <button
+                    key={hint}
+                    type="button"
+                    className="text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground rounded-full px-2 py-0.5 transition-colors"
+                    onClick={() => setTextInput(hint)}
+                  >
+                    {hint}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Tip: <kbd className="font-mono bg-muted px-1 py-0.5 rounded text-[10px]">⌘ Enter</kbd> to parse
+                Tip: <kbd className="font-mono bg-muted px-1 py-0.5 rounded text-[10px]">⌘ Enter</kbd> to apply
               </p>
               <Button
                 onClick={handleTextSubmit}

@@ -372,6 +372,12 @@ export const ParseTranscriptResponse = zod.object({
     }),
   ),
   rawTranscript: zod.string(),
+  changes: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      'Human-readable list of what changed (e.g. \"Updated bench press sets to 5\", \"Removed lat pulldown\")',
+    ),
 });
 
 /**

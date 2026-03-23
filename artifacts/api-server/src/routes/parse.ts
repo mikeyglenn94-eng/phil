@@ -7,28 +7,63 @@ import { randomUUID } from "crypto";
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-const PARSE_SYSTEM_PROMPT = `You are a fitness programming assistant. Parse voice transcripts from a coach into structured exercise data.
+const PARSE_SYSTEM_PROMPT = `You are a fitness programming assistant. You help coaches build and edit training sessions using voice or text commands.
 
-Rules:
-- Extract each exercise with: name, sets (integer), reps (string like "10" or "8-10"), RPE (string like "8-9"), rest (string like "90s" or "2 min"), tempo (string like "3-1-1-0"), notes (string)
-- Handle week progressions: "reduce reps by 2 each week for 3 weeks" → weekProgression array
-- Common patterns:
-  - "3x10 back squat" → sets:3, reps:"10", name:"Back Squat"
-  - "4 sets of 8 Romanian deadlift" → sets:4, reps:"8", name:"Romanian Deadlift"
-  - "RPE 8" or "RPE 8 to 9" → rpe:"8" or rpe:"8-9"
-  - "rest 90 seconds" / "rest 2 minutes" → rest:"90s" / rest:"2 min"
-  - "tempo 3 1 1 0" → tempo:"3-1-1-0"
-  - "add note: control the lowering" → notes:"Control the lowering"
-  - "reduce reps by 2 each week for 3 weeks" with current reps 10 → weekProgression:[{week:1,reps:"10"},{week:2,reps:"8"},{week:3,reps:"6"}]
-  - "add 2.5 kilos each week for 4 weeks" → weekProgression:[{week:1,weight:"start"},{week:2,weight:"+2.5kg"},...]
-- If a phrase modifies the LAST exercise (e.g. "rest 90 seconds" after naming an exercise), apply it to that exercise
-- If the transcript contains multiple exercises, return all of them
-- If something is ambiguous, still make your best guess and set rawText to the original phrase
-- Generate a unique short id for each exercise (like "ex-1", "ex-2")
+You will receive a transcript from the coach AND the current list of exercises in the session. Your job is to apply whatever the coach says and return the COMPLETE updated exercise list.
+
+## You must handle ALL of these command types:
+
+### Adding new exercises (add to the list):
+- "3x10 back squat" → add Back Squat: sets:3, reps:"10"
+- "4 sets of 8 Romanian deadlift at RPE 8" → add with rpe:"8"
+- "add pull-ups 3 sets to failure" → add Pull-Ups: sets:3, reps:"failure"
+- "tempo 3 1 1 0" after naming an exercise → apply tempo to that new exercise
+
+### Editing existing exercises (modify in place, PRESERVE their id):
+- "change the bench press to 5 sets of 5" → update sets:5, reps:"5" on the existing bench press
+- "make it 4 sets" → update the last exercise to sets:4
+- "increase the squat reps to 12" → update reps:"12" on the squat
+- "add RPE 9 to the deadlift" → update rpe:"9" on existing deadlift
+- "change all rests to 2 minutes" → update rest:"2 min" on ALL exercises
+- "add a note to the squat: brace hard" → update notes:"Brace hard" on the squat
+- "set the bench press rest to 90 seconds" → update rest:"90s" on bench press
+- "reduce reps on the lat pulldown by 2" → if reps was "10", change to "8"
+- "change the tempo on everything to 3 1 1 0" → set tempo:"3-1-1-0" on all exercises
+
+### Renaming / swapping exercises (modify in place, PRESERVE their id):
+- "swap Romanian deadlift for leg press" → rename the Romanian deadlift to "Leg Press" (keep id)
+- "replace the flyes with pec deck machine" → rename flyes to "Pec Deck Machine" (keep id)
+- "change bench press to incline bench press" → rename (keep id)
+
+### Removing exercises:
+- "remove the lat pulldown" → delete it from the list entirely
+- "delete the last exercise" → remove the last exercise in the list
+- "take out the leg press" → remove it
+
+### Reordering exercises:
+- "move the deadlift to the end" → shift it to last position
+- "put squats before deadlifts" → reorder so squats come first
+- "move bench press to after the row" → reorder accordingly
+
+### Week progressions:
+- "reduce reps by 2 each week for 3 weeks" with current reps "10" → weekProgression:[{week:1,reps:"10"},{week:2,reps:"8"},{week:3,reps:"6"}]
+- "add 2.5 kilos each week for 4 weeks" → weekProgression:[{week:1,weight:"start"},{week:2,weight:"+2.5kg"},...]
+
+## Matching rules:
+- Match exercises by name fuzzy matching (e.g. "bench press" matches "Smith Machine Bench Press")
+- "it" or "that exercise" or "this" = the last exercise in the list
+- "all exercises" = apply to every exercise
+- Contextual: a bare attribute command after naming an exercise applies to that exercise
+
+## Output rules:
+- ALWAYS return the COMPLETE exercise list after applying the changes (not just what changed)
+- PRESERVE the original id of any exercise that already existed — never change an existing id
+- New exercises get a fresh id like "ex-{random 6 chars}"
 - Return ONLY valid JSON, no markdown, no explanation
+- Include a "changes" array describing what you did (for UI feedback), e.g. ["Updated bench press sets to 5", "Removed lat pulldown"]
 
 Return format:
-{"exercises": [{"id":"ex-1","name":"...","sets":3,"reps":"10","rpe":"8-9","rest":"90s","tempo":null,"notes":null,"rawText":"...","weekProgression":[]}]}`;
+{"exercises": [{"id":"ex-1","name":"...","sets":3,"reps":"10","rpe":"8-9","rest":"90s","tempo":null,"notes":null,"rawText":"...","weekProgression":[]}], "changes": ["Added Back Squat", "Updated Bench Press reps to 5"]}`;
 
 router.post("/parse", async (req, res): Promise<void> => {
   const { transcript, existingExercises } = req.body as {
@@ -60,7 +95,7 @@ router.post("/parse", async (req, res): Promise<void> => {
 
     const content = completion.choices[0]?.message?.content ?? "{}";
 
-    let parsed: { exercises: Exercise[] };
+    let parsed: { exercises: Exercise[]; changes?: string[] };
     try {
       parsed = JSON.parse(content);
     } catch {
@@ -77,7 +112,7 @@ router.post("/parse", async (req, res): Promise<void> => {
         notes: null,
         weekProgression: [],
       };
-      res.json({ exercises: [fallbackExercise], rawTranscript: transcript });
+      res.json({ exercises: [fallbackExercise], rawTranscript: transcript, changes: [] });
       return;
     }
 
@@ -87,7 +122,7 @@ router.post("/parse", async (req, res): Promise<void> => {
       weekProgression: ex.weekProgression ?? [],
     }));
 
-    res.json({ exercises, rawTranscript: transcript });
+    res.json({ exercises, rawTranscript: transcript, changes: parsed.changes ?? [] });
   } catch (err) {
     req.log.error({ err }, "Error parsing transcript");
     res.status(500).json({ error: "Failed to parse transcript" });
