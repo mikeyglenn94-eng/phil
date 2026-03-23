@@ -1,8 +1,8 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, Plus, MoreHorizontal, Trash2, Copy,
-  Dumbbell, ClipboardPaste, X,
+  Dumbbell, ClipboardPaste, X, Mic, Square, Loader2, Send, Undo2, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addWeeks, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
@@ -13,6 +13,7 @@ import {
   useUpdateProgramme,
   useCreateProgramme,
   getListProgrammesQueryKey,
+  calendarCommand,
 } from "@workspace/api-client-react";
 import type { Programme, Session } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -71,11 +72,98 @@ export default function Home() {
   const [newProgrammeTitle, setNewProgrammeTitle] = useState("");
   const [copiedSession, setCopiedSession] = useState<Session | null>(null);
 
+  // Calendar command bar
+  const [commandText, setCommandText] = useState("");
+  const [commandListening, setCommandListening] = useState(false);
+  const [commandInterim, setCommandInterim] = useState("");
+  const [isRunningCommand, setIsRunningCommand] = useState(false);
+  const [commandChanges, setCommandChanges] = useState<string[] | null>(null);
+  const [previousSessions, setPreviousSessions] = useState<Session[] | null>(null);
+  const commandRecRef = useRef<any>(null);
+
   const selectedProgramme = useMemo(() => {
     if (!programmes) return null;
     if (selectedProgrammeId) return programmes.find(p => p.id === selectedProgrammeId) || null;
     return programmes[0] || null;
   }, [programmes, selectedProgrammeId]);
+
+  // Voice recognition setup for calendar command
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    rec.onresult = (e: any) => {
+      let interim = "";
+      let final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t;
+        else interim += t;
+      }
+      setCommandInterim(interim);
+      if (final) {
+        setCommandText(prev => (prev ? prev + " " + final : final).trim());
+        setCommandInterim("");
+      }
+    };
+    rec.onend = () => setCommandListening(false);
+    rec.onerror = () => setCommandListening(false);
+    commandRecRef.current = rec;
+    return () => { try { rec.stop(); } catch {} };
+  }, []);
+
+  const toggleCommandListening = useCallback(() => {
+    if (commandListening) {
+      commandRecRef.current?.stop();
+      setCommandListening(false);
+    } else {
+      setCommandText("");
+      setCommandInterim("");
+      commandRecRef.current?.start();
+      setCommandListening(true);
+    }
+  }, [commandListening]);
+
+  const runCalendarCommand = useCallback(async (text: string) => {
+    if (!selectedProgramme || !text.trim() || isRunningCommand) return;
+    setIsRunningCommand(true);
+    setCommandChanges(null);
+    const snapshot = (selectedProgramme.sessions ?? []) as Session[];
+    setPreviousSessions(snapshot);
+    try {
+      const result = await calendarCommand({
+        command: text,
+        sessions: snapshot as any,
+        referenceDate: format(new Date(), "yyyy-MM-dd"),
+      });
+      await updateMutation.mutateAsync({
+        id: selectedProgramme.id,
+        data: { sessions: result.sessions as any },
+      });
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      setCommandChanges(result.changes);
+      setCommandText("");
+    } catch {
+      toast({ title: "Command failed — please try again", variant: "destructive" });
+    } finally {
+      setIsRunningCommand(false);
+    }
+  }, [selectedProgramme, isRunningCommand, updateMutation, queryClient, toast]);
+
+  const handleUndoCommand = useCallback(async () => {
+    if (!selectedProgramme || !previousSessions) return;
+    await updateMutation.mutateAsync({
+      id: selectedProgramme.id,
+      data: { sessions: previousSessions as any },
+    });
+    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+    setPreviousSessions(null);
+    setCommandChanges(null);
+    toast({ title: "Reverted to previous schedule" });
+  }, [selectedProgramme, previousSessions, updateMutation, queryClient, toast]);
 
   const baseWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 }); // Monday
   const viewStart = addWeeks(baseWeekStart, weekOffset);
@@ -253,6 +341,73 @@ export default function Home() {
           </Button>
         </div>
       </div>
+
+      {/* AI Command Bar */}
+      {selectedProgramme && (
+        <div className="shrink-0 border-b bg-background px-4 py-2.5">
+          <div className="flex items-center gap-2 max-w-3xl mx-auto">
+            <Sparkles className="w-4 h-4 text-primary shrink-0" />
+            <div className="relative flex-1">
+              <Input
+                value={commandListening ? (commandInterim || commandText || "") : commandText}
+                onChange={e => setCommandText(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && runCalendarCommand(commandText)}
+                placeholder='Try: "copy this week to next week, decrease reps by 2, increase sets by 1"'
+                disabled={commandListening || isRunningCommand}
+                className="pr-10 h-9 text-sm bg-muted/40 border-muted rounded-lg"
+              />
+              <button
+                onClick={toggleCommandListening}
+                disabled={isRunningCommand}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors ${commandListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-foreground"}`}
+                title={commandListening ? "Stop listening" : "Speak a command"}
+              >
+                {commandListening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <Button
+              size="sm"
+              variant="default"
+              className="h-9 px-3 gap-1.5 rounded-lg shrink-0"
+              onClick={() => runCalendarCommand(commandText)}
+              disabled={!commandText.trim() || isRunningCommand}
+            >
+              {isRunningCommand ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline text-sm">Run</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Command result banner */}
+      {commandChanges && commandChanges.length > 0 && (
+        <div className="shrink-0 bg-emerald-50 border-b border-emerald-200 px-6 py-2 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-emerald-800 leading-tight">
+              {commandChanges.length} change{commandChanges.length !== 1 ? "s" : ""} applied
+            </p>
+            <p className="text-xs text-emerald-700 truncate">{commandChanges.join(" · ")}</p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {previousSessions && (
+              <Button
+                variant="outline" size="sm"
+                className="h-7 gap-1.5 text-xs rounded-lg border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                onClick={handleUndoCommand}
+              >
+                <Undo2 className="w-3 h-3" /> Undo
+              </Button>
+            )}
+            <Button
+              variant="ghost" size="sm"
+              className="h-7 w-7 p-0 rounded-lg text-emerald-700 hover:bg-emerald-100"
+              onClick={() => { setCommandChanges(null); setPreviousSessions(null); }}
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Clipboard banner */}
       {copiedSession && (

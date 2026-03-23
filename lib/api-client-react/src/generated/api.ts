@@ -17,6 +17,8 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  CalendarCommandBody,
+  CalendarCommandResponse,
   CreateProgrammeBody,
   ErrorResponse,
   HealthStatus,
@@ -701,6 +703,92 @@ export const useParseTranscript = <
   TContext
 > => {
   return useMutation(getParseTranscriptMutationOptions(options));
+};
+
+/**
+ * @summary Execute a natural language command on the calendar sessions
+ */
+export const getCalendarCommandUrl = () => {
+  return `/api/calendar-command`;
+};
+
+export const calendarCommand = async (
+  calendarCommandBody: CalendarCommandBody,
+  options?: RequestInit,
+): Promise<CalendarCommandResponse> => {
+  return customFetch<CalendarCommandResponse>(getCalendarCommandUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(calendarCommandBody),
+  });
+};
+
+export const getCalendarCommandMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof calendarCommand>>,
+    TError,
+    { data: BodyType<CalendarCommandBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof calendarCommand>>,
+  TError,
+  { data: BodyType<CalendarCommandBody> },
+  TContext
+> => {
+  const mutationKey = ["calendarCommand"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof calendarCommand>>,
+    { data: BodyType<CalendarCommandBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return calendarCommand(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CalendarCommandMutationResult = NonNullable<
+  Awaited<ReturnType<typeof calendarCommand>>
+>;
+export type CalendarCommandMutationBody = BodyType<CalendarCommandBody>;
+export type CalendarCommandMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Execute a natural language command on the calendar sessions
+ */
+export const useCalendarCommand = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof calendarCommand>>,
+    TError,
+    { data: BodyType<CalendarCommandBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof calendarCommand>>,
+  TError,
+  { data: BodyType<CalendarCommandBody> },
+  TContext
+> => {
+  return useMutation(getCalendarCommandMutationOptions(options));
 };
 
 /**

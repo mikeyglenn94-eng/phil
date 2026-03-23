@@ -129,6 +129,114 @@ router.post("/parse", async (req, res): Promise<void> => {
   }
 });
 
+router.post("/calendar-command", async (req, res): Promise<void> => {
+  const { command, sessions, referenceDate } = req.body as {
+    command: string;
+    sessions: any[];
+    referenceDate: string;
+  };
+
+  if (!command || !sessions || !referenceDate) {
+    res.status(400).json({ error: "command, sessions, and referenceDate are required" });
+    return;
+  }
+
+  const systemPrompt = `You are a fitness calendar assistant. You execute natural language commands on a coach's training calendar.
+
+You receive:
+1. A command from the coach
+2. The complete list of sessions (each with id, date yyyy-MM-dd, name, exercises array)
+3. A reference date (today's date) to resolve relative date references
+
+Return the COMPLETE updated sessions array after applying the command.
+
+## Date resolution
+- "this week" = Mon-Sun of the week containing referenceDate
+- "next week" / "the following week" = Mon-Sun of the NEXT week after referenceDate's week
+- "Monday 23rd to Sunday 29th" = sessions with dates 2026-03-23 through 2026-03-29 (use the reference year)
+- Week starts on Monday
+- All dates use YYYY-MM-DD format
+
+## Operations you MUST handle
+
+### Copy sessions to another week:
+"copy sessions from Mon X to Sun Y to the following week"
+→ Find all sessions in the source date range
+→ For each, create a NEW session with:
+  - id: "session-copy-" + original_id
+  - date: offset the date by exactly 7 days (or however many days to reach the target week)
+  - name: same as original
+  - exercises: deep copy of exercises with new exercise ids ("ex-copy-" + original_id)
+→ ADD these new sessions to the array (keep originals too)
+
+### Modifying exercises (apply to copied sessions OR specified sessions):
+When combined with copy: apply modifications to the NEWLY COPIED sessions only
+When standalone (e.g. "increase all reps next week"): apply to sessions in that date range
+
+"decrease reps by N" → subtract N from each exercise's reps field:
+  - "10" → "8" (if N=2)
+  - "8-10" → "6-8" (subtract from both ends of range)
+  - "failure" / "AMRAP" → leave unchanged
+  - null → leave null
+  - Result is always a string
+
+"increase sets by N" → add N to each exercise's sets (integer field):
+  - 3 → 4 (if N=1)
+  - null → leave null
+
+"decrease reps by N and increase sets by N2" → apply both
+
+"add RPE X to all" → set rpe: "X" on all exercises in target sessions
+"change rest to X" → set rest: "X" on all exercises in target sessions
+"remove all notes" → set notes: null on all exercises in target sessions
+
+### Delete:
+"delete all sessions next week" → remove those sessions from array
+"clear next week" → same
+
+### Move:
+"move [session name/date] to [date]" → update that session's date
+
+## Output rules
+- Return ONLY valid JSON, no markdown, no explanation
+- Include ALL sessions (unchanged + modified/new)
+- Preserve IDs of existing sessions — never change existing IDs
+- New copied sessions use id: "session-copy-" + sourceId (make unique if needed)
+
+Return format:
+{"sessions": [...complete sessions array...], "changes": ["Copied 3 sessions from week of Mar 23 to Mar 30", "Decreased reps by 2 on all exercises in copied sessions", "Increased sets by 1 on all exercises in copied sessions"]}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 16384,
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Reference date (today): ${referenceDate}\n\nCurrent sessions:\n${JSON.stringify(sessions, null, 2)}\n\nCommand: "${command}"`,
+        },
+      ],
+    });
+
+    const content = completion.choices[0]?.message?.content ?? "{}";
+    let parsed: { sessions: any[]; changes: string[] };
+
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      req.log.warn({ content }, "Failed to parse calendar command response as JSON");
+      res.json({ sessions, changes: ["Command could not be parsed — no changes made"] });
+      return;
+    }
+
+    res.json({ sessions: parsed.sessions ?? sessions, changes: parsed.changes ?? [] });
+  } catch (err) {
+    req.log.error({ err }, "Error executing calendar command");
+    res.status(500).json({ error: "Failed to execute calendar command" });
+  }
+});
+
 router.post("/parse-log", async (req, res): Promise<void> => {
   const { transcript, exerciseName, totalSets } = req.body as {
     transcript: string;

@@ -176,6 +176,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/ParseTranscriptResponse"
 
+  /calendar-command:
+    post:
+      operationId: calendarCommand
+      tags: [parse]
+      summary: Execute a natural language command on the calendar sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalendarCommandBody"
+      responses:
+        "200":
+          description: Updated sessions and change summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarCommandResponse"
+
   /parse-log:
     post:
       operationId: parseLog
@@ -360,6 +379,39 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Session"
+
+    CalendarCommandBody:
+      type: object
+      properties:
+        command:
+          type: string
+          description: Natural language command to execute on the calendar
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+        referenceDate:
+          type: string
+          description: ISO date string (yyyy-MM-dd) representing today/current date for resolving relative date references
+      required:
+        - command
+        - sessions
+        - referenceDate
+
+    CalendarCommandResponse:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+        changes:
+          type: array
+          items:
+            type: string
+      required:
+        - sessions
+        - changes
 
     SetLog:
       type: object

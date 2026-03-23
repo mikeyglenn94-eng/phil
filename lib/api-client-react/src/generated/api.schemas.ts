@@ -81,6 +81,19 @@ export interface UpdateProgrammeBody {
   sessions?: Session[];
 }
 
+export interface CalendarCommandBody {
+  /** Natural language command to execute on the calendar */
+  command: string;
+  sessions: Session[];
+  /** ISO date string (yyyy-MM-dd) representing today/current date for resolving relative date references */
+  referenceDate: string;
+}
+
+export interface CalendarCommandResponse {
+  sessions: Session[];
+  changes: string[];
+}
+
 export interface SetLog {
   /** Zero-based set index */
   setIndex: number;

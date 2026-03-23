@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./calendarCommandBody";
+export * from "./calendarCommandResponse";
 export * from "./createProgrammeBody";
 export * from "./errorResponse";
 export * from "./exercise";

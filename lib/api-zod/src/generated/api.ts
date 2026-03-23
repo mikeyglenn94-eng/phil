@@ -381,6 +381,110 @@ export const ParseTranscriptResponse = zod.object({
 });
 
 /**
+ * @summary Execute a natural language command on the calendar sessions
+ */
+export const CalendarCommandBody = zod.object({
+  command: zod
+    .string()
+    .describe("Natural language command to execute on the calendar"),
+  sessions: zod.array(
+    zod.object({
+      id: zod.string(),
+      date: zod.string().describe("ISO date string e.g. 2026-03-23"),
+      name: zod
+        .string()
+        .nullish()
+        .describe("Session label e.g. Quads, Upper Body"),
+      color: zod.string().nullish(),
+      exercises: zod.array(
+        zod.object({
+          id: zod.string(),
+          name: zod.string(),
+          sets: zod.number().nullish(),
+          reps: zod.string().nullish(),
+          rpe: zod.string().nullish(),
+          rest: zod.string().nullish(),
+          tempo: zod.string().nullish(),
+          notes: zod.string().nullish(),
+          rawText: zod.string().nullish(),
+          weekProgression: zod
+            .array(
+              zod.object({
+                week: zod.number(),
+                sets: zod.number().nullish(),
+                reps: zod.string().nullish(),
+                rpe: zod.string().nullish(),
+                weight: zod.string().nullish(),
+              }),
+            )
+            .optional(),
+          setWeights: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Weight in kg logged by client for each set"),
+          setReps: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Actual reps achieved per set, logged by client"),
+        }),
+      ),
+    }),
+  ),
+  referenceDate: zod
+    .string()
+    .describe(
+      "ISO date string (yyyy-MM-dd) representing today\/current date for resolving relative date references",
+    ),
+});
+
+export const CalendarCommandResponse = zod.object({
+  sessions: zod.array(
+    zod.object({
+      id: zod.string(),
+      date: zod.string().describe("ISO date string e.g. 2026-03-23"),
+      name: zod
+        .string()
+        .nullish()
+        .describe("Session label e.g. Quads, Upper Body"),
+      color: zod.string().nullish(),
+      exercises: zod.array(
+        zod.object({
+          id: zod.string(),
+          name: zod.string(),
+          sets: zod.number().nullish(),
+          reps: zod.string().nullish(),
+          rpe: zod.string().nullish(),
+          rest: zod.string().nullish(),
+          tempo: zod.string().nullish(),
+          notes: zod.string().nullish(),
+          rawText: zod.string().nullish(),
+          weekProgression: zod
+            .array(
+              zod.object({
+                week: zod.number(),
+                sets: zod.number().nullish(),
+                reps: zod.string().nullish(),
+                rpe: zod.string().nullish(),
+                weight: zod.string().nullish(),
+              }),
+            )
+            .optional(),
+          setWeights: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Weight in kg logged by client for each set"),
+          setReps: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Actual reps achieved per set, logged by client"),
+        }),
+      ),
+    }),
+  ),
+  changes: zod.array(zod.string()),
+});
+
+/**
  * @summary Parse a client's spoken workout log into per-set data
  */
 export const ParseLogBody = zod.object({
