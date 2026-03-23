@@ -25,4 +25,6 @@ export interface Exercise {
   /** @nullable */
   rawText?: string | null;
   weekProgression?: WeekProgression[];
+  /** Weight in kg logged by client for each set */
+  setWeights?: (number | null)[];
 }

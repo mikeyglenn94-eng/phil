@@ -51,6 +51,10 @@ export const ListProgrammesResponseItem = zod.object({
               }),
             )
             .optional(),
+          setWeights: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Weight in kg logged by client for each set"),
         }),
       ),
     }),
@@ -97,6 +101,10 @@ export const CreateProgrammeBody = zod.object({
                 }),
               )
               .optional(),
+            setWeights: zod
+              .array(zod.number().nullable())
+              .optional()
+              .describe("Weight in kg logged by client for each set"),
           }),
         ),
       }),
@@ -145,6 +153,10 @@ export const GetProgrammeResponse = zod.object({
               }),
             )
             .optional(),
+          setWeights: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Weight in kg logged by client for each set"),
         }),
       ),
     }),
@@ -194,6 +206,10 @@ export const UpdateProgrammeBody = zod.object({
                 }),
               )
               .optional(),
+            setWeights: zod
+              .array(zod.number().nullable())
+              .optional()
+              .describe("Weight in kg logged by client for each set"),
           }),
         ),
       }),
@@ -235,6 +251,10 @@ export const UpdateProgrammeResponse = zod.object({
               }),
             )
             .optional(),
+          setWeights: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Weight in kg logged by client for each set"),
         }),
       ),
     }),
@@ -285,6 +305,10 @@ export const ParseTranscriptBody = zod.object({
             }),
           )
           .optional(),
+        setWeights: zod
+          .array(zod.number().nullable())
+          .optional()
+          .describe("Weight in kg logged by client for each set"),
       }),
     )
     .optional(),
@@ -313,6 +337,10 @@ export const ParseTranscriptResponse = zod.object({
           }),
         )
         .optional(),
+      setWeights: zod
+        .array(zod.number().nullable())
+        .optional()
+        .describe("Weight in kg logged by client for each set"),
     }),
   ),
   rawTranscript: zod.string(),

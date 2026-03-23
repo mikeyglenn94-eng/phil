@@ -7,6 +7,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import NotFound from "@/pages/not-found";
 import Home from "./pages/home";
 import SessionEditor from "./pages/session-editor";
+import ClientHome from "./pages/client-home";
+import ClientSession from "./pages/client-session";
 import { AppSidebar } from "./components/app-sidebar";
 
 const queryClient = new QueryClient({
@@ -29,10 +31,18 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <Switch>
-            {/* Session editor is full-screen (no sidebar) */}
+            {/* Full-screen routes (no sidebar) */}
             <Route path="/programmes/:programmeId/sessions/:sessionId" component={SessionEditor} />
+            <Route path="/client/programmes/:programmeId/sessions/:sessionId" component={ClientSession} />
 
-            {/* Calendar home + all other routes get sidebar layout */}
+            {/* Client calendar — no sidebar, clean layout */}
+            <Route path="/client">
+              <div className="flex h-[100dvh] w-full overflow-hidden flex-col">
+                <ClientHome />
+              </div>
+            </Route>
+
+            {/* Coach routes — sidebar layout */}
             <Route path="*">
               <SidebarProvider style={style as React.CSSProperties}>
                 <div className="flex h-[100dvh] w-full overflow-hidden">

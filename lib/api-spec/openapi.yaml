@@ -260,6 +260,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WeekProgression"
+        setWeights:
+          type: array
+          description: Weight in kg logged by client for each set
+          items:
+            type: ["number", "null"]
       required:
         - id
         - name
