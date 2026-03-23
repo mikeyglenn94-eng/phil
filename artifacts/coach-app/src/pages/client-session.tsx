@@ -500,10 +500,17 @@ export default function ClientSession() {
                   <p className="text-xs text-muted-foreground italic text-center py-2">No sets defined</p>
                 ) : (
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">
-                      <span>Set</span>
-                      <span className="text-center">Weight (kg)</span>
-                      <span className="text-center">Reps done</span>
+                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-1 mb-1">
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Set</span>
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Weight (kg)</span>
+                      <div className="text-center">
+                        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Reps done</span>
+                        {ex.reps && (
+                          <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">
+                            target: {ex.reps}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {Array.from({ length: setsCount }, (_, setIdx) => {
                       const log = exLogs[setIdx] || { weight: null, reps: null };
@@ -515,7 +522,7 @@ export default function ClientSession() {
                           </div>
                           <Input
                             type="number" inputMode="decimal" step="0.5" min="0"
-                            placeholder={ex.reps ? `(${ex.reps})` : "—"}
+                            placeholder="—"
                             value={log.weight ?? ""}
                             onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
                             className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
@@ -585,10 +592,17 @@ export default function ClientSession() {
                   <p className="text-xs text-muted-foreground italic text-center py-2">No sets defined</p>
                 ) : (
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">
-                      <span>Set</span>
-                      <span className="text-center">Weight (kg)</span>
-                      <span className="text-center">Reps done</span>
+                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-1 mb-1">
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Set</span>
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Weight (kg)</span>
+                      <div className="text-center">
+                        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Reps done</span>
+                        {ex.reps && (
+                          <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">
+                            target: {ex.reps}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {Array.from({ length: setsCount }, (_, setIdx) => {
                       const log = exLogs[setIdx] || { weight: null, reps: null };
@@ -600,7 +614,7 @@ export default function ClientSession() {
                           </div>
                           <Input
                             type="number" inputMode="decimal" step="0.5" min="0"
-                            placeholder={ex.reps ? `(${ex.reps})` : "—"}
+                            placeholder="—"
                             value={log.weight ?? ""}
                             onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
                             className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
