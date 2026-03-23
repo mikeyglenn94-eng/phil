@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
-  Mic, Square, Volume2, ArrowLeftRight, X, Check,
+  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send,
 } from "lucide-react";
 import {
   useGetProgramme,
   useUpdateProgramme,
   getListProgrammesQueryKey,
   parseLog,
+  parseTranscript,
 } from "@workspace/api-client-react";
 import type { Exercise, Session } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -69,6 +70,15 @@ export default function ClientSession() {
   const [swapListening, setSwapListening] = useState(false);
   const [swapInterim, setSwapInterim] = useState("");
   const swapRecRef = useRef<any>(null);
+
+  // Add exercise state
+  const [addedExercises, setAddedExercises] = useState<Exercise[]>([]);
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [addInput, setAddInput] = useState("");
+  const [addListening, setAddListening] = useState(false);
+  const [addInterim, setAddInterim] = useState("");
+  const [isParsingAdd, setIsParsingAdd] = useState(false);
+  const addRecRef = useRef<any>(null);
 
   // Voice log state
   const [listeningFor, setListeningFor] = useState<string | null>(null);
@@ -159,6 +169,77 @@ export default function ClientSession() {
     return () => { r.abort(); };
   }, []);
 
+  // Set up add-exercise voice recognition
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+    r.onresult = (e: any) => {
+      let fin = ""; let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      if (fin) { setAddInput(fin.trim()); setAddInterim(""); }
+      else setAddInterim(interim);
+    };
+    r.onerror = () => { setAddListening(false); setAddInterim(""); };
+    r.onend = () => { setAddListening(false); setAddInterim(""); };
+    addRecRef.current = r;
+    return () => { r.abort(); };
+  }, []);
+
+  const startAddListening = () => {
+    const r = addRecRef.current;
+    if (!r) { toast({ title: "Voice not supported in this browser", variant: "destructive" }); return; }
+    if (addListening) { r.stop(); return; }
+    setAddInterim(""); setAddInput("");
+    try { r.start(); setAddListening(true); } catch {}
+  };
+
+  const submitAddInput = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setIsParsingAdd(true);
+    const allCurrentExercises = [...(session?.exercises || []), ...addedExercises];
+    try {
+      const result = await parseTranscript({ transcript: trimmed, existingExercises: allCurrentExercises });
+      const newExercises = (result.exercises || []).filter(
+        ex => !allCurrentExercises.some(existing => existing.id === ex.id)
+      );
+      if (newExercises.length === 0) {
+        toast({ title: "Couldn't identify an exercise — try again", variant: "destructive" });
+        return;
+      }
+      // Init empty logs for each new exercise
+      const newLogs: LogState = {};
+      for (const ex of newExercises) {
+        newLogs[ex.id] = Array.from({ length: ex.sets || 0 }, () => ({ weight: null, reps: null }));
+      }
+      setAddedExercises(prev => [...prev, ...newExercises]);
+      setLogs(prev => ({ ...prev, ...newLogs }));
+      setAddInput("");
+      setAddPanelOpen(false);
+      setSaved(false);
+      toast({
+        title: newExercises.length === 1
+          ? `Added "${newExercises[0].name}"`
+          : `Added ${newExercises.length} exercises`,
+      });
+    } catch {
+      toast({ title: "Failed to parse exercise — try again", variant: "destructive" });
+    } finally {
+      setIsParsingAdd(false);
+    }
+  };
+
+  const removeAddedExercise = (exId: string) => {
+    setAddedExercises(prev => prev.filter(e => e.id !== exId));
+    setLogs(prev => { const n = { ...prev }; delete n[exId]; return n; });
+    setSaved(false);
+  };
+
   const startLogListening = (exId: string) => {
     const r = logRecRef.current;
     if (!r) { toast({ title: "Voice not supported", variant: "destructive" }); return; }
@@ -209,15 +290,18 @@ export default function ClientSession() {
     try {
       const updatedSessions = (programme.sessions || []).map((s: Session) => {
         if (s.id !== sessionId) return s;
-        return {
-          ...s,
-          exercises: (s.exercises || []).map((ex: Exercise) => ({
-            ...ex,
-            name: nameOverrides[ex.id] || ex.name,
-            setWeights: (logs[ex.id] || []).map(l => l.weight),
-            setReps: (logs[ex.id] || []).map(l => l.reps),
-          })),
-        };
+        const originalExercises = (s.exercises || []).map((ex: Exercise) => ({
+          ...ex,
+          name: nameOverrides[ex.id] || ex.name,
+          setWeights: (logs[ex.id] || []).map(l => l.weight),
+          setReps: (logs[ex.id] || []).map(l => l.reps),
+        }));
+        const extraExercises = addedExercises.map(ex => ({
+          ...ex,
+          setWeights: (logs[ex.id] || []).map(l => l.weight),
+          setReps: (logs[ex.id] || []).map(l => l.reps),
+        }));
+        return { ...s, exercises: [...originalExercises, ...extraExercises] };
       });
       await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
       queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
@@ -453,8 +537,150 @@ export default function ClientSession() {
           );
         })}
 
-        {(!session.exercises || session.exercises.length === 0) && (
+        {(!session.exercises || session.exercises.length === 0) && addedExercises.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">No exercises in this session.</div>
+        )}
+
+        {/* Added exercises (client-added) */}
+        {addedExercises.map((ex, exIdx) => {
+          const setsCount = ex.sets || 0;
+          const exLogs = logs[ex.id] || [];
+          const loggedCount = exLogs.filter(l => l.weight !== null || l.reps !== null).length;
+          const allLogged = setsCount > 0 && loggedCount === setsCount;
+          const totalIdx = (session.exercises?.length || 0) + exIdx;
+
+          return (
+            <div key={ex.id} className="bg-card rounded-2xl border border-dashed border-primary/40 shadow-sm overflow-hidden">
+              <div className="px-4 pt-4 pb-3 border-b bg-primary/5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${allLogged ? "bg-green-100 text-green-700" : "bg-primary/20 text-primary"}`}>
+                      {allLogged ? "✓" : totalIdx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-base leading-tight">{ex.name}</h3>
+                      <p className="text-[10px] text-primary/60 font-medium mt-0.5 flex items-center gap-1">
+                        <Plus className="w-2.5 h-2.5" /> added by you
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                    onClick={() => removeAddedExercise(ex.id)}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2 ml-8">
+                  {ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
+                  {ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
+                  {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
+                </div>
+                {ex.notes && <p className="text-xs text-muted-foreground mt-1.5 ml-8 italic">{ex.notes}</p>}
+              </div>
+
+              <div className="px-4 py-3">
+                {setsCount === 0 ? (
+                  <p className="text-xs text-muted-foreground italic text-center py-2">No sets defined</p>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">
+                      <span>Set</span>
+                      <span className="text-center">Weight (kg)</span>
+                      <span className="text-center">Reps done</span>
+                    </div>
+                    {Array.from({ length: setsCount }, (_, setIdx) => {
+                      const log = exLogs[setIdx] || { weight: null, reps: null };
+                      const isDone = log.weight !== null || log.reps !== null;
+                      return (
+                        <div key={setIdx} className={`grid grid-cols-[3rem_1fr_1fr] gap-2 items-center rounded-xl px-2 py-1.5 ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
+                          <div className={`text-sm font-bold pl-1 ${isDone ? "text-primary" : "text-muted-foreground"}`}>
+                            {setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}
+                          </div>
+                          <Input
+                            type="number" inputMode="decimal" step="0.5" min="0"
+                            placeholder={ex.reps ? `(${ex.reps})` : "—"}
+                            value={log.weight ?? ""}
+                            onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
+                            className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
+                          />
+                          <Input
+                            type="number" inputMode="numeric" step="1" min="0"
+                            placeholder={ex.reps || "—"}
+                            value={log.reps ?? ""}
+                            onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
+                            className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Add Exercise panel */}
+        {addPanelOpen ? (
+          <div className="bg-card rounded-2xl border-2 border-dashed border-primary/30 overflow-hidden">
+            <div className="px-4 py-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-bold flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-primary" /> Add an exercise
+                </p>
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg text-muted-foreground" onClick={() => { setAddPanelOpen(false); setAddInput(""); addRecRef.current?.stop(); }}>
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    value={addListening ? (addInterim || addInput) : addInput}
+                    onChange={e => setAddInput(e.target.value)}
+                    placeholder={addListening ? "Listening…" : 'e.g. "pull-ups 3x10" or "3 sets of cable flyes RPE 8"'}
+                    className="pr-10 rounded-xl"
+                    disabled={addListening || isParsingAdd}
+                    autoFocus={!addListening}
+                    onKeyDown={e => e.key === "Enter" && !addListening && submitAddInput(addInput)}
+                  />
+                  <button
+                    type="button"
+                    onClick={startAddListening}
+                    disabled={isParsingAdd}
+                    className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${addListening ? "text-destructive bg-destructive/10" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                  >
+                    {addListening
+                      ? <Square className="w-3.5 h-3.5 fill-current" />
+                      : <Mic className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <Button
+                  className="rounded-xl gap-1.5 shrink-0"
+                  disabled={(!addInput.trim() && !addInterim) || isParsingAdd}
+                  onClick={() => submitAddInput(addInput)}
+                >
+                  {isParsingAdd
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Send className="w-4 h-4" />}
+                  {isParsingAdd ? "Adding…" : "Add"}
+                </Button>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Speak or type naturally — sets, reps, RPE, rest are all understood.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="w-full border-2 border-dashed border-muted rounded-2xl py-4 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all"
+            onClick={() => setAddPanelOpen(true)}
+          >
+            <Plus className="w-4 h-4" /> Add exercise
+          </button>
         )}
       </div>
     </div>
