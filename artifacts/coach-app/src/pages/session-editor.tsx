@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRoute, useLocation, useSearch } from "wouter";
 import { VoiceInput } from "@/components/voice-input";
 import { ExerciseCard } from "@/components/exercise-card";
-import { PreviewPanel } from "@/components/preview-panel";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Save, ArrowLeft, Plus, Calendar } from "lucide-react";
@@ -181,7 +181,7 @@ export default function SessionEditor() {
     <div className="flex flex-col lg:flex-row h-[100dvh] overflow-hidden bg-background">
 
       {/* Left Panel */}
-      <div className="flex-[55] flex flex-col h-full border-r bg-background relative z-10 shadow-xl overflow-hidden no-print">
+      <div className="flex-1 flex flex-col h-full bg-background overflow-hidden no-print">
 
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-background z-20 gap-3">
@@ -274,10 +274,6 @@ export default function SessionEditor() {
         </div>
       </div>
 
-      {/* Right Panel: Preview */}
-      <div className="flex-[45] h-full overflow-hidden bg-slate-50 relative z-0">
-        <PreviewPanel title={displayTitle} exercises={exercises} />
-      </div>
     </div>
   );
 }
