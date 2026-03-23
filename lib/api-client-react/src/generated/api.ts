@@ -20,6 +20,8 @@ import type {
   CreateProgrammeBody,
   ErrorResponse,
   HealthStatus,
+  ParseLogBody,
+  ParseLogResponse,
   ParseTranscriptBody,
   ParseTranscriptResponse,
   Programme,
@@ -699,6 +701,92 @@ export const useParseTranscript = <
   TContext
 > => {
   return useMutation(getParseTranscriptMutationOptions(options));
+};
+
+/**
+ * @summary Parse a client's spoken workout log into per-set data
+ */
+export const getParseLogUrl = () => {
+  return `/api/parse-log`;
+};
+
+export const parseLog = async (
+  parseLogBody: ParseLogBody,
+  options?: RequestInit,
+): Promise<ParseLogResponse> => {
+  return customFetch<ParseLogResponse>(getParseLogUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(parseLogBody),
+  });
+};
+
+export const getParseLogMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof parseLog>>,
+    TError,
+    { data: BodyType<ParseLogBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof parseLog>>,
+  TError,
+  { data: BodyType<ParseLogBody> },
+  TContext
+> => {
+  const mutationKey = ["parseLog"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof parseLog>>,
+    { data: BodyType<ParseLogBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return parseLog(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ParseLogMutationResult = NonNullable<
+  Awaited<ReturnType<typeof parseLog>>
+>;
+export type ParseLogMutationBody = BodyType<ParseLogBody>;
+export type ParseLogMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Parse a client's spoken workout log into per-set data
+ */
+export const useParseLog = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof parseLog>>,
+    TError,
+    { data: BodyType<ParseLogBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof parseLog>>,
+  TError,
+  { data: BodyType<ParseLogBody> },
+  TContext
+> => {
+  return useMutation(getParseLogMutationOptions(options));
 };
 
 /**

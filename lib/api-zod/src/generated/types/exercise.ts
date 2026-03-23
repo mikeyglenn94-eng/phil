@@ -27,4 +27,6 @@ export interface Exercise {
   weekProgression?: WeekProgression[];
   /** Weight in kg logged by client for each set */
   setWeights?: (number | null)[];
+  /** Actual reps achieved per set, logged by client */
+  setReps?: (number | null)[];
 }

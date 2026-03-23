@@ -94,6 +94,75 @@ router.post("/parse", async (req, res): Promise<void> => {
   }
 });
 
+router.post("/parse-log", async (req, res): Promise<void> => {
+  const { transcript, exerciseName, totalSets } = req.body as {
+    transcript: string;
+    exerciseName: string;
+    totalSets: number;
+  };
+
+  if (!transcript || !exerciseName || !totalSets) {
+    res.status(400).json({ error: "transcript, exerciseName, and totalSets are required" });
+    return;
+  }
+
+  const systemPrompt = `You are a fitness log parser. A client has just spoken their results for a single exercise after completing it.
+Your job is to parse the spoken log into per-set data (weight in kg and reps achieved).
+
+Rules:
+- The exercise has exactly ${totalSets} sets (indexed 0 to ${totalSets - 1})
+- Extract weight (kg, can be decimal like 22.5) and reps for each set mentioned
+- "sets 1 and 2" means setIndex 0 and 1 (convert to 0-based)
+- "last set" = setIndex ${totalSets - 1}
+- "all sets" = every set
+- "first set" = setIndex 0
+- "second set" = setIndex 1, etc.
+- If a set is not mentioned, still include it with null values
+- Weight and reps can be null if not mentioned for that set
+- Return ONLY valid JSON, no markdown, no explanation
+
+Exercise: ${exerciseName}
+Total sets: ${totalSets}
+
+Return format:
+{"sets": [{"setIndex": 0, "weight": 20, "reps": 9}, {"setIndex": 1, "weight": 20, "reps": 9}, {"setIndex": 2, "weight": 22, "reps": 8}]}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 1024,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Parse this log: "${transcript}"` },
+      ],
+    });
+
+    const content = completion.choices[0]?.message?.content ?? "{}";
+    let parsed: { sets: { setIndex: number; weight: number | null; reps: number | null }[] };
+
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      req.log.warn({ content }, "Failed to parse log LLM response as JSON");
+      // Return nulled-out sets as fallback
+      parsed = {
+        sets: Array.from({ length: totalSets }, (_, i) => ({ setIndex: i, weight: null, reps: null })),
+      };
+    }
+
+    // Ensure all sets are represented
+    const setsMap = new Map(parsed.sets.map(s => [s.setIndex, s]));
+    const fullSets = Array.from({ length: totalSets }, (_, i) =>
+      setsMap.get(i) ?? { setIndex: i, weight: null, reps: null }
+    );
+
+    res.json({ sets: fullSets });
+  } catch (err) {
+    req.log.error({ err }, "Error parsing log");
+    res.status(500).json({ error: "Failed to parse log" });
+  }
+});
+
 router.post("/transcribe", upload.single("audio"), async (req, res): Promise<void> => {
   if (!req.file) {
     res.status(400).json({ error: "No audio file provided" });

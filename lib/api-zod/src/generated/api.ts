@@ -55,6 +55,10 @@ export const ListProgrammesResponseItem = zod.object({
             .array(zod.number().nullable())
             .optional()
             .describe("Weight in kg logged by client for each set"),
+          setReps: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Actual reps achieved per set, logged by client"),
         }),
       ),
     }),
@@ -105,6 +109,10 @@ export const CreateProgrammeBody = zod.object({
               .array(zod.number().nullable())
               .optional()
               .describe("Weight in kg logged by client for each set"),
+            setReps: zod
+              .array(zod.number().nullable())
+              .optional()
+              .describe("Actual reps achieved per set, logged by client"),
           }),
         ),
       }),
@@ -157,6 +165,10 @@ export const GetProgrammeResponse = zod.object({
             .array(zod.number().nullable())
             .optional()
             .describe("Weight in kg logged by client for each set"),
+          setReps: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Actual reps achieved per set, logged by client"),
         }),
       ),
     }),
@@ -210,6 +222,10 @@ export const UpdateProgrammeBody = zod.object({
               .array(zod.number().nullable())
               .optional()
               .describe("Weight in kg logged by client for each set"),
+            setReps: zod
+              .array(zod.number().nullable())
+              .optional()
+              .describe("Actual reps achieved per set, logged by client"),
           }),
         ),
       }),
@@ -255,6 +271,10 @@ export const UpdateProgrammeResponse = zod.object({
             .array(zod.number().nullable())
             .optional()
             .describe("Weight in kg logged by client for each set"),
+          setReps: zod
+            .array(zod.number().nullable())
+            .optional()
+            .describe("Actual reps achieved per set, logged by client"),
         }),
       ),
     }),
@@ -309,6 +329,10 @@ export const ParseTranscriptBody = zod.object({
           .array(zod.number().nullable())
           .optional()
           .describe("Weight in kg logged by client for each set"),
+        setReps: zod
+          .array(zod.number().nullable())
+          .optional()
+          .describe("Actual reps achieved per set, logged by client"),
       }),
     )
     .optional(),
@@ -341,9 +365,32 @@ export const ParseTranscriptResponse = zod.object({
         .array(zod.number().nullable())
         .optional()
         .describe("Weight in kg logged by client for each set"),
+      setReps: zod
+        .array(zod.number().nullable())
+        .optional()
+        .describe("Actual reps achieved per set, logged by client"),
     }),
   ),
   rawTranscript: zod.string(),
+});
+
+/**
+ * @summary Parse a client's spoken workout log into per-set data
+ */
+export const ParseLogBody = zod.object({
+  transcript: zod.string(),
+  exerciseName: zod.string(),
+  totalSets: zod.number(),
+});
+
+export const ParseLogResponse = zod.object({
+  sets: zod.array(
+    zod.object({
+      setIndex: zod.number().describe("Zero-based set index"),
+      weight: zod.number().nullish(),
+      reps: zod.number().nullish(),
+    }),
+  ),
 });
 
 /**

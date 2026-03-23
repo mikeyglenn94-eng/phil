@@ -45,6 +45,8 @@ export interface Exercise {
   weekProgression?: WeekProgression[];
   /** Weight in kg logged by client for each set */
   setWeights?: (number | null)[];
+  /** Actual reps achieved per set, logged by client */
+  setReps?: (number | null)[];
 }
 
 export interface Session {
@@ -77,6 +79,25 @@ export interface CreateProgrammeBody {
 export interface UpdateProgrammeBody {
   title?: string;
   sessions?: Session[];
+}
+
+export interface SetLog {
+  /** Zero-based set index */
+  setIndex: number;
+  /** @nullable */
+  weight?: number | null;
+  /** @nullable */
+  reps?: number | null;
+}
+
+export interface ParseLogBody {
+  transcript: string;
+  exerciseName: string;
+  totalSets: number;
+}
+
+export interface ParseLogResponse {
+  sets: SetLog[];
 }
 
 export interface ParseTranscriptBody {
