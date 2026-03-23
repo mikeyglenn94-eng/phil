@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, Plus, MoreHorizontal, Trash2, Copy,
-  Dumbbell,
+  Dumbbell, ClipboardPaste, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addWeeks, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
@@ -69,6 +69,7 @@ export default function Home() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [newProgrammeOpen, setNewProgrammeOpen] = useState(false);
   const [newProgrammeTitle, setNewProgrammeTitle] = useState("");
+  const [copiedSession, setCopiedSession] = useState<Session | null>(null);
 
   const selectedProgramme = useMemo(() => {
     if (!programmes) return null;
@@ -107,6 +108,38 @@ export default function Home() {
     toast({ title: "Session removed" });
   };
 
+  const handleCopySession = useCallback((session: Session) => {
+    setCopiedSession(session);
+    toast({ title: `"${session.name || "Session"}" copied — click any empty day to paste` });
+  }, [toast]);
+
+  const handlePasteSession = useCallback(async (date: Date) => {
+    if (!copiedSession || !selectedProgramme) return;
+    const dateStr = format(date, "yyyy-MM-dd");
+
+    // Build a fresh session: new ID, new date, new exercise IDs, clear logged weights/reps
+    const newSession: Session = {
+      id: `session-${Date.now()}`,
+      date: dateStr,
+      name: copiedSession.name,
+      exercises: (copiedSession.exercises || []).map(ex => ({
+        ...ex,
+        id: `ex-${Math.random().toString(36).slice(2, 8)}`,
+        setWeights: undefined,
+        setReps: undefined,
+      })),
+    };
+
+    const updatedSessions = [...(selectedProgramme.sessions || []), newSession];
+    try {
+      await updateMutation.mutateAsync({ id: selectedProgramme.id, data: { sessions: updatedSessions } });
+      queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      toast({ title: `Pasted "${newSession.name || "Session"}" to ${format(date, "EEE d MMM")}` });
+    } catch {
+      toast({ title: "Failed to paste session", variant: "destructive" });
+    }
+  }, [copiedSession, selectedProgramme, updateMutation, queryClient, toast]);
+
   const handleDayClick = (date: Date) => {
     if (!selectedProgramme) {
       setNewProgrammeOpen(true);
@@ -114,6 +147,13 @@ export default function Home() {
     }
     const dateStr = format(date, "yyyy-MM-dd");
     const existing = getSessionForDate(date);
+
+    // If clipboard is active and day is empty — paste instead of navigating
+    if (copiedSession && !existing) {
+      handlePasteSession(date);
+      return;
+    }
+
     if (existing) {
       setLocation(`/programmes/${selectedProgramme.id}/sessions/${existing.id}`);
     } else {
@@ -214,6 +254,24 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Clipboard banner */}
+      {copiedSession && (
+        <div className="shrink-0 bg-primary/5 border-b border-primary/20 px-6 py-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <ClipboardPaste className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-primary font-semibold">"{copiedSession.name || "Session"}" copied</span>
+            <span className="text-muted-foreground hidden sm:inline">— click any empty day to paste</span>
+          </div>
+          <Button
+            variant="ghost" size="sm"
+            className="h-7 gap-1.5 text-muted-foreground hover:text-foreground rounded-lg px-2"
+            onClick={() => setCopiedSession(null)}
+          >
+            <X className="w-3.5 h-3.5" /> Cancel
+          </Button>
+        </div>
+      )}
+
       {/* Calendar */}
       <div className="flex-1 overflow-auto">
         {(!programmes || programmes.length === 0) ? (
@@ -252,7 +310,11 @@ export default function Home() {
                       <div
                         key={dayIdx}
                         className={`border-r last:border-r-0 min-h-[160px] p-2 cursor-pointer group transition-colors ${
-                          isToday ? "bg-primary/5" : "hover:bg-muted/30"
+                          copiedSession && !session
+                            ? "bg-primary/5 hover:bg-primary/10 ring-inset ring-1 ring-primary/20"
+                            : isToday
+                            ? "bg-primary/5 hover:bg-primary/10"
+                            : "hover:bg-muted/30"
                         }`}
                         onClick={() => handleDayClick(date)}
                       >
@@ -266,15 +328,28 @@ export default function Home() {
                             {format(date, "d")}
                           </span>
                           {session && (
-                            <button
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteSession(session.id);
-                              }}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                title="Copy session"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopySession(session);
+                                }}
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                              <button
+                                className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                title="Delete session"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSession(session.id);
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           )}
                         </div>
 
@@ -309,11 +384,18 @@ export default function Home() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center h-[100px] opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="flex flex-col items-center gap-1 text-muted-foreground/60">
-                              <Plus className="w-4 h-4" />
-                              <span className="text-[10px]">Add session</span>
-                            </div>
+                          <div className={`flex items-center justify-center h-[100px] transition-opacity ${copiedSession ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                            {copiedSession ? (
+                              <div className="flex flex-col items-center gap-1.5 text-primary/70 group-hover:text-primary transition-colors">
+                                <ClipboardPaste className="w-4 h-4" />
+                                <span className="text-[10px] font-semibold">Paste here</span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-1 text-muted-foreground/60">
+                                <Plus className="w-4 h-4" />
+                                <span className="text-[10px]">Add session</span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
