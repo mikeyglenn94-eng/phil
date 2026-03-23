@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Voice Training Programme Builder"
+version = "1.0.0"
+id = "artifacts/coach-app"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25715
+
+[services.development]
+run = "pnpm --filter @workspace/coach-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/coach-app", "run", "build" ]
+publicDir = "artifacts/coach-app/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25715"
+BASE_PATH = "/"

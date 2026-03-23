@@ -1,0 +1,39 @@
+import { pgTable, text, serial, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const weekProgressionSchema = z.object({
+  week: z.number().int(),
+  sets: z.number().int().nullable().optional(),
+  reps: z.string().nullable().optional(),
+  rpe: z.string().nullable().optional(),
+  weight: z.string().nullable().optional(),
+});
+
+export const exerciseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  sets: z.number().int().nullable().optional(),
+  reps: z.string().nullable().optional(),
+  rpe: z.string().nullable().optional(),
+  rest: z.string().nullable().optional(),
+  tempo: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  rawText: z.string().nullable().optional(),
+  weekProgression: z.array(weekProgressionSchema).optional(),
+});
+
+export type Exercise = z.infer<typeof exerciseSchema>;
+export type WeekProgression = z.infer<typeof weekProgressionSchema>;
+
+export const programmesTable = pgTable("programmes", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  exercises: jsonb("exercises").notNull().$type<Exercise[]>().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const insertProgrammeSchema = createInsertSchema(programmesTable).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProgramme = z.infer<typeof insertProgrammeSchema>;
+export type Programme = typeof programmesTable.$inferSelect;

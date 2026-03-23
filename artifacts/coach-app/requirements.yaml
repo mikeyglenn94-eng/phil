@@ -1,0 +1,16 @@
+packages:
+  "@dnd-kit/core": "Drag and drop for reordering exercises"
+  "@dnd-kit/sortable": "Sortable lists for exercises"
+  "@dnd-kit/utilities": "Utilities for dnd-kit"
+  "framer-motion": "Smooth animations for voice recording pulse and micro-interactions"
+  "date-fns": "Formatting dates for programme list"
+  "lucide-react": "Icons"
+
+images:
+  - path: "artifacts/coach-app/public/images/logo.png"
+    description: "Minimal geometric logo for a premium fitness coaching app, featuring a subtle barbell or performance graph motif, deep slate and indigo colors, transparent background."
+    aspect_ratio: "1:1"
+
+notes:
+  - Using Web Speech API for offline, free, native voice recording.
+  - Relying on the workspace api-client-react for TanStack Query hooks.

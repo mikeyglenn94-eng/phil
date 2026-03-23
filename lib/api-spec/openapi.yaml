@@ -1,15 +1,18 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Voice Training Programme Builder API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: programmes
+    description: Training programme operations
+  - name: parse
+    description: Voice transcript parsing
 paths:
   /healthz:
     get:
@@ -24,6 +27,181 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /programmes:
+    get:
+      operationId: listProgrammes
+      tags: [programmes]
+      summary: List all programmes
+      responses:
+        "200":
+          description: List of programmes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Programme"
+    post:
+      operationId: createProgramme
+      tags: [programmes]
+      summary: Create a new programme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProgrammeBody"
+      responses:
+        "201":
+          description: Programme created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+
+  /programmes/{id}:
+    get:
+      operationId: getProgramme
+      tags: [programmes]
+      summary: Get a programme by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Programme details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+        "404":
+          description: Programme not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateProgramme
+      tags: [programmes]
+      summary: Update a programme
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProgrammeBody"
+      responses:
+        "200":
+          description: Programme updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+        "404":
+          description: Programme not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteProgramme
+      tags: [programmes]
+      summary: Delete a programme
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Programme deleted
+        "404":
+          description: Programme not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /programmes/{id}/duplicate:
+    post:
+      operationId: duplicateProgramme
+      tags: [programmes]
+      summary: Duplicate a programme
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Programme duplicated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+        "404":
+          description: Programme not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /parse:
+    post:
+      operationId: parseTranscript
+      tags: [parse]
+      summary: Parse a voice transcript into structured exercises
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParseTranscriptBody"
+      responses:
+        "200":
+          description: Parsed exercises
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParseTranscriptResponse"
+
+  /transcribe:
+    post:
+      operationId: transcribeAudio
+      tags: [parse]
+      summary: Transcribe audio to text
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                audio:
+                  type: string
+                  format: binary
+              required:
+                - audio
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscribeResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +212,135 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    WeekProgression:
+      type: object
+      properties:
+        week:
+          type: integer
+        sets:
+          type: ["integer", "null"]
+        reps:
+          type: ["string", "null"]
+        rpe:
+          type: ["string", "null"]
+        weight:
+          type: ["string", "null"]
+      required:
+        - week
+
+    Exercise:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        sets:
+          type: ["integer", "null"]
+        reps:
+          type: ["string", "null"]
+        rpe:
+          type: ["string", "null"]
+        rest:
+          type: ["string", "null"]
+        tempo:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        rawText:
+          type: ["string", "null"]
+        weekProgression:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeekProgression"
+      required:
+        - id
+        - name
+
+    Programme:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        exercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/Exercise"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - exercises
+        - createdAt
+        - updatedAt
+
+    CreateProgrammeBody:
+      type: object
+      properties:
+        title:
+          type: string
+        exercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/Exercise"
+      required:
+        - title
+        - exercises
+
+    UpdateProgrammeBody:
+      type: object
+      properties:
+        title:
+          type: string
+        exercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/Exercise"
+
+    ParseTranscriptBody:
+      type: object
+      properties:
+        transcript:
+          type: string
+        existingExercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/Exercise"
+      required:
+        - transcript
+
+    ParseTranscriptResponse:
+      type: object
+      properties:
+        exercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/Exercise"
+        rawTranscript:
+          type: string
+      required:
+        - exercises
+        - rawTranscript
+
+    TranscribeResponse:
+      type: object
+      properties:
+        transcript:
+          type: string
+      required:
+        - transcript
