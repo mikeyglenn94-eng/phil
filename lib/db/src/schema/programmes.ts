@@ -23,13 +23,22 @@ export const exerciseSchema = z.object({
   weekProgression: z.array(weekProgressionSchema).optional(),
 });
 
+export const sessionSchema = z.object({
+  id: z.string(),
+  date: z.string(), // ISO date string e.g. "2026-03-23"
+  name: z.string().optional(), // e.g. "Quads", "Upper Body"
+  color: z.string().optional(), // hex or named color
+  exercises: z.array(exerciseSchema),
+});
+
 export type Exercise = z.infer<typeof exerciseSchema>;
 export type WeekProgression = z.infer<typeof weekProgressionSchema>;
+export type Session = z.infer<typeof sessionSchema>;
 
 export const programmesTable = pgTable("programmes", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  exercises: jsonb("exercises").notNull().$type<Exercise[]>().default([]),
+  sessions: jsonb("sessions").notNull().$type<Session[]>().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

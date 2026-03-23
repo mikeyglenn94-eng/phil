@@ -8,7 +8,6 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -21,28 +20,39 @@ export const HealthCheckResponse = zod.object({
 export const ListProgrammesResponseItem = zod.object({
   id: zod.number(),
   title: zod.string(),
-  exercises: zod.array(
+  sessions: zod.array(
     zod.object({
       id: zod.string(),
-      name: zod.string(),
-      sets: zod.number().nullish(),
-      reps: zod.string().nullish(),
-      rpe: zod.string().nullish(),
-      rest: zod.string().nullish(),
-      tempo: zod.string().nullish(),
-      notes: zod.string().nullish(),
-      rawText: zod.string().nullish(),
-      weekProgression: zod
-        .array(
-          zod.object({
-            week: zod.number(),
-            sets: zod.number().nullish(),
-            reps: zod.string().nullish(),
-            rpe: zod.string().nullish(),
-            weight: zod.string().nullish(),
-          }),
-        )
-        .optional(),
+      date: zod.string().describe("ISO date string e.g. 2026-03-23"),
+      name: zod
+        .string()
+        .nullish()
+        .describe("Session label e.g. Quads, Upper Body"),
+      color: zod.string().nullish(),
+      exercises: zod.array(
+        zod.object({
+          id: zod.string(),
+          name: zod.string(),
+          sets: zod.number().nullish(),
+          reps: zod.string().nullish(),
+          rpe: zod.string().nullish(),
+          rest: zod.string().nullish(),
+          tempo: zod.string().nullish(),
+          notes: zod.string().nullish(),
+          rawText: zod.string().nullish(),
+          weekProgression: zod
+            .array(
+              zod.object({
+                week: zod.number(),
+                sets: zod.number().nullish(),
+                reps: zod.string().nullish(),
+                rpe: zod.string().nullish(),
+                weight: zod.string().nullish(),
+              }),
+            )
+            .optional(),
+        }),
+      ),
     }),
   ),
   createdAt: zod.date(),
@@ -55,30 +65,43 @@ export const ListProgrammesResponse = zod.array(ListProgrammesResponseItem);
  */
 export const CreateProgrammeBody = zod.object({
   title: zod.string(),
-  exercises: zod.array(
-    zod.object({
-      id: zod.string(),
-      name: zod.string(),
-      sets: zod.number().nullish(),
-      reps: zod.string().nullish(),
-      rpe: zod.string().nullish(),
-      rest: zod.string().nullish(),
-      tempo: zod.string().nullish(),
-      notes: zod.string().nullish(),
-      rawText: zod.string().nullish(),
-      weekProgression: zod
-        .array(
+  sessions: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        date: zod.string().describe("ISO date string e.g. 2026-03-23"),
+        name: zod
+          .string()
+          .nullish()
+          .describe("Session label e.g. Quads, Upper Body"),
+        color: zod.string().nullish(),
+        exercises: zod.array(
           zod.object({
-            week: zod.number(),
+            id: zod.string(),
+            name: zod.string(),
             sets: zod.number().nullish(),
             reps: zod.string().nullish(),
             rpe: zod.string().nullish(),
-            weight: zod.string().nullish(),
+            rest: zod.string().nullish(),
+            tempo: zod.string().nullish(),
+            notes: zod.string().nullish(),
+            rawText: zod.string().nullish(),
+            weekProgression: zod
+              .array(
+                zod.object({
+                  week: zod.number(),
+                  sets: zod.number().nullish(),
+                  reps: zod.string().nullish(),
+                  rpe: zod.string().nullish(),
+                  weight: zod.string().nullish(),
+                }),
+              )
+              .optional(),
           }),
-        )
-        .optional(),
-    }),
-  ),
+        ),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -91,28 +114,39 @@ export const GetProgrammeParams = zod.object({
 export const GetProgrammeResponse = zod.object({
   id: zod.number(),
   title: zod.string(),
-  exercises: zod.array(
+  sessions: zod.array(
     zod.object({
       id: zod.string(),
-      name: zod.string(),
-      sets: zod.number().nullish(),
-      reps: zod.string().nullish(),
-      rpe: zod.string().nullish(),
-      rest: zod.string().nullish(),
-      tempo: zod.string().nullish(),
-      notes: zod.string().nullish(),
-      rawText: zod.string().nullish(),
-      weekProgression: zod
-        .array(
-          zod.object({
-            week: zod.number(),
-            sets: zod.number().nullish(),
-            reps: zod.string().nullish(),
-            rpe: zod.string().nullish(),
-            weight: zod.string().nullish(),
-          }),
-        )
-        .optional(),
+      date: zod.string().describe("ISO date string e.g. 2026-03-23"),
+      name: zod
+        .string()
+        .nullish()
+        .describe("Session label e.g. Quads, Upper Body"),
+      color: zod.string().nullish(),
+      exercises: zod.array(
+        zod.object({
+          id: zod.string(),
+          name: zod.string(),
+          sets: zod.number().nullish(),
+          reps: zod.string().nullish(),
+          rpe: zod.string().nullish(),
+          rest: zod.string().nullish(),
+          tempo: zod.string().nullish(),
+          notes: zod.string().nullish(),
+          rawText: zod.string().nullish(),
+          weekProgression: zod
+            .array(
+              zod.object({
+                week: zod.number(),
+                sets: zod.number().nullish(),
+                reps: zod.string().nullish(),
+                rpe: zod.string().nullish(),
+                weight: zod.string().nullish(),
+              }),
+            )
+            .optional(),
+        }),
+      ),
     }),
   ),
   createdAt: zod.date(),
@@ -128,29 +162,40 @@ export const UpdateProgrammeParams = zod.object({
 
 export const UpdateProgrammeBody = zod.object({
   title: zod.string().optional(),
-  exercises: zod
+  sessions: zod
     .array(
       zod.object({
         id: zod.string(),
-        name: zod.string(),
-        sets: zod.number().nullish(),
-        reps: zod.string().nullish(),
-        rpe: zod.string().nullish(),
-        rest: zod.string().nullish(),
-        tempo: zod.string().nullish(),
-        notes: zod.string().nullish(),
-        rawText: zod.string().nullish(),
-        weekProgression: zod
-          .array(
-            zod.object({
-              week: zod.number(),
-              sets: zod.number().nullish(),
-              reps: zod.string().nullish(),
-              rpe: zod.string().nullish(),
-              weight: zod.string().nullish(),
-            }),
-          )
-          .optional(),
+        date: zod.string().describe("ISO date string e.g. 2026-03-23"),
+        name: zod
+          .string()
+          .nullish()
+          .describe("Session label e.g. Quads, Upper Body"),
+        color: zod.string().nullish(),
+        exercises: zod.array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            sets: zod.number().nullish(),
+            reps: zod.string().nullish(),
+            rpe: zod.string().nullish(),
+            rest: zod.string().nullish(),
+            tempo: zod.string().nullish(),
+            notes: zod.string().nullish(),
+            rawText: zod.string().nullish(),
+            weekProgression: zod
+              .array(
+                zod.object({
+                  week: zod.number(),
+                  sets: zod.number().nullish(),
+                  reps: zod.string().nullish(),
+                  rpe: zod.string().nullish(),
+                  weight: zod.string().nullish(),
+                }),
+              )
+              .optional(),
+          }),
+        ),
       }),
     )
     .optional(),
@@ -159,28 +204,39 @@ export const UpdateProgrammeBody = zod.object({
 export const UpdateProgrammeResponse = zod.object({
   id: zod.number(),
   title: zod.string(),
-  exercises: zod.array(
+  sessions: zod.array(
     zod.object({
       id: zod.string(),
-      name: zod.string(),
-      sets: zod.number().nullish(),
-      reps: zod.string().nullish(),
-      rpe: zod.string().nullish(),
-      rest: zod.string().nullish(),
-      tempo: zod.string().nullish(),
-      notes: zod.string().nullish(),
-      rawText: zod.string().nullish(),
-      weekProgression: zod
-        .array(
-          zod.object({
-            week: zod.number(),
-            sets: zod.number().nullish(),
-            reps: zod.string().nullish(),
-            rpe: zod.string().nullish(),
-            weight: zod.string().nullish(),
-          }),
-        )
-        .optional(),
+      date: zod.string().describe("ISO date string e.g. 2026-03-23"),
+      name: zod
+        .string()
+        .nullish()
+        .describe("Session label e.g. Quads, Upper Body"),
+      color: zod.string().nullish(),
+      exercises: zod.array(
+        zod.object({
+          id: zod.string(),
+          name: zod.string(),
+          sets: zod.number().nullish(),
+          reps: zod.string().nullish(),
+          rpe: zod.string().nullish(),
+          rest: zod.string().nullish(),
+          tempo: zod.string().nullish(),
+          notes: zod.string().nullish(),
+          rawText: zod.string().nullish(),
+          weekProgression: zod
+            .array(
+              zod.object({
+                week: zod.number(),
+                sets: zod.number().nullish(),
+                reps: zod.string().nullish(),
+                rpe: zod.string().nullish(),
+                weight: zod.string().nullish(),
+              }),
+            )
+            .optional(),
+        }),
+      ),
     }),
   ),
   createdAt: zod.date(),

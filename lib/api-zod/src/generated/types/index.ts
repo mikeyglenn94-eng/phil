@@ -13,6 +13,7 @@ export * from "./healthStatus";
 export * from "./parseTranscriptBody";
 export * from "./parseTranscriptResponse";
 export * from "./programme";
+export * from "./session";
 export * from "./transcribeAudioBody";
 export * from "./transcribeResponse";
 export * from "./updateProgrammeBody";

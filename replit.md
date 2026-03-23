@@ -2,7 +2,7 @@
 
 ## Overview
 
-A voice-first internal tool for fitness coaches to create structured training programmes by speaking naturally. The app converts speech into structured exercise data, allows manual editing, and renders polished programme output that can be exported.
+A voice-first internal tool for fitness coaches to create structured training programmes by speaking naturally. The app shows a calendar (TrainHeroic-style) as the home screen, with sessions scheduled per day. Clicking a day opens a session editor with voice input, AI parsing, and live preview.
 
 ## Stack
 
@@ -37,30 +37,36 @@ artifacts-monorepo/
 └── package.json
 ```
 
+## Frontend Pages & Routing
+
+- `/` — **Calendar home** — multi-week Mon-Sun grid, programme selector in header, sessions shown per day. Click empty day → new session editor. Click session → edit session.
+- `/programmes/:programmeId/sessions/:sessionId` — **Session editor** — full-screen, voice input + exercise list (DnD reorder) + live preview panel. `sessionId=new` for new sessions (pass `?date=YYYY-MM-DD`).
+
 ## Key Features
 
-1. **Voice Input** — Browser Speech Recognition API, continuous mode, interim transcript display
-2. **AI Parsing** — GPT-5.2 converts natural language into structured exercise data (sets, reps, RPE, rest, tempo, notes, week progression)
-3. **Manual Editing** — Inline editing of all exercise fields, drag-to-reorder, add/delete exercises
-4. **Live Preview** — Right-panel preview updates in real-time, styled for professional output
-5. **Programme Management** — Create, save, edit, duplicate, delete programmes (stored in PostgreSQL)
-6. **Export** — Copy formatted text to clipboard, Print/PDF via browser print dialog
+1. **Calendar Home** — 4-week grid (Mon-Sun), today highlighted, session name badge + exercise list preview per day, add/navigate programmes
+2. **Voice Input** — Browser Speech Recognition API, continuous mode, interim transcript display
+3. **AI Parsing** — GPT-5.2 converts natural language into structured exercise data (sets, reps, RPE, rest, tempo, notes, week progression)
+4. **Manual Editing** — Inline editing of all exercise fields, drag-to-reorder, add/delete exercises
+5. **Live Preview** — Right-panel preview updates in real-time, styled for professional output
+6. **Programme Management** — Create, save, edit, duplicate, delete programmes (stored in PostgreSQL)
 
 ## Database Schema
 
-- `programmes` table: `id`, `title`, `exercises` (JSONB), `createdAt`, `updatedAt`
-- Exercises stored as JSONB with full Exercise type (name, sets, reps, RPE, rest, tempo, notes, weekProgression)
+- `programmes` table: `id`, `title`, `sessions` (JSONB), `createdAt`, `updatedAt`
+- Sessions stored as JSONB: `[{ id, date, name?, color?, exercises[] }]`
+- Each exercise: `{ id, name, sets, reps, rpe, rest, tempo, notes, weekProgression[] }`
 
 ## API Endpoints
 
 - `GET /api/programmes` — list all programmes
-- `POST /api/programmes` — create programme
+- `POST /api/programmes` — create programme (`{ title, sessions? }`)
 - `GET /api/programmes/:id` — get programme
-- `PUT /api/programmes/:id` — update programme
+- `PUT /api/programmes/:id` — update programme (`{ title?, sessions? }`)
 - `DELETE /api/programmes/:id` — delete programme
 - `POST /api/programmes/:id/duplicate` — duplicate programme
-- `POST /api/parse` — parse transcript via AI
-- `POST /api/transcribe` — transcribe audio (fallback, not used in browser since Web Speech API is used)
+- `POST /api/parse` — parse transcript via AI → exercises[]
+- `POST /api/transcribe` — transcribe audio (fallback)
 
 ## Environment Variables
 
@@ -79,5 +85,5 @@ artifacts-monorepo/
 1. Write OpenAPI spec in `lib/api-spec/openapi.yaml`
 2. Run codegen: `pnpm --filter @workspace/api-spec run codegen`
 3. Build frontend with `pnpm --filter @workspace/coach-app run dev`
-4. Push DB schema: `pnpm --filter @workspace/db run push`
-5. Restart API server: `pnpm --filter @workspace/api-server run dev`
+4. Push DB schema: `pnpm --filter @workspace/db run push` (or push-force for column changes)
+5. Restart API server after schema changes

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Plus, List, Settings, LayoutDashboard, Dumbbell, Calendar, FileText } from "lucide-react";
+import { Plus, LayoutDashboard, Dumbbell, FileText } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,7 +15,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { useListProgrammes } from "@workspace/api-client-react";
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  onNewProgramme?: () => void;
+  onSelectProgramme?: (id: number) => void;
+  selectedProgrammeId?: number | null;
+}
+
+export function AppSidebar({ onNewProgramme, onSelectProgramme, selectedProgrammeId }: AppSidebarProps) {
   const [location] = useLocation();
   const { data: programmes, isLoading } = useListProgrammes();
 
@@ -33,33 +39,23 @@ export function AppSidebar() {
             <p className="text-xs text-sidebar-foreground/50 font-medium">Programme Builder</p>
           </div>
         </div>
-        
-        <Link href="/programmes/new">
-          <Button 
-            className="w-full justify-start gap-2 shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
-            size="lg"
-          >
-            <Plus className="w-4 h-4" />
-            New Programme
-          </Button>
-        </Link>
       </SidebarHeader>
 
       <SidebarContent className="px-2">
         <SidebarGroup>
           <SidebarGroupLabel className="text-sidebar-foreground/50 font-semibold tracking-wider text-xs uppercase">
-            Menu
+            Navigation
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <Link href="/">
-                  <SidebarMenuButton 
-                    isActive={location === "/"} 
+                  <SidebarMenuButton
+                    isActive={location === "/"}
                     className="hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground font-medium rounded-lg"
                   >
                     <LayoutDashboard className="w-4 h-4" />
-                    <span>Dashboard</span>
+                    <span>Calendar</span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>
@@ -68,8 +64,8 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-4">
-          <SidebarGroupLabel className="text-sidebar-foreground/50 font-semibold tracking-wider text-xs uppercase flex items-center justify-between">
-            Recent Programmes
+          <SidebarGroupLabel className="text-sidebar-foreground/50 font-semibold tracking-wider text-xs uppercase">
+            Programmes
           </SidebarGroupLabel>
           <SidebarGroupContent>
             {isLoading ? (
@@ -78,17 +74,27 @@ export function AppSidebar() {
               <div className="px-4 py-3 text-sm text-sidebar-foreground/40 italic">No programmes yet</div>
             ) : (
               <SidebarMenu>
-                {programmes?.slice(0, 8).map((prog) => (
+                {programmes?.slice(0, 10).map((prog) => (
                   <SidebarMenuItem key={prog.id}>
-                    <Link href={`/programmes/${prog.id}`}>
-                      <SidebarMenuButton 
-                        isActive={location === `/programmes/${prog.id}`}
-                        className="hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground font-medium rounded-lg"
+                    {onSelectProgramme ? (
+                      <SidebarMenuButton
+                        isActive={selectedProgrammeId === prog.id}
+                        className="hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground font-medium rounded-lg cursor-pointer"
+                        onClick={() => onSelectProgramme(prog.id)}
                       >
                         <FileText className="w-4 h-4 opacity-50" />
                         <span className="truncate">{prog.title || 'Untitled Programme'}</span>
                       </SidebarMenuButton>
-                    </Link>
+                    ) : (
+                      <Link href="/">
+                        <SidebarMenuButton
+                          className="hover:bg-sidebar-accent/50 font-medium rounded-lg"
+                        >
+                          <FileText className="w-4 h-4 opacity-50" />
+                          <span className="truncate">{prog.title || 'Untitled Programme'}</span>
+                        </SidebarMenuButton>
+                      </Link>
+                    )}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

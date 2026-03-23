@@ -5,9 +5,9 @@
  * Voice Training Programme Builder API
  * OpenAPI spec version: 0.1.0
  */
-import type { Exercise } from "./exercise";
+import type { Session } from "./session";
 
 export interface UpdateProgrammeBody {
   title?: string;
-  exercises?: Exercise[];
+  sessions?: Session[];
 }

@@ -45,22 +45,36 @@ export interface Exercise {
   weekProgression?: WeekProgression[];
 }
 
+export interface Session {
+  id: string;
+  /** ISO date string e.g. 2026-03-23 */
+  date: string;
+  /**
+   * Session label e.g. Quads, Upper Body
+   * @nullable
+   */
+  name?: string | null;
+  /** @nullable */
+  color?: string | null;
+  exercises: Exercise[];
+}
+
 export interface Programme {
   id: number;
   title: string;
-  exercises: Exercise[];
+  sessions: Session[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateProgrammeBody {
   title: string;
-  exercises: Exercise[];
+  sessions?: Session[];
 }
 
 export interface UpdateProgrammeBody {
   title?: string;
-  exercises?: Exercise[];
+  sessions?: Session[];
 }
 
 export interface ParseTranscriptBody {

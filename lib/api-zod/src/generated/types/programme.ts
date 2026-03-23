@@ -5,12 +5,12 @@
  * Voice Training Programme Builder API
  * OpenAPI spec version: 0.1.0
  */
-import type { Exercise } from "./exercise";
+import type { Session } from "./session";
 
 export interface Programme {
   id: number;
   title: string;
-  exercises: Exercise[];
+  sessions: Session[];
   createdAt: Date;
   updatedAt: Date;
 }

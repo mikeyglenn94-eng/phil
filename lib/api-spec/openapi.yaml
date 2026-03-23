@@ -19,7 +19,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -79,7 +78,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Programme"
         "404":
-          description: Programme not found
+          description: Not found
           content:
             application/json:
               schema:
@@ -108,7 +107,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Programme"
         "404":
-          description: Programme not found
+          description: Not found
           content:
             application/json:
               schema:
@@ -125,9 +124,9 @@ paths:
             type: integer
       responses:
         "204":
-          description: Programme deleted
+          description: Deleted
         "404":
-          description: Programme not found
+          description: Not found
           content:
             application/json:
               schema:
@@ -146,13 +145,13 @@ paths:
             type: integer
       responses:
         "201":
-          description: Programme duplicated
+          description: Duplicated
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Programme"
         "404":
-          description: Programme not found
+          description: Not found
           content:
             application/json:
               schema:
@@ -196,7 +195,7 @@ paths:
                 - audio
       responses:
         "200":
-          description: Transcription result
+          description: Transcription
           content:
             application/json:
               schema:
@@ -265,6 +264,28 @@ components:
         - id
         - name
 
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          description: ISO date string e.g. 2026-03-23
+        name:
+          type: ["string", "null"]
+          description: Session label e.g. Quads, Upper Body
+        color:
+          type: ["string", "null"]
+        exercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/Exercise"
+      required:
+        - id
+        - date
+        - exercises
+
     Programme:
       type: object
       properties:
@@ -272,10 +293,10 @@ components:
           type: integer
         title:
           type: string
-        exercises:
+        sessions:
           type: array
           items:
-            $ref: "#/components/schemas/Exercise"
+            $ref: "#/components/schemas/Session"
         createdAt:
           type: string
           format: date-time
@@ -285,7 +306,7 @@ components:
       required:
         - id
         - title
-        - exercises
+        - sessions
         - createdAt
         - updatedAt
 
@@ -294,23 +315,22 @@ components:
       properties:
         title:
           type: string
-        exercises:
+        sessions:
           type: array
           items:
-            $ref: "#/components/schemas/Exercise"
+            $ref: "#/components/schemas/Session"
       required:
         - title
-        - exercises
 
     UpdateProgrammeBody:
       type: object
       properties:
         title:
           type: string
-        exercises:
+        sessions:
           type: array
           items:
-            $ref: "#/components/schemas/Exercise"
+            $ref: "#/components/schemas/Session"
 
     ParseTranscriptBody:
       type: object
