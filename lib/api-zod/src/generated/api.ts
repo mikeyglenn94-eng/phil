@@ -51,6 +51,10 @@ export const ListProgrammesResponseItem = zod.object({
               }),
             )
             .optional(),
+          clientComment: zod
+            .string()
+            .nullish()
+            .describe("Client's post-set comment for the coach"),
           perSetReps: zod
             .array(zod.string().nullable())
             .optional()
@@ -117,6 +121,10 @@ export const CreateProgrammeBody = zod.object({
                 }),
               )
               .optional(),
+            clientComment: zod
+              .string()
+              .nullish()
+              .describe("Client's post-set comment for the coach"),
             perSetReps: zod
               .array(zod.string().nullable())
               .optional()
@@ -185,6 +193,10 @@ export const GetProgrammeResponse = zod.object({
               }),
             )
             .optional(),
+          clientComment: zod
+            .string()
+            .nullish()
+            .describe("Client's post-set comment for the coach"),
           perSetReps: zod
             .array(zod.string().nullable())
             .optional()
@@ -254,6 +266,10 @@ export const UpdateProgrammeBody = zod.object({
                 }),
               )
               .optional(),
+            clientComment: zod
+              .string()
+              .nullish()
+              .describe("Client's post-set comment for the coach"),
             perSetReps: zod
               .array(zod.string().nullable())
               .optional()
@@ -315,6 +331,10 @@ export const UpdateProgrammeResponse = zod.object({
               }),
             )
             .optional(),
+          clientComment: zod
+            .string()
+            .nullish()
+            .describe("Client's post-set comment for the coach"),
           perSetReps: zod
             .array(zod.string().nullable())
             .optional()
@@ -385,6 +405,10 @@ export const ParseTranscriptBody = zod.object({
             }),
           )
           .optional(),
+        clientComment: zod
+          .string()
+          .nullish()
+          .describe("Client's post-set comment for the coach"),
         perSetReps: zod
           .array(zod.string().nullable())
           .optional()
@@ -433,6 +457,10 @@ export const ParseTranscriptResponse = zod.object({
           }),
         )
         .optional(),
+      clientComment: zod
+        .string()
+        .nullish()
+        .describe("Client's post-set comment for the coach"),
       perSetReps: zod
         .array(zod.string().nullable())
         .optional()
@@ -502,6 +530,10 @@ export const CalendarCommandBody = zod.object({
               }),
             )
             .optional(),
+          clientComment: zod
+            .string()
+            .nullish()
+            .describe("Client's post-set comment for the coach"),
           perSetReps: zod
             .array(zod.string().nullable())
             .optional()
@@ -565,6 +597,10 @@ export const CalendarCommandResponse = zod.object({
               }),
             )
             .optional(),
+          clientComment: zod
+            .string()
+            .nullish()
+            .describe("Client's post-set comment for the coach"),
           perSetReps: zod
             .array(zod.string().nullable())
             .optional()

@@ -43,6 +43,11 @@ export interface Exercise {
   /** @nullable */
   rawText?: string | null;
   weekProgression?: WeekProgression[];
+  /**
+   * Client's post-set comment for the coach
+   * @nullable
+   */
+  clientComment?: string | null;
   /** Coach-prescribed reps per set (overrides global reps when present) */
   perSetReps?: (string | null)[];
   /** Coach-prescribed RPE per set (overrides global rpe when present) */

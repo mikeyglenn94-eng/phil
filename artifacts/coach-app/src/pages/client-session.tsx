@@ -86,6 +86,12 @@ export default function ClientSession() {
   const [parsingFor, setParsingFor] = useState<string | null>(null);
   const logRecRef = useRef<any>(null);
 
+  // Comment state
+  const [comments, setComments] = useState<Record<string, string>>({});
+  const [commentListeningFor, setCommentListeningFor] = useState<string | null>(null);
+  const [commentInterim, setCommentInterim] = useState("");
+  const commentRecRef = useRef<any>(null);
+
   // Init logs from saved data
   useEffect(() => {
     if (!session) return;
@@ -98,7 +104,48 @@ export default function ClientSession() {
     }
     setLogs(initial);
     setNameOverrides({});
+    // Init comments from saved data
+    const savedComments: Record<string, string> = {};
+    for (const ex of session.exercises || []) {
+      if (ex.clientComment) savedComments[ex.id] = ex.clientComment;
+    }
+    setComments(savedComments);
   }, [session]);
+
+  // Set up comment voice recognition (single-shot)
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+    r.onresult = (e: any) => {
+      let fin = ""; let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      setCommentInterim(interim);
+      if (fin) {
+        const exId = r.currentExId;
+        setComments(prev => ({ ...prev, [exId]: (prev[exId] ? prev[exId] + " " : "") + fin.trim() }));
+        setCommentInterim("");
+      }
+    };
+    r.onerror = () => { setCommentListeningFor(null); setCommentInterim(""); };
+    r.onend = () => { setCommentListeningFor(null); setCommentInterim(""); };
+    commentRecRef.current = r;
+    return () => { try { r.abort(); } catch {} };
+  }, []);
+
+  const startCommentListening = (exId: string) => {
+    const r = commentRecRef.current;
+    if (!r) return;
+    if (commentListeningFor === exId) { r.stop(); return; }
+    r.currentExId = exId;
+    setCommentListeningFor(exId);
+    setCommentInterim("");
+    try { r.start(); } catch {}
+  };
 
   // Set up log voice recognition
   useEffect(() => {
@@ -312,11 +359,13 @@ export default function ClientSession() {
           name: nameOverrides[ex.id] || ex.name,
           setWeights: (logs[ex.id] || []).map(l => l.weight),
           setReps: (logs[ex.id] || []).map(l => l.reps),
+          clientComment: comments[ex.id] || null,
         }));
         const extraExercises = addedExercises.map(ex => ({
           ...ex,
           setWeights: (logs[ex.id] || []).map(l => l.weight),
           setReps: (logs[ex.id] || []).map(l => l.reps),
+          clientComment: comments[ex.id] || null,
         }));
         return { ...s, exercises: [...originalExercises, ...extraExercises] };
       });
@@ -572,6 +621,30 @@ export default function ClientSession() {
                   </div>
                 )}
               </div>
+
+              {/* Client comment box */}
+              <div className="px-4 pb-4">
+                <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-muted bg-muted/20 hover:border-muted-foreground/30"}`}>
+                  <textarea
+                    value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
+                    onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); }}
+                    placeholder="Leave a comment for your coach…"
+                    rows={2}
+                    disabled={commentListeningFor === ex.id}
+                    className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => startCommentListening(ex.id)}
+                    className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${commentListeningFor === ex.id ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                    title={commentListeningFor === ex.id ? "Stop" : "Dictate comment"}
+                  >
+                    {commentListeningFor === ex.id
+                      ? <Square className="w-3.5 h-3.5 fill-current" />
+                      : <Mic className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
             </div>
           );
         })}
@@ -665,6 +738,30 @@ export default function ClientSession() {
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* Client comment box */}
+              <div className="px-4 pb-4">
+                <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-muted bg-muted/20 hover:border-muted-foreground/30"}`}>
+                  <textarea
+                    value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
+                    onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); }}
+                    placeholder="Leave a comment for your coach…"
+                    rows={2}
+                    disabled={commentListeningFor === ex.id}
+                    className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => startCommentListening(ex.id)}
+                    className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${commentListeningFor === ex.id ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                    title={commentListeningFor === ex.id ? "Stop" : "Dictate comment"}
+                  >
+                    {commentListeningFor === ex.id
+                      ? <Square className="w-3.5 h-3.5 fill-current" />
+                      : <Mic className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
             </div>
           );
