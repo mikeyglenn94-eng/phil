@@ -91,6 +91,7 @@ export default function ClientSession() {
   const [commentListeningFor, setCommentListeningFor] = useState<string | null>(null);
   const [commentInterim, setCommentInterim] = useState("");
   const commentRecRef = useRef<any>(null);
+  const commentInterimRef = useRef(""); // sync ref so onend can read latest interim
 
   // Init logs from saved data
   useEffect(() => {
@@ -124,15 +125,27 @@ export default function ClientSession() {
         if (e.results[i].isFinal) fin += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
       }
+      commentInterimRef.current = interim;
       setCommentInterim(interim);
       if (fin) {
+        commentInterimRef.current = "";
         const exId = r.currentExId;
         setComments(prev => ({ ...prev, [exId]: (prev[exId] ? prev[exId] + " " : "") + fin.trim() }));
         setCommentInterim("");
       }
     };
-    r.onerror = () => { setCommentListeningFor(null); setCommentInterim(""); };
-    r.onend = () => { setCommentListeningFor(null); setCommentInterim(""); };
+    r.onerror = () => { commentInterimRef.current = ""; setCommentListeningFor(null); setCommentInterim(""); };
+    r.onend = () => {
+      // Commit any pending interim text that wasn't finalised before stop was pressed
+      const leftover = commentInterimRef.current.trim();
+      const exId = r.currentExId;
+      if (leftover && exId) {
+        setComments(prev => ({ ...prev, [exId]: (prev[exId] ? prev[exId] + " " : "") + leftover }));
+      }
+      commentInterimRef.current = "";
+      setCommentListeningFor(null);
+      setCommentInterim("");
+    };
     commentRecRef.current = r;
     return () => { try { r.abort(); } catch {} };
   }, []);
