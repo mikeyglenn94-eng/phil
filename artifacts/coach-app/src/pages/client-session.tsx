@@ -461,8 +461,10 @@ export default function ClientSession() {
 
                 {/* Meta tags */}
                 <div className="flex flex-wrap gap-1.5 mt-2 ml-8">
-                  {ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
-                  {ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
+                  {ex.perSetReps && ex.perSetReps.length > 0
+                    ? <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.perSetReps.join("/")} reps</span>
+                    : ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
+                  {!ex.perSetRpe?.length && ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
                   {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
                 </div>
                 {ex.notes && <p className="text-xs text-muted-foreground mt-1.5 ml-8 italic">{ex.notes}</p>}
@@ -525,20 +527,23 @@ export default function ClientSession() {
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Weight (kg)</span>
                       <div className="text-center">
                         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Reps done</span>
-                        {ex.reps && (
-                          <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">
-                            target: {ex.reps}
-                          </span>
-                        )}
+                        {ex.perSetReps && ex.perSetReps.length > 0 ? (
+                          <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">varies per set</span>
+                        ) : ex.reps ? (
+                          <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">target: {ex.reps}</span>
+                        ) : null}
                       </div>
                     </div>
                     {Array.from({ length: setsCount }, (_, setIdx) => {
                       const log = exLogs[setIdx] || { weight: null, reps: null };
                       const isDone = log.weight !== null || log.reps !== null;
+                      const perSetTarget = ex.perSetReps?.[setIdx];
+                      const perSetRpeTarget = ex.perSetRpe?.[setIdx];
                       return (
                         <div key={setIdx} className={`grid grid-cols-[3rem_1fr_1fr] gap-2 items-center rounded-xl px-2 py-1.5 transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
-                          <div className={`text-sm font-bold pl-1 ${isDone ? "text-primary" : "text-muted-foreground"}`}>
-                            {setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}
+                          <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
+                            <div>{setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}</div>
+                            {perSetRpeTarget && <div className="text-[9px] font-semibold text-muted-foreground normal-case">RPE {perSetRpeTarget}</div>}
                           </div>
                           <Input
                             type="number" inputMode="decimal" step="0.5" min="0"
@@ -547,13 +552,20 @@ export default function ClientSession() {
                             onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
                             className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
                           />
-                          <Input
-                            type="number" inputMode="numeric" step="1" min="0"
-                            placeholder={ex.reps || "—"}
-                            value={log.reps ?? ""}
-                            onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
-                            className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
-                          />
+                          <div className="relative">
+                            <Input
+                              type="number" inputMode="numeric" step="1" min="0"
+                              placeholder={perSetTarget || ex.reps || "—"}
+                              value={log.reps ?? ""}
+                              onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
+                              className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
+                            />
+                            {perSetTarget && (
+                              <span className="absolute -bottom-3.5 left-0 right-0 text-center text-[9px] text-primary/50 font-semibold pointer-events-none">
+                                target: {perSetTarget}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -600,8 +612,10 @@ export default function ClientSession() {
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2 ml-8">
-                  {ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
-                  {ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
+                  {ex.perSetReps && ex.perSetReps.length > 0
+                    ? <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.perSetReps.join("/")} reps</span>
+                    : ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
+                  {!ex.perSetRpe?.length && ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
                   {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
                 </div>
                 {ex.notes && <p className="text-xs text-muted-foreground mt-1.5 ml-8 italic">{ex.notes}</p>}

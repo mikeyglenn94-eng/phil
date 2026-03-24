@@ -25,6 +25,10 @@ export interface Exercise {
   /** @nullable */
   rawText?: string | null;
   weekProgression?: WeekProgression[];
+  /** Coach-prescribed reps per set (overrides global reps when present) */
+  perSetReps?: (string | null)[];
+  /** Coach-prescribed RPE per set (overrides global rpe when present) */
+  perSetRpe?: (string | null)[];
   /** Weight in kg logged by client for each set */
   setWeights?: (number | null)[];
   /** Actual reps achieved per set, logged by client */

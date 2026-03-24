@@ -51,6 +51,18 @@ export const ListProgrammesResponseItem = zod.object({
               }),
             )
             .optional(),
+          perSetReps: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed reps per set (overrides global reps when present)",
+            ),
+          perSetRpe: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed RPE per set (overrides global rpe when present)",
+            ),
           setWeights: zod
             .array(zod.number().nullable())
             .optional()
@@ -105,6 +117,18 @@ export const CreateProgrammeBody = zod.object({
                 }),
               )
               .optional(),
+            perSetReps: zod
+              .array(zod.string().nullable())
+              .optional()
+              .describe(
+                "Coach-prescribed reps per set (overrides global reps when present)",
+              ),
+            perSetRpe: zod
+              .array(zod.string().nullable())
+              .optional()
+              .describe(
+                "Coach-prescribed RPE per set (overrides global rpe when present)",
+              ),
             setWeights: zod
               .array(zod.number().nullable())
               .optional()
@@ -161,6 +185,18 @@ export const GetProgrammeResponse = zod.object({
               }),
             )
             .optional(),
+          perSetReps: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed reps per set (overrides global reps when present)",
+            ),
+          perSetRpe: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed RPE per set (overrides global rpe when present)",
+            ),
           setWeights: zod
             .array(zod.number().nullable())
             .optional()
@@ -218,6 +254,18 @@ export const UpdateProgrammeBody = zod.object({
                 }),
               )
               .optional(),
+            perSetReps: zod
+              .array(zod.string().nullable())
+              .optional()
+              .describe(
+                "Coach-prescribed reps per set (overrides global reps when present)",
+              ),
+            perSetRpe: zod
+              .array(zod.string().nullable())
+              .optional()
+              .describe(
+                "Coach-prescribed RPE per set (overrides global rpe when present)",
+              ),
             setWeights: zod
               .array(zod.number().nullable())
               .optional()
@@ -267,6 +315,18 @@ export const UpdateProgrammeResponse = zod.object({
               }),
             )
             .optional(),
+          perSetReps: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed reps per set (overrides global reps when present)",
+            ),
+          perSetRpe: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed RPE per set (overrides global rpe when present)",
+            ),
           setWeights: zod
             .array(zod.number().nullable())
             .optional()
@@ -325,6 +385,18 @@ export const ParseTranscriptBody = zod.object({
             }),
           )
           .optional(),
+        perSetReps: zod
+          .array(zod.string().nullable())
+          .optional()
+          .describe(
+            "Coach-prescribed reps per set (overrides global reps when present)",
+          ),
+        perSetRpe: zod
+          .array(zod.string().nullable())
+          .optional()
+          .describe(
+            "Coach-prescribed RPE per set (overrides global rpe when present)",
+          ),
         setWeights: zod
           .array(zod.number().nullable())
           .optional()
@@ -361,6 +433,18 @@ export const ParseTranscriptResponse = zod.object({
           }),
         )
         .optional(),
+      perSetReps: zod
+        .array(zod.string().nullable())
+        .optional()
+        .describe(
+          "Coach-prescribed reps per set (overrides global reps when present)",
+        ),
+      perSetRpe: zod
+        .array(zod.string().nullable())
+        .optional()
+        .describe(
+          "Coach-prescribed RPE per set (overrides global rpe when present)",
+        ),
       setWeights: zod
         .array(zod.number().nullable())
         .optional()
@@ -418,6 +502,18 @@ export const CalendarCommandBody = zod.object({
               }),
             )
             .optional(),
+          perSetReps: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed reps per set (overrides global reps when present)",
+            ),
+          perSetRpe: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed RPE per set (overrides global rpe when present)",
+            ),
           setWeights: zod
             .array(zod.number().nullable())
             .optional()
@@ -469,6 +565,18 @@ export const CalendarCommandResponse = zod.object({
               }),
             )
             .optional(),
+          perSetReps: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed reps per set (overrides global reps when present)",
+            ),
+          perSetRpe: zod
+            .array(zod.string().nullable())
+            .optional()
+            .describe(
+              "Coach-prescribed RPE per set (overrides global rpe when present)",
+            ),
           setWeights: zod
             .array(zod.number().nullable())
             .optional()

@@ -527,7 +527,9 @@ export default function Home() {
                                     <p className="text-xs font-medium text-foreground leading-tight truncate">{ex.name}</p>
                                     {(ex.sets || ex.reps) && (
                                       <p className="text-[10px] text-muted-foreground">
-                                        {ex.sets && ex.reps ? `${ex.sets} x ${ex.reps}` : ex.sets ? `${ex.sets} sets` : ex.reps}
+                                        {ex.perSetReps && ex.perSetReps.length > 0
+                                          ? ex.perSetReps.join("/")
+                                          : ex.sets && ex.reps ? `${ex.sets} x ${ex.reps}` : ex.sets ? `${ex.sets} sets` : ex.reps}
                                       </p>
                                     )}
                                   </div>

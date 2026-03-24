@@ -45,6 +45,15 @@ You will receive a transcript from the coach AND the current list of exercises i
 - "put squats before deadlifts" → reorder so squats come first
 - "move bench press to after the row" → reorder accordingly
 
+### Variable rep schemes (per-set reps and/or RPE):
+- "21/15/9 at RPE 9" or "21 reps set 1, 15 reps set 2, 9 reps set 3 all RPE 9" or "set 1: 21 reps RPE 9, set 2: 15 reps RPE 9, set 3: 9 reps RPE 9"
+  → sets:3, perSetReps:["21","15","9"], rpe:"9" (global RPE since all the same)
+- "set 1: 10 reps RPE 7, set 2: 8 reps RPE 8, set 3: 6 reps RPE 9"
+  → sets:3, perSetReps:["10","8","6"], perSetRpe:["7","8","9"]
+- If reps per set are variable but RPE is the same → set global rpe, no perSetRpe
+- If reps are all the same → set global reps, no perSetReps
+- To clear variable scheme: "make the bench press uniform 4 sets of 8" → clear perSetReps, perSetRpe; set reps:"8"
+
 ### Week progressions:
 - "reduce reps by 2 each week for 3 weeks" with current reps "10" → weekProgression:[{week:1,reps:"10"},{week:2,reps:"8"},{week:3,reps:"6"}]
 - "add 2.5 kilos each week for 4 weeks" → weekProgression:[{week:1,weight:"start"},{week:2,weight:"+2.5kg"},...]

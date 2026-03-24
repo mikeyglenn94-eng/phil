@@ -298,6 +298,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WeekProgression"
+        perSetReps:
+          type: array
+          description: Coach-prescribed reps per set (overrides global reps when present)
+          items:
+            type: ["string", "null"]
+        perSetRpe:
+          type: array
+          description: Coach-prescribed RPE per set (overrides global rpe when present)
+          items:
+            type: ["string", "null"]
         setWeights:
           type: array
           description: Weight in kg logged by client for each set
