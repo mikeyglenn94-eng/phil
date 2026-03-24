@@ -20,6 +20,8 @@ export function VoiceInput({ onTranscriptComplete, isProcessing, editMode = fals
   const [textInput, setTextInput] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
+  const shouldBeListeningRef = useRef(false);
+  const interimAccRef = useRef("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -44,32 +46,44 @@ export function VoiceInput({ onTranscriptComplete, isProcessing, editMode = fals
           interim += event.results[i][0].transcript;
         }
       }
+      interimAccRef.current = interim;
       setInterimText(interim || finalTranscript);
       if (finalTranscript) {
-        recognitionRef.current.finalAccumulator =
-          (recognitionRef.current.finalAccumulator || "") + " " + finalTranscript;
+        recognition.finalAccumulator =
+          (recognition.finalAccumulator || "") + " " + finalTranscript;
+        interimAccRef.current = "";
       }
     };
 
     recognition.onerror = (event: any) => {
-      setIsRecording(false);
-      if (event.error === "not-allowed") {
+      if (event.error === "not-allowed" || event.error === "audio-capture") {
+        shouldBeListeningRef.current = false;
+        setIsRecording(false);
         toast({ title: "Microphone access denied", variant: "destructive" });
       }
+      // no-speech / network: let onend handle restart
     };
 
     recognition.onend = () => {
+      if (shouldBeListeningRef.current) {
+        // Browser cut off due to silence timeout — restart seamlessly
+        try { recognition.start(); } catch {}
+        return;
+      }
+      // User explicitly stopped — process accumulated text
       setIsRecording(false);
-      const finalResult =
-        (recognitionRef.current.finalAccumulator || "") + " " + interimText;
-      const clean = finalResult.trim();
-      if (clean) onTranscriptComplete(clean);
+      const finalResult = ((recognition.finalAccumulator || "") + " " + interimAccRef.current).trim();
+      if (finalResult) onTranscriptComplete(finalResult);
       setInterimText("");
-      if (recognitionRef.current) recognitionRef.current.finalAccumulator = "";
+      interimAccRef.current = "";
+      recognition.finalAccumulator = "";
     };
 
     recognitionRef.current = recognition;
-    return () => recognitionRef.current?.abort();
+    return () => {
+      shouldBeListeningRef.current = false;
+      recognitionRef.current?.abort();
+    };
   }, [onTranscriptComplete, toast]);
 
   const toggleRecording = () => {
@@ -78,16 +92,20 @@ export function VoiceInput({ onTranscriptComplete, isProcessing, editMode = fals
       return;
     }
     if (isRecording) {
+      shouldBeListeningRef.current = false;
       recognitionRef.current?.stop();
-      setIsRecording(false);
+      // setIsRecording(false) will be called by onend
     } else {
       setInterimText("");
+      interimAccRef.current = "";
       if (recognitionRef.current) {
         recognitionRef.current.finalAccumulator = "";
+        shouldBeListeningRef.current = true;
         try {
           recognitionRef.current.start();
           setIsRecording(true);
         } catch (e) {
+          shouldBeListeningRef.current = false;
           console.error(e);
         }
       }

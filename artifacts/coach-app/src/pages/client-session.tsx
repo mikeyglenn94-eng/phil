@@ -115,8 +115,20 @@ export default function ClientSession() {
       setInterimText(interim || fin);
       if (fin) r.finalAccumulator = (r.finalAccumulator || "") + " " + fin;
     };
-    r.onerror = () => { setListeningFor(null); setInterimText(""); };
+    r.shouldBeListening = false;
+    r.onerror = (e: any) => {
+      if (e.error === "not-allowed" || e.error === "audio-capture") {
+        r.shouldBeListening = false;
+        setListeningFor(null); setInterimText("");
+      }
+      // no-speech / network timeouts: let onend handle restart
+    };
     r.onend = async () => {
+      if (r.shouldBeListening) {
+        // Browser silence timeout — restart seamlessly
+        try { r.start(); } catch {}
+        return;
+      }
       const exId = r.currentExId;
       const final = ((r.finalAccumulator || "") + " " + (interimText || "")).trim();
       setListeningFor(null); setInterimText(""); r.finalAccumulator = "";
@@ -243,8 +255,13 @@ export default function ClientSession() {
   const startLogListening = (exId: string) => {
     const r = logRecRef.current;
     if (!r) { toast({ title: "Voice not supported", variant: "destructive" }); return; }
-    if (listeningFor) { r.stop(); return; }
+    if (listeningFor) {
+      r.shouldBeListening = false;
+      r.stop();
+      return;
+    }
     r.finalAccumulator = ""; r.currentExId = exId;
+    r.shouldBeListening = true;
     setInterimText("");
     try { r.start(); setListeningFor(exId); } catch {}
   };
@@ -371,7 +388,10 @@ export default function ClientSession() {
               <p className="text-sm font-semibold text-primary">Listening...</p>
               <p className="text-xs text-muted-foreground truncate italic">{interimText || "Speak your results..."}</p>
             </div>
-            <Button size="sm" variant="outline" className="shrink-0 rounded-xl" onClick={() => logRecRef.current?.stop()}>
+            <Button size="sm" variant="outline" className="shrink-0 rounded-xl" onClick={() => {
+              const r = logRecRef.current;
+              if (r) { r.shouldBeListening = false; r.stop(); }
+            }}>
               <Square className="w-3.5 h-3.5 mr-1.5 fill-current" />Done
             </Button>
           </div>
