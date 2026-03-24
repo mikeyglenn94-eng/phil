@@ -298,6 +298,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WeekProgression"
+        clientComment:
+          type: ["string", "null"]
+          description: Client's post-set comment for the coach
         perSetReps:
           type: array
           description: Coach-prescribed reps per set (overrides global reps when present)

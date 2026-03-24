@@ -21,6 +21,7 @@ export const exerciseSchema = z.object({
   notes: z.string().nullable().optional(),
   rawText: z.string().nullable().optional(),
   weekProgression: z.array(weekProgressionSchema).optional(),
+  clientComment: z.string().nullable().optional(), // client's post-session comment to coach
   perSetReps: z.array(z.string().nullable()).optional(), // coach-prescribed reps per set
   perSetRpe: z.array(z.string().nullable()).optional(), // coach-prescribed RPE per set
   setWeights: z.array(z.number().nullable()).optional(), // kg per set, logged by client
