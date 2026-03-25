@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, Plus, MoreHorizontal, Trash2, Copy,
-  Dumbbell, ClipboardPaste, X, Mic, Square, Loader2, Send, Undo2, Sparkles,
+  Dumbbell, ClipboardPaste, X, Mic, Square, Loader2, Send, Undo2, Sparkles, Brain, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addWeeks, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
@@ -29,8 +29,16 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const WEEKS_TO_SHOW = 4;
@@ -71,6 +79,114 @@ export default function Home() {
   const [newProgrammeOpen, setNewProgrammeOpen] = useState(false);
   const [newProgrammeTitle, setNewProgrammeTitle] = useState("");
   const [copiedSession, setCopiedSession] = useState<Session | null>(null);
+
+  // ── WOD Brain ──
+  const [wodBrainOpen, setWodBrainOpen] = useState(false);
+  const [wodQuery, setWodQuery] = useState("");
+  const [wodListening, setWodListening] = useState(false);
+  const [wodInterim, setWodInterim] = useState("");
+  const wodInterimRef = useRef("");
+  const wodRecRef = useRef<any>(null);
+  const [wodSearching, setWodSearching] = useState(false);
+  const [wodResults, setWodResults] = useState<any[]>([]);
+  const [wodTargetDate, setWodTargetDate] = useState("");
+  const [wodAdding, setWodAdding] = useState<string | null>(null);
+
+  // Week dates available for WOD Brain targeting
+  const currentWeekStart = useMemo(() => startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 }), [weekOffset]);
+  const currentWeekDates = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i)), [currentWeekStart]);
+
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = true; r.interimResults = true; r.lang = "en-US";
+    r.onresult = (e: any) => {
+      let fin = ""; let int = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else int += e.results[i][0].transcript;
+      }
+      wodInterimRef.current = int;
+      setWodInterim(int);
+      if (fin) {
+        wodInterimRef.current = "";
+        setWodQuery(prev => (prev ? prev + " " : "") + fin.trim());
+        setWodInterim("");
+      }
+    };
+    r.onerror = () => { setWodListening(false); setWodInterim(""); wodInterimRef.current = ""; };
+    r.onend = () => {
+      const leftover = wodInterimRef.current.trim();
+      if (leftover) setWodQuery(prev => (prev ? prev + " " : "") + leftover);
+      wodInterimRef.current = "";
+      setWodListening(false);
+      setWodInterim("");
+    };
+    wodRecRef.current = r;
+    return () => { try { r.abort(); } catch {} };
+  }, []);
+
+  const toggleWodListening = () => {
+    if (wodListening) { wodRecRef.current?.stop(); return; }
+    setWodListening(true); setWodInterim(""); wodInterimRef.current = "";
+    try { wodRecRef.current?.start(); } catch {}
+  };
+
+  const searchWods = async () => {
+    const q = wodQuery.trim();
+    if (!q) return;
+    if (wodListening) { wodRecRef.current?.stop(); setWodListening(false); }
+    setWodSearching(true);
+    try {
+      const res = await fetch("/api/wod-brain/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+      const data = await res.json();
+      setWodResults(data.results ?? []);
+      if ((data.results?.length ?? 0) === 0) toast({ title: "No matching WODs found", description: "Try different keywords." });
+    } catch {
+      toast({ title: "WOD Brain error", variant: "destructive" });
+    } finally { setWodSearching(false); }
+  };
+
+  const addWodToCalendar = async (wod: any) => {
+    if (!selectedProgramme || !wodTargetDate) return;
+    setWodAdding(wod.id);
+    const formatLabel = wod.formatLabel ?? wod.format;
+    const sessionName = `${formatLabel} ${wod.duration}: ${wod.name}`;
+    const newSession: Session = {
+      id: `session-${Date.now()}`,
+      date: wodTargetDate,
+      name: sessionName,
+      exercises: wod.exercises.map((ex: string, idx: number) => ({
+        id: `ex-${Date.now()}-${idx}`,
+        name: ex.charAt(0).toUpperCase() + ex.slice(1),
+        sets: null,
+        reps: null,
+        notes: `WOD Brain · ${formatLabel} ${wod.duration} min`,
+      })),
+    };
+    const existingOnDay = (selectedProgramme.sessions || []).find((s: any) => s.date === wodTargetDate);
+    if (existingOnDay && !confirm(`${format(new Date(wodTargetDate + "T12:00:00"), "EEE d MMM")} already has a session. Replace it?`)) {
+      setWodAdding(null); return;
+    }
+    const updatedSessions = [
+      ...(selectedProgramme.sessions || []).filter((s: any) => s.date !== wodTargetDate),
+      newSession,
+    ];
+    try {
+      await updateMutation.mutateAsync({ id: selectedProgramme.id, data: { sessions: updatedSessions as any } });
+      queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      toast({ title: `"${sessionName}" added to ${format(new Date(wodTargetDate + "T12:00:00"), "EEE d MMM")}` });
+      setWodBrainOpen(false);
+      setWodResults([]); setWodQuery(""); setWodTargetDate("");
+    } catch {
+      toast({ title: "Failed to add session", variant: "destructive" });
+    } finally { setWodAdding(null); }
+  };
 
   // Calendar command bar
   const [commandText, setCommandText] = useState("");
@@ -336,6 +452,16 @@ export default function Home() {
             </Button>
           </div>
 
+          {selectedProgramme && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-lg gap-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300"
+              onClick={() => { setWodResults([]); setWodQuery(""); setWodTargetDate(""); setWodBrainOpen(true); }}
+            >
+              <Brain className="w-4 h-4" /> WOD Brain
+            </Button>
+          )}
           <Button size="sm" className="rounded-lg gap-2" onClick={() => setNewProgrammeOpen(true)}>
             <Plus className="w-4 h-4" /> New Programme
           </Button>
@@ -564,6 +690,127 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* WOD Brain Dialog */}
+      <Dialog open={wodBrainOpen} onOpenChange={open => { if (!open) { try { wodRecRef.current?.stop(); } catch {} setWodListening(false); setWodInterim(""); } setWodBrainOpen(open); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-purple-600" />
+              WOD Brain
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            {/* Query input with voice */}
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">Describe the workout you want — format, movements, duration, feel.</p>
+              <div className="relative flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <Input
+                    placeholder='e.g. "EMOM 12 min, no running, ski erg and KB"'
+                    value={wodListening ? (wodQuery + (wodInterim ? " " + wodInterim : "")) : wodQuery}
+                    onChange={e => !wodListening && setWodQuery(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && !wodSearching && searchWods()}
+                    className={wodListening ? "border-red-300 bg-red-50 pr-2" : ""}
+                    autoFocus
+                  />
+                  {wodListening && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5">
+                      {[0, 1, 2].map(i => (
+                        <span key={i} className="w-0.5 bg-red-500 rounded-full animate-bounce" style={{ height: 12 + i * 4, animationDelay: `${i * 0.1}s` }} />
+                      ))}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant={wodListening ? "destructive" : "outline"}
+                  size="icon"
+                  className="shrink-0 h-10 w-10 rounded-lg"
+                  onClick={toggleWodListening}
+                  title={wodListening ? "Stop recording" : "Speak your query"}
+                >
+                  {wodListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
+                <Button
+                  size="sm"
+                  className="shrink-0 gap-1.5 rounded-lg h-10 px-4 bg-purple-600 hover:bg-purple-700"
+                  onClick={searchWods}
+                  disabled={!wodQuery.trim() || wodSearching}
+                >
+                  {wodSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                  Find
+                </Button>
+              </div>
+            </div>
+
+            {/* Target day picker */}
+            {wodResults.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-1.5">Add to which day?</p>
+                <Select value={wodTargetDate} onValueChange={setWodTargetDate}>
+                  <SelectTrigger className="w-full rounded-lg">
+                    <SelectValue placeholder="Choose a day from current week…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currentWeekDates.map(d => (
+                      <SelectItem key={d.toISOString()} value={format(d, "yyyy-MM-dd")}>
+                        {format(d, "EEEE · d MMM")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Results */}
+            {wodResults.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-muted-foreground">Top matches</p>
+                {wodResults.map((wod, idx) => (
+                  <div
+                    key={wod.id}
+                    className="rounded-xl border border-purple-100 bg-purple-50/40 p-4 space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs font-bold text-purple-700 bg-purple-100 rounded px-2 py-0.5">{wod.formatLabel}</span>
+                          <span className="text-xs text-muted-foreground">{wod.duration} min</span>
+                          <span className="text-xs text-amber-600 font-bold">#{idx + 1}</span>
+                        </div>
+                        <p className="font-semibold text-sm">{wod.name}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="shrink-0 rounded-lg gap-1.5 bg-purple-600 hover:bg-purple-700 text-xs"
+                        disabled={!wodTargetDate || wodAdding === wod.id}
+                        onClick={() => addWodToCalendar(wod)}
+                        title={!wodTargetDate ? "Choose a day first" : `Add to ${wodTargetDate}`}
+                      >
+                        {wodAdding === wod.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                        Add
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {wod.exercises.map((ex: string) => (
+                        <span key={ex} className="text-xs bg-white border border-purple-100 rounded-full px-2 py-0.5 text-purple-800 capitalize">{ex}</span>
+                      ))}
+                    </div>
+                    {wod.tags?.length > 0 && (
+                      <div className="flex gap-1">
+                        {wod.tags.map((tag: string) => (
+                          <span key={tag} className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">{tag}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* New Programme Dialog */}
       <Dialog open={newProgrammeOpen} onOpenChange={setNewProgrammeOpen}>

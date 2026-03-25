@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import programmesRouter from "./programmes";
 import parseRouter from "./parse";
 import clientsRouter from "./clients";
+import wodBrainRouter from "./wod-brain";
 
 const router: IRouter = Router();
 
@@ -10,5 +11,6 @@ router.use(healthRouter);
 router.use(programmesRouter);
 router.use(parseRouter);
 router.use(clientsRouter);
+router.use(wodBrainRouter);
 
 export default router;
