@@ -161,6 +161,8 @@ export default function Home() {
       id: `session-${Date.now()}`,
       date: wodTargetDate,
       name: sessionName,
+      source: "wod_brain",
+      structure: wod.structure ?? "",
       exercises: (wod.blocks ?? []).map((block: any, idx: number) => ({
         id: `ex-${Date.now()}-${idx}`,
         name: `${block.movement.charAt(0).toUpperCase()}${block.movement.slice(1)}`,
@@ -261,12 +263,14 @@ export default function Home() {
       id: `session-${Date.now()}`,
       date: runTargetDate,
       name: sessionName,
+      source: "run_brain",
+      structure: run.structure ?? "",
       exercises: [{
         id: `ex-${Date.now()}-0`,
         name: run.name,
         sets: null,
         reps: null,
-        notes: run.structure + ` · ${run.intensityLabel} · Run Brain`,
+        notes: run.structure + ` · ${run.intensityLabel}`,
       }],
     };
     const existingOnDay = (selectedProgramme.sessions || []).find((s: any) => s.date === runTargetDate);
@@ -761,27 +765,35 @@ export default function Home() {
                                 {session.name}
                               </div>
                             )}
-                            {/* Exercise list */}
-                            <div className="space-y-0.5">
-                              {(session.exercises || []).slice(0, 6).map((ex, i) => (
-                                <div key={ex.id} className="flex items-start gap-1.5">
-                                  <span className="text-[10px] text-muted-foreground font-bold w-3 shrink-0 mt-0.5">{i + 1}</span>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-foreground leading-tight truncate">{ex.name}</p>
-                                    {(ex.sets || ex.reps) && (
-                                      <p className="text-[10px] text-muted-foreground">
-                                        {ex.perSetReps && ex.perSetReps.length > 0
-                                          ? ex.perSetReps.join("/")
-                                          : ex.sets && ex.reps ? `${ex.sets} x ${ex.reps}` : ex.sets ? `${ex.sets} sets` : ex.reps}
-                                      </p>
-                                    )}
+                            {/* Exercise list — WOD/Run Brain sessions show as one block */}
+                            {(session as any).source === "wod_brain" || (session as any).source === "run_brain" ? (
+                              <p className="text-[10px] text-foreground/80 leading-snug">
+                                {(session.exercises || []).map((ex, i) => (
+                                  `${i + 1}. ${ex.name}${ex.notes ? ` ${ex.notes}` : ""}`
+                                )).join("  ")}
+                              </p>
+                            ) : (
+                              <div className="space-y-0.5">
+                                {(session.exercises || []).slice(0, 6).map((ex, i) => (
+                                  <div key={ex.id} className="flex items-start gap-1.5">
+                                    <span className="text-[10px] text-muted-foreground font-bold w-3 shrink-0 mt-0.5">{i + 1}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-foreground leading-tight truncate">{ex.name}</p>
+                                      {(ex.sets || ex.reps) && (
+                                        <p className="text-[10px] text-muted-foreground">
+                                          {ex.perSetReps && ex.perSetReps.length > 0
+                                            ? ex.perSetReps.join("/")
+                                            : ex.sets && ex.reps ? `${ex.sets} x ${ex.reps}` : ex.sets ? `${ex.sets} sets` : ex.reps}
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
-                              {(session.exercises || []).length > 6 && (
-                                <p className="text-[10px] text-muted-foreground italic pl-4">+{session.exercises.length - 6} more</p>
-                              )}
-                            </div>
+                                ))}
+                                {(session.exercises || []).length > 6 && (
+                                  <p className="text-[10px] text-muted-foreground italic pl-4">+{session.exercises.length - 6} more</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className={`flex items-center justify-center h-[100px] transition-opacity ${copiedSession ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>

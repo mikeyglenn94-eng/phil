@@ -33,6 +33,8 @@ export const sessionSchema = z.object({
   date: z.string(), // ISO date string e.g. "2026-03-23"
   name: z.string().optional(), // e.g. "Quads", "Upper Body"
   color: z.string().optional(), // hex or named color
+  source: z.enum(["wod_brain", "run_brain"]).optional(), // set when added from WOD/Run Brain
+  structure: z.string().optional(), // full workout structure text for WOD/Run Brain sessions
   exercises: z.array(exerciseSchema),
 });
 
