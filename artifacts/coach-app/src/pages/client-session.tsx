@@ -122,12 +122,32 @@ export default function ClientSession() {
     setSessionComment((session as any).clientComment || "");
   }, [session]);
 
-  // Set up comment voice recognition (single-shot)
-  useEffect(() => {
+  // ── Mobile-safe speech recognition ──────────────────────────────────────────
+  // iOS Safari requires a *fresh* SpeechRecognition instance for every start()
+  // call, and does not support continuous:true. We create new instances each
+  // time and simulate continuous behaviour by restarting on onend.
+
+  function makeSR() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) return null;
     const r = new SR();
-    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+    r.continuous = false;
+    r.interimResults = true;
+    r.lang = "en-US";
+    return r;
+  }
+
+  function stopRef(ref: React.MutableRefObject<any>) {
+    try { ref.current?.stop(); } catch {}
+  }
+
+  // ── Comment voice (per-exercise) ─────────────────────────────────────────
+  const startCommentListening = (exId: string) => {
+    if (commentListeningFor === exId) { stopRef(commentRecRef); return; }
+    stopRef(commentRecRef);
+    const r = makeSR();
+    if (!r) return;
+    commentInterimRef.current = "";
     r.onresult = (e: any) => {
       let fin = ""; let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -138,43 +158,31 @@ export default function ClientSession() {
       setCommentInterim(interim);
       if (fin) {
         commentInterimRef.current = "";
-        const exId = r.currentExId;
         setComments(prev => ({ ...prev, [exId]: (prev[exId] ? prev[exId] + " " : "") + fin.trim() }));
         setCommentInterim("");
       }
     };
     r.onerror = () => { commentInterimRef.current = ""; setCommentListeningFor(null); setCommentInterim(""); };
     r.onend = () => {
-      // Commit any pending interim text that wasn't finalised before stop was pressed
       const leftover = commentInterimRef.current.trim();
-      const exId = r.currentExId;
-      if (leftover && exId) {
-        setComments(prev => ({ ...prev, [exId]: (prev[exId] ? prev[exId] + " " : "") + leftover }));
-      }
+      if (leftover) setComments(prev => ({ ...prev, [exId]: (prev[exId] ? prev[exId] + " " : "") + leftover }));
       commentInterimRef.current = "";
       setCommentListeningFor(null);
       setCommentInterim("");
     };
     commentRecRef.current = r;
-    return () => { try { r.abort(); } catch {} };
-  }, []);
-
-  const startCommentListening = (exId: string) => {
-    const r = commentRecRef.current;
-    if (!r) return;
-    if (commentListeningFor === exId) { r.stop(); return; }
-    r.currentExId = exId;
     setCommentListeningFor(exId);
     setCommentInterim("");
     try { r.start(); } catch {}
   };
 
-  // Session-level comment voice recognition
-  useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
-    const r = new SR();
-    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+  // ── Session-level comment voice ───────────────────────────────────────────
+  const toggleSessionCommentListening = () => {
+    if (sessionCommentListening) { stopRef(sessionCommentRecRef); return; }
+    stopRef(sessionCommentRecRef);
+    const r = makeSR();
+    if (!r) return;
+    sessionCommentInterimRef.current = "";
     r.onresult = (e: any) => {
       let fin = ""; let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -198,24 +206,35 @@ export default function ClientSession() {
       setSessionCommentInterim("");
     };
     sessionCommentRecRef.current = r;
-    return () => { try { r.abort(); } catch {} };
-  }, []);
-
-  const toggleSessionCommentListening = () => {
-    const r = sessionCommentRecRef.current;
-    if (!r) return;
-    if (sessionCommentListening) { r.stop(); return; }
     setSessionCommentListening(true);
     setSessionCommentInterim("");
     try { r.start(); } catch {}
   };
 
-  // Set up log voice recognition
-  useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
-    const r = new SR();
-    r.continuous = true; r.interimResults = true; r.lang = "en-US";
+  // ── Log voice (simulates continuous by restarting fresh instances) ────────
+  // Shared state stored in a ref so onend closures can read the latest values
+  const logAccRef = useRef("");   // accumulated finals across restarts
+  const logExIdRef = useRef("");  // which exercise is being logged
+  const logActiveRef = useRef(false); // should we keep listening?
+
+  const startLogListening = (exId: string) => {
+    if (logActiveRef.current) {
+      // User tapped again — stop and process
+      logActiveRef.current = false;
+      stopRef(logRecRef);
+      return;
+    }
+    logAccRef.current = "";
+    logExIdRef.current = exId;
+    logActiveRef.current = true;
+    setListeningFor(exId);
+    setInterimText("");
+    spawnLogRec();
+  };
+
+  function spawnLogRec() {
+    const r = makeSR();
+    if (!r) { logActiveRef.current = false; setListeningFor(null); return; }
     r.onresult = (e: any) => {
       let fin = ""; let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -223,25 +242,26 @@ export default function ClientSession() {
         else interim += e.results[i][0].transcript;
       }
       setInterimText(interim || fin);
-      if (fin) r.finalAccumulator = (r.finalAccumulator || "") + " " + fin;
+      if (fin) logAccRef.current = (logAccRef.current + " " + fin).trim();
     };
-    r.shouldBeListening = false;
     r.onerror = (e: any) => {
       if (e.error === "not-allowed" || e.error === "audio-capture") {
-        r.shouldBeListening = false;
+        logActiveRef.current = false;
         setListeningFor(null); setInterimText("");
       }
-      // no-speech / network timeouts: let onend handle restart
+      // other errors (no-speech, network): onend will restart if still active
     };
     r.onend = async () => {
-      if (r.shouldBeListening) {
-        // Browser silence timeout — restart seamlessly
-        try { r.start(); } catch {}
+      if (logActiveRef.current) {
+        // Silence timeout — spawn a new instance and keep going
+        setTimeout(spawnLogRec, 100);
         return;
       }
-      const exId = r.currentExId;
-      const final = ((r.finalAccumulator || "") + " " + (interimText || "")).trim();
-      setListeningFor(null); setInterimText(""); r.finalAccumulator = "";
+      // User stopped — process accumulated transcript
+      const exId = logExIdRef.current;
+      const final = logAccRef.current.trim();
+      setListeningFor(null); setInterimText("");
+      logAccRef.current = "";
       if (!final || !exId || !session) return;
       const ex = session.exercises?.find((e: Exercise) => e.id === exId);
       if (!ex) return;
@@ -267,15 +287,15 @@ export default function ClientSession() {
       } finally { setParsingFor(null); }
     };
     logRecRef.current = r;
-    return () => { r.abort(); };
-  }, [session, nameOverrides, toast]);
+    try { r.start(); } catch { logActiveRef.current = false; setListeningFor(null); }
+  }
 
-  // Set up swap voice recognition (separate instance)
-  useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
-    const r = new SR();
-    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+  // ── Swap voice ────────────────────────────────────────────────────────────
+  const startSwapListening = () => {
+    if (swapListening) { stopRef(swapRecRef); return; }
+    stopRef(swapRecRef);
+    const r = makeSR();
+    if (!r) return;
     r.onresult = (e: any) => {
       let fin = ""; let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -288,15 +308,17 @@ export default function ClientSession() {
     r.onerror = () => { setSwapListening(false); setSwapInterim(""); };
     r.onend = () => { setSwapListening(false); setSwapInterim(""); };
     swapRecRef.current = r;
-    return () => { r.abort(); };
-  }, []);
+    setSwapListening(true);
+    setSwapInterim("");
+    try { r.start(); } catch { setSwapListening(false); }
+  };
 
-  // Set up add-exercise voice recognition
-  useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
-    const r = new SR();
-    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+  // ── Add-exercise voice ────────────────────────────────────────────────────
+  const startAddListening = () => {
+    if (addListening) { stopRef(addRecRef); return; }
+    stopRef(addRecRef);
+    const r = makeSR();
+    if (!r) { toast({ title: "Voice not supported in this browser", variant: "destructive" }); return; }
     r.onresult = (e: any) => {
       let fin = ""; let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -309,15 +331,9 @@ export default function ClientSession() {
     r.onerror = () => { setAddListening(false); setAddInterim(""); };
     r.onend = () => { setAddListening(false); setAddInterim(""); };
     addRecRef.current = r;
-    return () => { r.abort(); };
-  }, []);
-
-  const startAddListening = () => {
-    const r = addRecRef.current;
-    if (!r) { toast({ title: "Voice not supported in this browser", variant: "destructive" }); return; }
-    if (addListening) { r.stop(); return; }
     setAddInterim(""); setAddInput("");
-    try { r.start(); setAddListening(true); } catch {}
+    setAddListening(true);
+    try { r.start(); } catch { setAddListening(false); }
   };
 
   const submitAddInput = async (text: string) => {
@@ -360,28 +376,6 @@ export default function ClientSession() {
     setAddedExercises(prev => prev.filter(e => e.id !== exId));
     setLogs(prev => { const n = { ...prev }; delete n[exId]; return n; });
     setSaved(false);
-  };
-
-  const startLogListening = (exId: string) => {
-    const r = logRecRef.current;
-    if (!r) { toast({ title: "Voice not supported", variant: "destructive" }); return; }
-    if (listeningFor) {
-      r.shouldBeListening = false;
-      r.stop();
-      return;
-    }
-    r.finalAccumulator = ""; r.currentExId = exId;
-    r.shouldBeListening = true;
-    setInterimText("");
-    try { r.start(); setListeningFor(exId); } catch {}
-  };
-
-  const startSwapListening = () => {
-    const r = swapRecRef.current;
-    if (!r) return;
-    if (swapListening) { r.stop(); return; }
-    setSwapInterim(""); setSwapText("");
-    try { r.start(); setSwapListening(true); } catch {}
   };
 
   const confirmSwap = (exId: string) => {
@@ -505,8 +499,8 @@ export default function ClientSession() {
               <p className="text-xs text-muted-foreground truncate italic">{interimText || "Speak your results..."}</p>
             </div>
             <Button size="sm" variant="outline" className="shrink-0 rounded-xl" onClick={() => {
-              const r = logRecRef.current;
-              if (r) { r.shouldBeListening = false; r.stop(); }
+              logActiveRef.current = false;
+              stopRef(logRecRef);
             }}>
               <Square className="w-3.5 h-3.5 mr-1.5 fill-current" />Done
             </Button>
@@ -625,7 +619,7 @@ export default function ClientSession() {
                         size="sm"
                         variant={isListening ? "default" : "outline"}
                         className={`rounded-xl gap-1.5 h-8 px-3 text-xs ${isListening ? "bg-destructive hover:bg-destructive/90 text-white border-0" : ""}`}
-                        onClick={() => isListening ? logRecRef.current?.stop() : startLogListening(ex.id)}
+                        onClick={() => startLogListening(ex.id)}
                         disabled={isParsing || (!!listeningFor && !isListening)}
                       >
                         {isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
