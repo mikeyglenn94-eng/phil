@@ -5,7 +5,7 @@ import { ExerciseCard } from "@/components/exercise-card";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, ArrowLeft, Plus, Calendar, Brain, Zap } from "lucide-react";
+import { Loader2, Save, ArrowLeft, Plus, Calendar, Brain, Zap, Trash2 } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -168,6 +168,20 @@ export default function SessionEditor() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!programme || isNew) return;
+    if (!confirm(`Delete this session? This cannot be undone.`)) return;
+    try {
+      const updatedSessions = (programme.sessions || []).filter((s: Session) => s.id !== sessionId);
+      await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
+      queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      toast({ title: "Session deleted" });
+      setLocation(`/`);
+    } catch {
+      toast({ title: "Error deleting session", variant: "destructive" });
+    }
+  };
+
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
@@ -211,6 +225,17 @@ export default function SessionEditor() {
               />
             </div>
           </div>
+          {!isNew && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleDelete}
+              className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
+              title="Delete session"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
           <Button
             onClick={handleSave}
             disabled={isSaving || parseMutation.isPending}
