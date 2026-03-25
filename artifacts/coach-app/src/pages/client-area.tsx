@@ -8,6 +8,7 @@ import {
   useGetClient,
   useListProgrammes,
   useAssignProgramme,
+  useDeleteProgramme,
   useListNutritionEntries,
   useAddNutritionEntry,
   useDeleteNutritionEntry,
@@ -39,6 +40,18 @@ export default function ClientArea() {
   const { data: masterProgrammes } = useListProgrammes(); // master programmes (no clientId)
   const { data: clientProgrammes } = useListProgrammes({ clientId });
   const assignMutation = useAssignProgramme();
+  const deleteProgrammeMutation = useDeleteProgramme();
+
+  async function handleDeleteClientProgramme(programmeId: number, title: string) {
+    if (!confirm(`Remove "${title}" from ${client?.name ?? "this client"}'s calendar?`)) return;
+    try {
+      await deleteProgrammeMutation.mutateAsync({ id: programmeId });
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({ title: "Programme removed from calendar" });
+    } catch {
+      toast({ title: "Failed to remove programme", variant: "destructive" });
+    }
+  }
 
   const [activeTab, setActiveTab] = useState<Tab>("nutrition");
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -345,7 +358,7 @@ export default function ClientArea() {
             ) : (
               <div className="space-y-2">
                 {clientProgrammes.map(prog => (
-                  <div key={prog.id} className="w-full bg-card border rounded-2xl px-5 py-4 flex items-center justify-between">
+                  <div key={prog.id} className="w-full bg-card border rounded-2xl px-5 py-4 flex items-center justify-between group">
                     <div className="flex items-center gap-3">
                       <Dumbbell className="w-4 h-4 text-primary" />
                       <div>
@@ -358,6 +371,13 @@ export default function ClientArea() {
                         </p>
                       </div>
                     </div>
+                    <button
+                      onClick={() => handleDeleteClientProgramme(prog.id, prog.title)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground"
+                      title="Remove from calendar"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 ))}
               </div>
