@@ -17,11 +17,16 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AddNutritionEntryBody,
   CalendarCommandBody,
   CalendarCommandResponse,
+  Client,
+  CreateClientBody,
   CreateProgrammeBody,
   ErrorResponse,
   HealthStatus,
+  ListNutritionEntriesParams,
+  NutritionEntry,
   ParseLogBody,
   ParseLogResponse,
   ParseTranscriptBody,
@@ -963,4 +968,543 @@ export const useTranscribeAudio = <
   TContext
 > => {
   return useMutation(getTranscribeAudioMutationOptions(options));
+};
+
+/**
+ * @summary List all clients
+ */
+export const getListClientsUrl = () => {
+  return `/api/clients`;
+};
+
+export const listClients = async (options?: RequestInit): Promise<Client[]> => {
+  return customFetch<Client[]>(getListClientsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListClientsQueryKey = () => {
+  return [`/api/clients`] as const;
+};
+
+export const getListClientsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClients>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listClients>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListClientsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listClients>>> = ({
+    signal,
+  }) => listClients({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClients>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClientsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClients>>
+>;
+export type ListClientsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all clients
+ */
+
+export function useListClients<
+  TData = Awaited<ReturnType<typeof listClients>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listClients>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClientsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a client
+ */
+export const getCreateClientUrl = () => {
+  return `/api/clients`;
+};
+
+export const createClient = async (
+  createClientBody: CreateClientBody,
+  options?: RequestInit,
+): Promise<Client> => {
+  return customFetch<Client>(getCreateClientUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createClientBody),
+  });
+};
+
+export const getCreateClientMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClient>>,
+    TError,
+    { data: BodyType<CreateClientBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createClient>>,
+  TError,
+  { data: BodyType<CreateClientBody> },
+  TContext
+> => {
+  const mutationKey = ["createClient"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createClient>>,
+    { data: BodyType<CreateClientBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createClient(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateClientMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createClient>>
+>;
+export type CreateClientMutationBody = BodyType<CreateClientBody>;
+export type CreateClientMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a client
+ */
+export const useCreateClient = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClient>>,
+    TError,
+    { data: BodyType<CreateClientBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createClient>>,
+  TError,
+  { data: BodyType<CreateClientBody> },
+  TContext
+> => {
+  return useMutation(getCreateClientMutationOptions(options));
+};
+
+/**
+ * @summary Get a client
+ */
+export const getGetClientUrl = (clientId: number) => {
+  return `/api/clients/${clientId}`;
+};
+
+export const getClient = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<Client> => {
+  return customFetch<Client>(getGetClientUrl(clientId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetClientQueryKey = (clientId: number) => {
+  return [`/api/clients/${clientId}`] as const;
+};
+
+export const getGetClientQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClient>>,
+  TError = ErrorType<unknown>,
+>(
+  clientId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClient>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetClientQueryKey(clientId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getClient>>> = ({
+    signal,
+  }) => getClient(clientId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clientId,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getClient>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetClientQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClient>>
+>;
+export type GetClientQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a client
+ */
+
+export function useGetClient<
+  TData = Awaited<ReturnType<typeof getClient>>,
+  TError = ErrorType<unknown>,
+>(
+  clientId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClient>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClientQueryOptions(clientId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List nutrition entries for a client on a given date
+ */
+export const getListNutritionEntriesUrl = (
+  clientId: number,
+  params?: ListNutritionEntriesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/clients/${clientId}/nutrition?${stringifiedParams}`
+    : `/api/clients/${clientId}/nutrition`;
+};
+
+export const listNutritionEntries = async (
+  clientId: number,
+  params?: ListNutritionEntriesParams,
+  options?: RequestInit,
+): Promise<NutritionEntry[]> => {
+  return customFetch<NutritionEntry[]>(
+    getListNutritionEntriesUrl(clientId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListNutritionEntriesQueryKey = (
+  clientId: number,
+  params?: ListNutritionEntriesParams,
+) => {
+  return [
+    `/api/clients/${clientId}/nutrition`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListNutritionEntriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listNutritionEntries>>,
+  TError = ErrorType<unknown>,
+>(
+  clientId: number,
+  params?: ListNutritionEntriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listNutritionEntries>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListNutritionEntriesQueryKey(clientId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listNutritionEntries>>
+  > = ({ signal }) =>
+    listNutritionEntries(clientId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clientId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listNutritionEntries>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListNutritionEntriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listNutritionEntries>>
+>;
+export type ListNutritionEntriesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List nutrition entries for a client on a given date
+ */
+
+export function useListNutritionEntries<
+  TData = Awaited<ReturnType<typeof listNutritionEntries>>,
+  TError = ErrorType<unknown>,
+>(
+  clientId: number,
+  params?: ListNutritionEntriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listNutritionEntries>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListNutritionEntriesQueryOptions(
+    clientId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a nutrition entry (AI-parsed macros)
+ */
+export const getAddNutritionEntryUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/nutrition`;
+};
+
+export const addNutritionEntry = async (
+  clientId: number,
+  addNutritionEntryBody: AddNutritionEntryBody,
+  options?: RequestInit,
+): Promise<NutritionEntry> => {
+  return customFetch<NutritionEntry>(getAddNutritionEntryUrl(clientId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addNutritionEntryBody),
+  });
+};
+
+export const getAddNutritionEntryMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addNutritionEntry>>,
+    TError,
+    { clientId: number; data: BodyType<AddNutritionEntryBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addNutritionEntry>>,
+  TError,
+  { clientId: number; data: BodyType<AddNutritionEntryBody> },
+  TContext
+> => {
+  const mutationKey = ["addNutritionEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addNutritionEntry>>,
+    { clientId: number; data: BodyType<AddNutritionEntryBody> }
+  > = (props) => {
+    const { clientId, data } = props ?? {};
+
+    return addNutritionEntry(clientId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddNutritionEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addNutritionEntry>>
+>;
+export type AddNutritionEntryMutationBody = BodyType<AddNutritionEntryBody>;
+export type AddNutritionEntryMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a nutrition entry (AI-parsed macros)
+ */
+export const useAddNutritionEntry = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addNutritionEntry>>,
+    TError,
+    { clientId: number; data: BodyType<AddNutritionEntryBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addNutritionEntry>>,
+  TError,
+  { clientId: number; data: BodyType<AddNutritionEntryBody> },
+  TContext
+> => {
+  return useMutation(getAddNutritionEntryMutationOptions(options));
+};
+
+/**
+ * @summary Delete a nutrition entry
+ */
+export const getDeleteNutritionEntryUrl = (
+  clientId: number,
+  entryId: number,
+) => {
+  return `/api/clients/${clientId}/nutrition/${entryId}`;
+};
+
+export const deleteNutritionEntry = async (
+  clientId: number,
+  entryId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteNutritionEntryUrl(clientId, entryId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteNutritionEntryMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteNutritionEntry>>,
+    TError,
+    { clientId: number; entryId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteNutritionEntry>>,
+  TError,
+  { clientId: number; entryId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteNutritionEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteNutritionEntry>>,
+    { clientId: number; entryId: number }
+  > = (props) => {
+    const { clientId, entryId } = props ?? {};
+
+    return deleteNutritionEntry(clientId, entryId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteNutritionEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteNutritionEntry>>
+>;
+
+export type DeleteNutritionEntryMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a nutrition entry
+ */
+export const useDeleteNutritionEntry = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteNutritionEntry>>,
+    TError,
+    { clientId: number; entryId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteNutritionEntry>>,
+  TError,
+  { clientId: number; entryId: number },
+  TContext
+> => {
+  return useMutation(getDeleteNutritionEntryMutationOptions(options));
 };

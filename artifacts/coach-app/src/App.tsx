@@ -9,6 +9,8 @@ import Home from "./pages/home";
 import SessionEditor from "./pages/session-editor";
 import ClientHome from "./pages/client-home";
 import ClientSession from "./pages/client-session";
+import ClientsList from "./pages/clients-list";
+import ClientArea from "./pages/client-area";
 import { AppSidebar } from "./components/app-sidebar";
 
 const queryClient = new QueryClient({
@@ -54,6 +56,8 @@ function App() {
                     <main className="flex-1 overflow-hidden flex flex-col">
                       <Switch>
                         <Route path="/" component={Home} />
+                        <Route path="/clients" component={ClientsList} />
+                        <Route path="/clients/:clientId" component={ClientArea} />
                         <Route component={NotFound} />
                       </Switch>
                     </main>

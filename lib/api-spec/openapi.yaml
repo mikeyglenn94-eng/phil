@@ -13,6 +13,10 @@ tags:
     description: Training programme operations
   - name: parse
     description: Voice transcript parsing
+  - name: clients
+    description: Client management
+  - name: nutrition
+    description: Client nutrition diary
 paths:
   /healthz:
     get:
@@ -238,6 +242,136 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TranscribeResponse"
+
+  /clients:
+    get:
+      operationId: listClients
+      tags: [clients]
+      summary: List all clients
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Client"
+    post:
+      operationId: createClient
+      tags: [clients]
+      summary: Create a client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required: [name]
+      responses:
+        "201":
+          description: Created client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+
+  /clients/{clientId}:
+    get:
+      operationId: getClient
+      tags: [clients]
+      summary: Get a client
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+
+  /clients/{clientId}/nutrition:
+    get:
+      operationId: listNutritionEntries
+      tags: [nutrition]
+      summary: List nutrition entries for a client on a given date
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Nutrition entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NutritionEntry"
+    post:
+      operationId: addNutritionEntry
+      tags: [nutrition]
+      summary: Add a nutrition entry (AI-parsed macros)
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                date:
+                  type: string
+              required: [description, date]
+      responses:
+        "201":
+          description: Created entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NutritionEntry"
+
+  /clients/{clientId}/nutrition/{entryId}:
+    delete:
+      operationId: deleteNutritionEntry
+      tags: [nutrition]
+      summary: Delete a nutrition entry
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
 
 components:
   schemas:
@@ -500,3 +634,39 @@ components:
           type: string
       required:
         - transcript
+
+    Client:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, createdAt]
+
+    NutritionEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        clientId:
+          type: integer
+        date:
+          type: string
+        description:
+          type: string
+        calories:
+          type: ["integer", "null"]
+        protein:
+          type: ["string", "null"]
+        carbs:
+          type: ["string", "null"]
+        fats:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, clientId, date, description, createdAt]

@@ -6,12 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./addNutritionEntryBody";
 export * from "./calendarCommandBody";
 export * from "./calendarCommandResponse";
+export * from "./client";
+export * from "./createClientBody";
 export * from "./createProgrammeBody";
 export * from "./errorResponse";
 export * from "./exercise";
 export * from "./healthStatus";
+export * from "./listNutritionEntriesParams";
+export * from "./nutritionEntry";
 export * from "./parseLogBody";
 export * from "./parseLogResponse";
 export * from "./parseTranscriptBody";

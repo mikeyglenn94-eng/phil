@@ -60,12 +60,13 @@ export function AppSidebar({ onNewProgramme, onSelectProgramme, selectedProgramm
                 </Link>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <Link href="/client">
+                <Link href="/clients">
                   <SidebarMenuButton
-                    className="hover:bg-sidebar-accent/50 font-medium rounded-lg text-primary/80 hover:text-primary"
+                    isActive={location.startsWith("/clients")}
+                    className="hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground font-medium rounded-lg"
                   >
                     <Users className="w-4 h-4" />
-                    <span>Client View</span>
+                    <span>Clients</span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>

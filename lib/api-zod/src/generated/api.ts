@@ -657,3 +657,79 @@ export const TranscribeAudioBody = zod.object({
 export const TranscribeAudioResponse = zod.object({
   transcript: zod.string(),
 });
+
+/**
+ * @summary List all clients
+ */
+export const ListClientsResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  createdAt: zod.date(),
+});
+export const ListClientsResponse = zod.array(ListClientsResponseItem);
+
+/**
+ * @summary Create a client
+ */
+export const CreateClientBody = zod.object({
+  name: zod.string(),
+});
+
+/**
+ * @summary Get a client
+ */
+export const GetClientParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const GetClientResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  createdAt: zod.date(),
+});
+
+/**
+ * @summary List nutrition entries for a client on a given date
+ */
+export const ListNutritionEntriesParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const ListNutritionEntriesQueryParams = zod.object({
+  date: zod.coerce.string().optional(),
+});
+
+export const ListNutritionEntriesResponseItem = zod.object({
+  id: zod.number(),
+  clientId: zod.number(),
+  date: zod.string(),
+  description: zod.string(),
+  calories: zod.number().nullish(),
+  protein: zod.string().nullish(),
+  carbs: zod.string().nullish(),
+  fats: zod.string().nullish(),
+  createdAt: zod.date(),
+});
+export const ListNutritionEntriesResponse = zod.array(
+  ListNutritionEntriesResponseItem,
+);
+
+/**
+ * @summary Add a nutrition entry (AI-parsed macros)
+ */
+export const AddNutritionEntryParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const AddNutritionEntryBody = zod.object({
+  description: zod.string(),
+  date: zod.string(),
+});
+
+/**
+ * @summary Delete a nutrition entry
+ */
+export const DeleteNutritionEntryParams = zod.object({
+  clientId: zod.coerce.number(),
+  entryId: zod.coerce.number(),
+});

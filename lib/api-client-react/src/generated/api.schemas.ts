@@ -138,6 +138,41 @@ export interface TranscribeResponse {
   transcript: string;
 }
 
+export interface Client {
+  id: number;
+  name: string;
+  createdAt: string;
+}
+
+export interface NutritionEntry {
+  id: number;
+  clientId: number;
+  date: string;
+  description: string;
+  /** @nullable */
+  calories?: number | null;
+  /** @nullable */
+  protein?: string | null;
+  /** @nullable */
+  carbs?: string | null;
+  /** @nullable */
+  fats?: string | null;
+  createdAt: string;
+}
+
 export type TranscribeAudioBody = {
   audio: Blob;
+};
+
+export type CreateClientBody = {
+  name: string;
+};
+
+export type ListNutritionEntriesParams = {
+  date?: string;
+};
+
+export type AddNutritionEntryBody = {
+  description: string;
+  date: string;
 };
