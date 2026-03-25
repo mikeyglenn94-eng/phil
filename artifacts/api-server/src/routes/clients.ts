@@ -12,6 +12,11 @@ function toPublicClient(c: typeof clientsTable.$inferSelect) {
   return { ...rest, hasPassword: !!passwordHash };
 }
 
+// Validate macro goal calories don't exceed calorie goal
+function macroCalories(protein: number, carbs: number, fats: number) {
+  return protein * 4 + carbs * 4 + fats * 9;
+}
+
 const router: IRouter = Router();
 
 // List clients
@@ -47,6 +52,31 @@ router.post("/clients/:clientId/set-password", async (req, res): Promise<void> =
   }
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
   const [client] = await db.update(clientsTable).set({ passwordHash: hash }).where(eq(clientsTable.id, id)).returning();
+  if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+  res.json(toPublicClient(client));
+});
+
+// Set daily macro/calorie goals for a client
+router.put("/clients/:clientId/goals", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.clientId, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { calories, protein, carbs, fats } = req.body as {
+    calories: number; protein: number; carbs: number; fats: number;
+  };
+  if ([calories, protein, carbs, fats].some(v => typeof v !== "number" || v < 0)) {
+    res.status(400).json({ error: "All goals must be non-negative numbers" }); return;
+  }
+  const fromMacros = macroCalories(protein, carbs, fats);
+  if (fromMacros > calories) {
+    res.status(400).json({
+      error: `Macro calories (${fromMacros} kcal) exceed the calorie goal (${calories} kcal). Reduce protein, carbs, or fats.`
+    });
+    return;
+  }
+  const [client] = await db.update(clientsTable)
+    .set({ dailyCalorieGoal: calories, dailyProteinGoal: protein, dailyCarbGoal: carbs, dailyFatGoal: fats })
+    .where(eq(clientsTable.id, id))
+    .returning();
   if (!client) { res.status(404).json({ error: "Client not found" }); return; }
   res.json(toPublicClient(client));
 });

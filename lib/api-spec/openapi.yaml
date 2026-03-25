@@ -355,6 +355,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/VerifyPasswordResult"
 
+  /clients/{clientId}/goals:
+    put:
+      operationId: setClientGoals
+      tags: [clients]
+      summary: Set daily macro and calorie goals for a client
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetGoalsBody"
+      responses:
+        "200":
+          description: Goals updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+
   /clients/{clientId}/nutrition:
     get:
       operationId: listNutritionEntries
@@ -747,10 +772,35 @@ components:
           type: string
         hasPassword:
           type: boolean
+        dailyCalorieGoal:
+          type: ["integer", "null"]
+        dailyProteinGoal:
+          type: ["integer", "null"]
+        dailyCarbGoal:
+          type: ["integer", "null"]
+        dailyFatGoal:
+          type: ["integer", "null"]
         createdAt:
           type: string
           format: date-time
       required: [id, name, hasPassword, createdAt]
+
+    SetGoalsBody:
+      type: object
+      properties:
+        calories:
+          type: integer
+          minimum: 0
+        protein:
+          type: integer
+          minimum: 0
+        carbs:
+          type: integer
+          minimum: 0
+        fats:
+          type: integer
+          minimum: 0
+      required: [calories, protein, carbs, fats]
 
     SetPasswordBody:
       type: object

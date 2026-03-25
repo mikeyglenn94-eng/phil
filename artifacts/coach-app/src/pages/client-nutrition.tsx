@@ -6,6 +6,7 @@ import {
   useListNutritionEntries,
   useAddNutritionEntry,
   useDeleteNutritionEntry,
+  useGetClient,
   getListNutritionEntriesQueryKey,
 } from "@workspace/api-client-react";
 import type { NutritionEntry } from "@workspace/api-client-react";
@@ -18,6 +19,7 @@ export default function ClientNutrition() {
   const CLIENT_ID = client?.id ?? 0;
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: clientData } = useGetClient(CLIENT_ID, { query: { enabled: CLIENT_ID > 0 } });
 
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const { data: entries, isLoading } = useListNutritionEntries(CLIENT_ID, { date: selectedDate });
@@ -128,25 +130,60 @@ export default function ClientNutrition() {
 
       <div className="px-6 py-5 max-w-2xl space-y-4">
         {/* Daily totals */}
-        {(entries?.length ?? 0) > 0 && (
-          <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4">
-            <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-3">Daily Totals</p>
-            <div className="grid grid-cols-4 gap-3 text-center">
-              {[
-                { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500" },
-                { label: "Protein", value: totals.protein.toFixed(1), unit: "g", color: "text-blue-500" },
-                { label: "Carbs", value: totals.carbs.toFixed(1), unit: "g", color: "text-yellow-500" },
-                { label: "Fats", value: totals.fats.toFixed(1), unit: "g", color: "text-pink-500" },
-              ].map(({ label, value, unit, color }) => (
-                <div key={label}>
-                  <p className={`text-xl font-bold ${color}`}>{value}</p>
-                  <p className="text-[10px] text-muted-foreground font-medium">{unit}</p>
-                  <p className="text-[10px] text-muted-foreground">{label}</p>
+        {(entries?.length ?? 0) > 0 && (() => {
+          const goals = {
+            calories: clientData?.dailyCalorieGoal ?? null,
+            protein: clientData?.dailyProteinGoal ?? null,
+            carbs: clientData?.dailyCarbGoal ?? null,
+            fats: clientData?.dailyFatGoal ?? null,
+          };
+          const hasGoals = goals.calories !== null;
+          const macros = [
+            { label: "Calories", actual: Math.round(totals.calories), goal: goals.calories, unit: "kcal", color: "bg-orange-400", textColor: "text-orange-500" },
+            { label: "Protein", actual: Math.round(totals.protein), goal: goals.protein, unit: "g", color: "bg-blue-400", textColor: "text-blue-500" },
+            { label: "Carbs", actual: Math.round(totals.carbs), goal: goals.carbs, unit: "g", color: "bg-yellow-400", textColor: "text-yellow-600" },
+            { label: "Fats", actual: Math.round(totals.fats), goal: goals.fats, unit: "g", color: "bg-pink-400", textColor: "text-pink-500" },
+          ];
+          return (
+            <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4">
+              <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-3">Daily Totals</p>
+              {hasGoals ? (
+                <div className="space-y-3">
+                  {macros.map(({ label, actual, goal, unit, color, textColor }) => {
+                    const pct = goal ? Math.min((actual / goal) * 100, 100) : 0;
+                    const over = goal !== null && actual > goal;
+                    return (
+                      <div key={label}>
+                        <div className="flex justify-between items-baseline mb-1">
+                          <span className="text-xs text-muted-foreground font-medium">{label}</span>
+                          <span className={`text-sm font-bold ${over ? "text-red-500" : textColor}`}>
+                            {actual}<span className="text-xs font-normal text-muted-foreground"> / {goal} {unit}</span>
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${over ? "bg-red-400" : color}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              ) : (
+                <div className="grid grid-cols-4 gap-3 text-center">
+                  {macros.map(({ label, actual, unit, textColor }) => (
+                    <div key={label}>
+                      <p className={`text-xl font-bold ${textColor}`}>{actual}</p>
+                      <p className="text-[10px] text-muted-foreground font-medium">{unit}</p>
+                      <p className="text-[10px] text-muted-foreground">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Add food input */}
         <div className="bg-card border rounded-2xl p-4 shadow-sm">

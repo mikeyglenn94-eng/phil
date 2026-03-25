@@ -25,6 +25,7 @@ export * from "./parseTranscriptBody";
 export * from "./parseTranscriptResponse";
 export * from "./programme";
 export * from "./session";
+export * from "./setGoalsBody";
 export * from "./setLog";
 export * from "./setPasswordBody";
 export * from "./transcribeAudioBody";

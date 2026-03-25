@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, Calendar, KeyRound } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, Calendar, KeyRound, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
@@ -12,8 +12,10 @@ import {
   useListNutritionEntries,
   useAddNutritionEntry,
   useDeleteNutritionEntry,
+  useSetClientGoals,
   getListNutritionEntriesQueryKey,
   getListProgrammesQueryKey,
+  getGetClientQueryKey,
 } from "@workspace/api-client-react";
 import type { NutritionEntry, Programme } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,6 +43,51 @@ export default function ClientArea() {
   const { data: clientProgrammes } = useListProgrammes({ clientId });
   const assignMutation = useAssignProgramme();
   const deleteProgrammeMutation = useDeleteProgramme();
+
+  // ── Goals dialog ──
+  const setGoalsMutation = useSetClientGoals();
+  const [goalsOpen, setGoalsOpen] = useState(false);
+  const [goalCalories, setGoalCalories] = useState("");
+  const [goalProtein, setGoalProtein] = useState("");
+  const [goalCarbs, setGoalCarbs] = useState("");
+  const [goalFats, setGoalFats] = useState("");
+  const [goalsError, setGoalsError] = useState("");
+  const [savingGoals, setSavingGoals] = useState(false);
+
+  function openGoalsDialog() {
+    setGoalCalories(client?.dailyCalorieGoal?.toString() ?? "");
+    setGoalProtein(client?.dailyProteinGoal?.toString() ?? "");
+    setGoalCarbs(client?.dailyCarbGoal?.toString() ?? "");
+    setGoalFats(client?.dailyFatGoal?.toString() ?? "");
+    setGoalsError("");
+    setGoalsOpen(true);
+  }
+
+  const macroKcal = (parseFloat(goalProtein || "0") * 4) + (parseFloat(goalCarbs || "0") * 4) + (parseFloat(goalFats || "0") * 9);
+  const calTarget = parseFloat(goalCalories || "0");
+  const macroExceedsTarget = calTarget > 0 && macroKcal > calTarget;
+
+  async function handleSaveGoals() {
+    const calories = parseInt(goalCalories, 10);
+    const protein = parseInt(goalProtein, 10);
+    const carbs = parseInt(goalCarbs, 10);
+    const fats = parseInt(goalFats, 10);
+    if ([calories, protein, carbs, fats].some(v => isNaN(v) || v < 0)) {
+      setGoalsError("All fields must be valid positive numbers."); return;
+    }
+    if (protein * 4 + carbs * 4 + fats * 9 > calories) {
+      setGoalsError(`Macro calories (${Math.round(protein * 4 + carbs * 4 + fats * 9)} kcal) exceed the calorie goal. Reduce one or more macros.`); return;
+    }
+    setSavingGoals(true); setGoalsError("");
+    try {
+      await setGoalsMutation.mutateAsync({ clientId, data: { calories, protein, carbs, fats } });
+      await queryClient.invalidateQueries({ queryKey: getGetClientQueryKey(clientId) });
+      setGoalsOpen(false);
+      toast({ title: "Goals saved" });
+    } catch (e: any) {
+      setGoalsError(e?.data?.error ?? "Failed to save goals.");
+    } finally { setSavingGoals(false); }
+  }
 
   const [resettingPassword, setResettingPassword] = useState(false);
   async function handleResetPassword() {
@@ -207,6 +254,16 @@ export default function ClientArea() {
             </div>
             <h1 className="font-display font-bold text-lg truncate">{client.name}</h1>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={openGoalsDialog}
+            className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+            title="Set daily macro & calorie goals"
+          >
+            <Target className="w-3.5 h-3.5" />
+            Goals
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -484,6 +541,76 @@ export default function ClientArea() {
             >
               {isAssigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Assign to {client?.name ?? "Client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Goals Dialog */}
+      <Dialog open={goalsOpen} onOpenChange={setGoalsOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Daily Goals — {client?.name}</DialogTitle>
+            <DialogDescription>
+              Set target macros. Macro calories must not exceed the calorie goal<br/>
+              (protein × 4 + carbs × 4 + fats × 9).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Calorie goal */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Daily Calories (kcal)</label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="e.g. 2000"
+                value={goalCalories}
+                onChange={e => { setGoalCalories(e.target.value); setGoalsError(""); }}
+              />
+            </div>
+
+            {/* Macro grid */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-blue-600">Protein (g)</label>
+                <Input type="number" min={0} placeholder="e.g. 180" value={goalProtein}
+                  onChange={e => { setGoalProtein(e.target.value); setGoalsError(""); }} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-yellow-600">Carbs (g)</label>
+                <Input type="number" min={0} placeholder="e.g. 200" value={goalCarbs}
+                  onChange={e => { setGoalCarbs(e.target.value); setGoalsError(""); }} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-pink-600">Fats (g)</label>
+                <Input type="number" min={0} placeholder="e.g. 70" value={goalFats}
+                  onChange={e => { setGoalFats(e.target.value); setGoalsError(""); }} />
+              </div>
+            </div>
+
+            {/* Live macro calorie counter */}
+            {(goalProtein || goalCarbs || goalFats) && (
+              <div className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium ${macroExceedsTarget ? "bg-red-50 border border-red-200 text-red-600" : "bg-muted/60 text-muted-foreground"}`}>
+                <span>Macro calories</span>
+                <span className="font-bold">
+                  {Math.round(macroKcal)} / {goalCalories || "—"} kcal
+                  {macroExceedsTarget && " ⚠️"}
+                </span>
+              </div>
+            )}
+
+            {goalsError && <p className="text-sm text-red-500">{goalsError}</p>}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGoalsOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleSaveGoals}
+              disabled={savingGoals || macroExceedsTarget || !goalCalories || !goalProtein || !goalCarbs || !goalFats}
+            >
+              {savingGoals ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Save Goals
             </Button>
           </DialogFooter>
         </DialogContent>

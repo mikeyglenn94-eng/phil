@@ -34,6 +34,7 @@ import type {
   ParseTranscriptBody,
   ParseTranscriptResponse,
   Programme,
+  SetGoalsBody,
   SetPasswordBody,
   TranscribeAudioBody,
   TranscribeResponse,
@@ -1413,6 +1414,93 @@ export const useVerifyClientPassword = <
   TContext
 > => {
   return useMutation(getVerifyClientPasswordMutationOptions(options));
+};
+
+/**
+ * @summary Set daily macro and calorie goals for a client
+ */
+export const getSetClientGoalsUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/goals`;
+};
+
+export const setClientGoals = async (
+  clientId: number,
+  setGoalsBody: SetGoalsBody,
+  options?: RequestInit,
+): Promise<Client> => {
+  return customFetch<Client>(getSetClientGoalsUrl(clientId), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setGoalsBody),
+  });
+};
+
+export const getSetClientGoalsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setClientGoals>>,
+    TError,
+    { clientId: number; data: BodyType<SetGoalsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setClientGoals>>,
+  TError,
+  { clientId: number; data: BodyType<SetGoalsBody> },
+  TContext
+> => {
+  const mutationKey = ["setClientGoals"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setClientGoals>>,
+    { clientId: number; data: BodyType<SetGoalsBody> }
+  > = (props) => {
+    const { clientId, data } = props ?? {};
+
+    return setClientGoals(clientId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetClientGoalsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setClientGoals>>
+>;
+export type SetClientGoalsMutationBody = BodyType<SetGoalsBody>;
+export type SetClientGoalsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Set daily macro and calorie goals for a client
+ */
+export const useSetClientGoals = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setClientGoals>>,
+    TError,
+    { clientId: number; data: BodyType<SetGoalsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setClientGoals>>,
+  TError,
+  { clientId: number; data: BodyType<SetGoalsBody> },
+  TContext
+> => {
+  return useMutation(getSetClientGoalsMutationOptions(options));
 };
 
 /**

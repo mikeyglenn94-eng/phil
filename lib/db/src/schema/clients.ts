@@ -5,7 +5,11 @@ import { z } from "zod/v4";
 export const clientsTable = pgTable("clients", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  passwordHash: text("password_hash"), // null = no password set yet
+  passwordHash: text("password_hash"),
+  dailyCalorieGoal: integer("daily_calorie_goal"),
+  dailyProteinGoal: integer("daily_protein_goal"),
+  dailyCarbGoal: integer("daily_carb_goal"),
+  dailyFatGoal: integer("daily_fat_goal"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

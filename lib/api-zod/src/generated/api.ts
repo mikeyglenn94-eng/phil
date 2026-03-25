@@ -677,6 +677,10 @@ export const ListClientsResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
   hasPassword: zod.boolean(),
+  dailyCalorieGoal: zod.number().nullish(),
+  dailyProteinGoal: zod.number().nullish(),
+  dailyCarbGoal: zod.number().nullish(),
+  dailyFatGoal: zod.number().nullish(),
   createdAt: zod.date(),
 });
 export const ListClientsResponse = zod.array(ListClientsResponseItem);
@@ -699,6 +703,10 @@ export const GetClientResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   hasPassword: zod.boolean(),
+  dailyCalorieGoal: zod.number().nullish(),
+  dailyProteinGoal: zod.number().nullish(),
+  dailyCarbGoal: zod.number().nullish(),
+  dailyFatGoal: zod.number().nullish(),
   createdAt: zod.date(),
 });
 
@@ -719,6 +727,10 @@ export const SetClientPasswordResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   hasPassword: zod.boolean(),
+  dailyCalorieGoal: zod.number().nullish(),
+  dailyProteinGoal: zod.number().nullish(),
+  dailyCarbGoal: zod.number().nullish(),
+  dailyFatGoal: zod.number().nullish(),
   createdAt: zod.date(),
 });
 
@@ -735,6 +747,39 @@ export const VerifyClientPasswordBody = zod.object({
 
 export const VerifyClientPasswordResponse = zod.object({
   success: zod.boolean(),
+});
+
+/**
+ * @summary Set daily macro and calorie goals for a client
+ */
+export const SetClientGoalsParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const setClientGoalsBodyCaloriesMin = 0;
+
+export const setClientGoalsBodyProteinMin = 0;
+
+export const setClientGoalsBodyCarbsMin = 0;
+
+export const setClientGoalsBodyFatsMin = 0;
+
+export const SetClientGoalsBody = zod.object({
+  calories: zod.number().min(setClientGoalsBodyCaloriesMin),
+  protein: zod.number().min(setClientGoalsBodyProteinMin),
+  carbs: zod.number().min(setClientGoalsBodyCarbsMin),
+  fats: zod.number().min(setClientGoalsBodyFatsMin),
+});
+
+export const SetClientGoalsResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  hasPassword: zod.boolean(),
+  dailyCalorieGoal: zod.number().nullish(),
+  dailyProteinGoal: zod.number().nullish(),
+  dailyCarbGoal: zod.number().nullish(),
+  dailyFatGoal: zod.number().nullish(),
+  createdAt: zod.date(),
 });
 
 /**

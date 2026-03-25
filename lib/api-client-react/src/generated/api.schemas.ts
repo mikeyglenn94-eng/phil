@@ -148,7 +148,26 @@ export interface Client {
   id: number;
   name: string;
   hasPassword: boolean;
+  /** @nullable */
+  dailyCalorieGoal?: number | null;
+  /** @nullable */
+  dailyProteinGoal?: number | null;
+  /** @nullable */
+  dailyCarbGoal?: number | null;
+  /** @nullable */
+  dailyFatGoal?: number | null;
   createdAt: string;
+}
+
+export interface SetGoalsBody {
+  /** @minimum 0 */
+  calories: number;
+  /** @minimum 0 */
+  protein: number;
+  /** @minimum 0 */
+  carbs: number;
+  /** @minimum 0 */
+  fats: number;
 }
 
 export interface SetPasswordBody {

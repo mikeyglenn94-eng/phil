@@ -10,5 +10,13 @@ export interface Client {
   id: number;
   name: string;
   hasPassword: boolean;
+  /** @nullable */
+  dailyCalorieGoal?: number | null;
+  /** @nullable */
+  dailyProteinGoal?: number | null;
+  /** @nullable */
+  dailyCarbGoal?: number | null;
+  /** @nullable */
+  dailyFatGoal?: number | null;
   createdAt: Date;
 }
