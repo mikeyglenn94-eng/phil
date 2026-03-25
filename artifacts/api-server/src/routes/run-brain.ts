@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { db, runLibraryTable } from "@workspace/db";
 
 interface RunWorkout {
   id: string;
@@ -139,20 +140,58 @@ function scoreRunWorkout(workout: RunWorkout, filters: ReturnType<typeof parseRu
 
 const router: IRouter = Router();
 
-router.post("/run-brain/search", (req, res): void => {
-  const { query } = req.body as { query: string };
-  if (!query?.trim()) {
-    res.status(400).json({ error: "Query is required" });
+router.get("/run-brain/workouts", async (_req, res): Promise<void> => {
+  try {
+    const custom = await db.select().from(runLibraryTable).orderBy(runLibraryTable.createdAt);
+    const customMapped = custom.map(w => ({
+      ...w,
+      id: `custom_run_${w.id}`,
+      intensityLabel: INTENSITY_LABELS[w.intensity] ?? w.intensity,
+      source: "custom" as const,
+    }));
+    const builtin = runWorkouts.map(w => ({ ...w, intensityLabel: INTENSITY_LABELS[w.intensity] ?? w.intensity, source: "builtin" as const }));
+    res.json({ workouts: [...builtin, ...customMapped] });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load workouts" });
+  }
+});
+
+router.post("/run-brain/workouts", async (req, res): Promise<void> => {
+  const { name, type, duration, distanceKm, structure, tags, terrain, intensity } = req.body;
+  if (!name?.trim() || !type || !structure || !intensity) {
+    res.status(400).json({ error: "name, type, structure and intensity are required" });
     return;
   }
+  try {
+    const [row] = await db.insert(runLibraryTable).values({
+      name: name.trim(), type, duration: duration ? Number(duration) : null,
+      distanceKm: distanceKm ? Number(distanceKm) : null,
+      structure: structure.trim(), tags: tags ?? [], terrain: terrain ?? [], intensity,
+    }).returning();
+    res.json({ workout: { ...row, id: `custom_run_${row.id}`, intensityLabel: INTENSITY_LABELS[row.intensity] ?? row.intensity, source: "custom" } });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to save workout" });
+  }
+});
 
+router.post("/run-brain/search", async (req, res): Promise<void> => {
+  const { query } = req.body as { query: string };
+  if (!query?.trim()) { res.status(400).json({ error: "Query is required" }); return; }
+
+  let custom: any[] = [];
+  try {
+    const rows = await db.select().from(runLibraryTable);
+    custom = rows.map(w => ({ ...w, id: `custom_run_${w.id}`, source: "custom" }));
+  } catch {}
+
+  const all = [...runWorkouts, ...custom];
   const filters = parseRunInput(query);
 
-  const results = runWorkouts
+  const results = all
     .map(w => ({
       ...w,
-      score: scoreRunWorkout(w, filters),
-      intensityLabel: INTENSITY_LABELS[w.intensity] ?? w.intensity,
+      score: scoreRunWorkout(w as RunWorkout, filters),
+      intensityLabel: INTENSITY_LABELS[(w as RunWorkout).intensity] ?? (w as RunWorkout).intensity,
     }))
     .filter(w => w.score >= 0)
     .sort((a, b) => b.score - a.score)

@@ -15,6 +15,7 @@ import ClientNutrition from "./pages/client-nutrition";
 import ClientPicker from "./pages/client-picker";
 import ClientsList from "./pages/clients-list";
 import ClientArea from "./pages/client-area";
+import Library from "./pages/library";
 import { AppSidebar } from "./components/app-sidebar";
 import { ClientSidebar } from "./components/client-sidebar";
 import { ClientProvider, useClientContext } from "./contexts/client-context";
@@ -110,6 +111,7 @@ function App() {
                         <Route path="/" component={Home} />
                         <Route path="/clients" component={ClientsList} />
                         <Route path="/clients/:clientId" component={ClientArea} />
+                        <Route path="/library" component={Library} />
                         <Route component={NotFound} />
                       </Switch>
                     </main>

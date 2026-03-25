@@ -1,0 +1,299 @@
+const workouts = [
+
+{
+id:"wod_001",
+name:"10 Min Engine Push",
+format:"amrap",
+duration:10,
+structure:"AMRAP 10: 200m run, 15 wall balls, 10 burpees",
+blocks:[
+{movement:"running",amount:200,unit:"m"},
+{movement:"wall balls",amount:15,unit:"reps"},
+{movement:"burpees",amount:10,unit:"reps"}
+],
+equipment:["wall ball"],
+tags:["engine","short"]
+},
+
+{
+id:"wod_002",
+name:"DB Sweat 12",
+format:"amrap",
+duration:12,
+structure:"AMRAP 12: 20 dumbbell lunges, 12 dumbbell push press, 20 sit-ups",
+blocks:[
+{movement:"dumbbell lunges",amount:20,unit:"reps"},
+{movement:"dumbbell push press",amount:12,unit:"reps"},
+{movement:"sit-ups",amount:20,unit:"reps"}
+],
+equipment:["dumbbells"],
+tags:["dumbbell"]
+},
+
+{
+id:"wod_003",
+name:"Row Intervals",
+format:"interval",
+duration:12,
+structure:"6 rounds: 250m row hard, 60s rest",
+rounds:6,
+restSeconds:60,
+blocks:[
+{movement:"rowing",amount:250,unit:"m"}
+],
+equipment:["rower"],
+tags:["engine"]
+},
+
+{
+id:"wod_004",
+name:"Hybrid 15",
+format:"for_time",
+duration:15,
+structure:"4 rounds: 400m run, 15 dumbbell thrusters, 12 burpees",
+rounds:4,
+blocks:[
+{movement:"running",amount:400,unit:"m"},
+{movement:"dumbbell thrusters",amount:15,unit:"reps"},
+{movement:"burpees",amount:12,unit:"reps"}
+],
+equipment:["dumbbells"],
+tags:["hyrox"]
+},
+
+{
+id:"wod_005",
+name:"EMOM Builder",
+format:"emom",
+duration:12,
+structure:"EMOM 12: Min1 12 cal ski, Min2 15 goblet squats, Min3 30s plank",
+intervalStyle:"rotating",
+blocks:[
+{minute:1,movement:"ski erg",amount:12,unit:"cal"},
+{minute:2,movement:"goblet squats",amount:15,unit:"reps"},
+{minute:3,movement:"plank",amount:30,unit:"seconds"}
+],
+equipment:["kettlebell","ski erg"],
+tags:["simple"]
+},
+
+{
+id:"wod_006",
+name:"20 Min Engine",
+format:"amrap",
+duration:20,
+structure:"AMRAP 20: 400m run, 20 wall balls, 20 lunges",
+blocks:[
+{movement:"running",amount:400,unit:"m"},
+{movement:"wall balls",amount:20,unit:"reps"},
+{movement:"lunges",amount:20,unit:"reps"}
+],
+equipment:["wall ball"],
+tags:["engine"]
+},
+
+{
+id:"wod_007",
+name:"Sled Grind",
+format:"for_time",
+duration:18,
+structure:"5 rounds: 20m sled push, 200m run",
+rounds:5,
+blocks:[
+{movement:"sled push",amount:20,unit:"m"},
+{movement:"running",amount:200,unit:"m"}
+],
+equipment:["sled"],
+tags:["hyrox"]
+},
+
+{
+id:"wod_008",
+name:"DB Conditioning",
+format:"amrap",
+duration:15,
+structure:"AMRAP 15: 15 dumbbell snatch, 12 burpees, 20 sit-ups",
+blocks:[
+{movement:"dumbbell snatch",amount:15,unit:"reps"},
+{movement:"burpees",amount:12,unit:"reps"},
+{movement:"sit-ups",amount:20,unit:"reps"}
+],
+equipment:["dumbbells"],
+tags:["mixed"]
+},
+
+{
+id:"wod_009",
+name:"Long Aerobic",
+format:"amrap",
+duration:30,
+structure:"AMRAP 30: 800m run, 500m row",
+blocks:[
+{movement:"running",amount:800,unit:"m"},
+{movement:"rowing",amount:500,unit:"m"}
+],
+equipment:["rower"],
+tags:["aerobic"]
+},
+
+{
+id:"wod_010",
+name:"Wall Ball Ladder",
+format:"ladder",
+duration:20,
+structure:"10-20-30-40 wall balls, 10 burpees after each set",
+blocks:[
+{movement:"wall balls",amount:10,unit:"reps"},
+{movement:"burpees",amount:10,unit:"reps"}
+],
+equipment:["wall ball"],
+tags:["hyrox"]
+},
+
+{
+id:"wod_011",
+name:"Burpee Engine",
+format:"amrap",
+duration:10,
+structure:"AMRAP 10: 12 burpees, 200m run",
+blocks:[
+{movement:"burpees",amount:12,unit:"reps"},
+{movement:"running",amount:200,unit:"m"}
+],
+equipment:[],
+tags:["engine"]
+},
+
+{
+id:"wod_012",
+name:"DB Ladder 15",
+format:"ladder",
+duration:15,
+structure:"10-20-30 dumbbell thrusters + lunges",
+blocks:[
+{movement:"dumbbell thrusters",amount:10,unit:"reps"},
+{movement:"dumbbell lunges",amount:10,unit:"reps"}
+],
+equipment:["dumbbells"],
+tags:["dumbbell"]
+},
+
+{
+id:"wod_013",
+name:"Row Wall Ball",
+format:"amrap",
+duration:12,
+structure:"AMRAP 12: 250m row, 20 wall balls",
+blocks:[
+{movement:"rowing",amount:250,unit:"m"},
+{movement:"wall balls",amount:20,unit:"reps"}
+],
+equipment:["rower","wall ball"],
+tags:["hyrox"]
+},
+
+{
+id:"wod_014",
+name:"Bodyweight 15",
+format:"amrap",
+duration:15,
+structure:"AMRAP 15: 20 air squats, 15 push-ups, 20 sit-ups",
+blocks:[
+{movement:"air squats",amount:20,unit:"reps"},
+{movement:"push-ups",amount:15,unit:"reps"},
+{movement:"sit-ups",amount:20,unit:"reps"}
+],
+equipment:[],
+tags:["bodyweight"]
+},
+
+{
+id:"wod_015",
+name:"Sled Burpee",
+format:"for_time",
+duration:20,
+structure:"4 rounds: 30m sled push, 15 burpees",
+rounds:4,
+blocks:[
+{movement:"sled push",amount:30,unit:"m"},
+{movement:"burpees",amount:15,unit:"reps"}
+],
+equipment:["sled"],
+tags:["hyrox"]
+},
+
+{
+id:"wod_016",
+name:"Bike Intervals",
+format:"interval",
+duration:12,
+structure:"6 rounds: 15 cal bike, 60s rest",
+rounds:6,
+restSeconds:60,
+blocks:[
+{movement:"bike",amount:15,unit:"cal"}
+],
+equipment:["bike"],
+tags:["engine"]
+},
+
+{
+id:"wod_017",
+name:"Run Lunge",
+format:"amrap",
+duration:20,
+structure:"AMRAP 20: 400m run, 20 lunges",
+blocks:[
+{movement:"running",amount:400,unit:"m"},
+{movement:"lunges",amount:20,unit:"reps"}
+],
+equipment:[],
+tags:["engine"]
+},
+
+{
+id:"wod_018",
+name:"Core Burner",
+format:"amrap",
+duration:15,
+structure:"AMRAP 15: 20 sit-ups, 30s plank, 10 burpees",
+blocks:[
+{movement:"sit-ups",amount:20,unit:"reps"},
+{movement:"plank",amount:30,unit:"seconds"},
+{movement:"burpees",amount:10,unit:"reps"}
+],
+equipment:[],
+tags:["core"]
+},
+
+{
+id:"wod_019",
+name:"Long Grind",
+format:"amrap",
+duration:30,
+structure:"AMRAP 30: 400m run, 20 wall balls, 15 burpees",
+blocks:[
+{movement:"running",amount:400,unit:"m"},
+{movement:"wall balls",amount:20,unit:"reps"},
+{movement:"burpees",amount:15,unit:"reps"}
+],
+equipment:["wall ball"],
+tags:["long"]
+},
+
+{
+id:"wod_020",
+name:"Row Run",
+format:"for_time",
+duration:18,
+structure:"5 rounds: 300m row, 300m run",
+rounds:5,
+blocks:[
+{movement:"rowing",amount:300,unit:"m"},
+{movement:"running",amount:300,unit:"m"}
+],
+equipment:["rower"],
+tags:["engine"]
+}
+
+];

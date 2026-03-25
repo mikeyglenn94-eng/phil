@@ -161,12 +161,14 @@ export default function Home() {
       id: `session-${Date.now()}`,
       date: wodTargetDate,
       name: sessionName,
-      exercises: wod.exercises.map((ex: string, idx: number) => ({
+      exercises: (wod.blocks ?? []).map((block: any, idx: number) => ({
         id: `ex-${Date.now()}-${idx}`,
-        name: ex.charAt(0).toUpperCase() + ex.slice(1),
+        name: `${block.movement.charAt(0).toUpperCase()}${block.movement.slice(1)}`,
         sets: null,
         reps: null,
-        notes: `WOD Brain · ${formatLabel} ${wod.duration} min`,
+        rpe: null,
+        notes: `${block.amount} ${block.unit}`,
+        rawText: `${block.amount} ${block.unit} ${block.movement}`,
       })),
     };
     const existingOnDay = (selectedProgramme.sessions || []).find((s: any) => s.date === wodTargetDate);

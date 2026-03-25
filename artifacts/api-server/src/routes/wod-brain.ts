@@ -1,56 +1,48 @@
 import { Router, type IRouter } from "express";
+import { db, wodLibraryTable } from "@workspace/db";
+
+interface Block {
+  movement: string;
+  amount: number;
+  unit: string;
+  minute?: number;
+}
 
 interface WOD {
   id: string;
   name: string;
   format: string;
   duration: number;
-  exercises: string[];
+  structure: string;
+  blocks: Block[];
   equipment: string[];
   tags: string[];
+  rounds?: number;
+  restSeconds?: number;
+  intervalStyle?: string;
 }
 
-const workouts: WOD[] = [
-  { id: "wod_001", name: "10 Min Engine Push", format: "amrap", duration: 10, exercises: ["running", "wall balls", "burpees"], equipment: ["wall ball"], tags: ["engine", "short"] },
-  { id: "wod_002", name: "DB Sweat 12", format: "amrap", duration: 12, exercises: ["dumbbell lunges", "dumbbell push press", "sit-ups"], equipment: ["dumbbells"], tags: ["dumbbell", "mixed"] },
-  { id: "wod_003", name: "Row Intervals", format: "interval", duration: 10, exercises: ["rowing"], equipment: ["rower"], tags: ["engine"] },
-  { id: "wod_004", name: "Hybrid 15", format: "for_time", duration: 15, exercises: ["running", "dumbbell thrusters", "burpees"], equipment: ["dumbbells"], tags: ["hyrox"] },
-  { id: "wod_005", name: "EMOM Builder", format: "emom", duration: 12, exercises: ["ski erg", "goblet squats", "plank"], equipment: ["kettlebell", "ski erg"], tags: ["simple"] },
-  { id: "wod_006", name: "20 Min Engine", format: "amrap", duration: 20, exercises: ["running", "wall balls", "lunges"], equipment: ["wall ball"], tags: ["engine"] },
-  { id: "wod_007", name: "Sled Grind", format: "for_time", duration: 18, exercises: ["sled push", "running"], equipment: ["sled"], tags: ["hyrox"] },
-  { id: "wod_008", name: "DB Conditioning", format: "amrap", duration: 15, exercises: ["dumbbell snatch", "burpees", "sit-ups"], equipment: ["dumbbells"], tags: ["mixed"] },
-  { id: "wod_009", name: "Long Aerobic", format: "amrap", duration: 30, exercises: ["running", "rowing"], equipment: ["rower"], tags: ["aerobic"] },
-  { id: "wod_010", name: "Wall Ball Ladder", format: "ladder", duration: 20, exercises: ["wall balls", "burpees", "running"], equipment: ["wall ball"], tags: ["hyrox"] },
-  { id: "wod_011", name: "10 Min Burpee Engine", format: "amrap", duration: 10, exercises: ["burpees", "running"], equipment: [], tags: ["engine", "short"] },
-  { id: "wod_012", name: "DB Ladder 15", format: "ladder", duration: 15, exercises: ["dumbbell thrusters", "dumbbell lunges"], equipment: ["dumbbells"], tags: ["dumbbell"] },
-  { id: "wod_013", name: "Row + Wall Ball 12", format: "amrap", duration: 12, exercises: ["rowing", "wall balls"], equipment: ["rower", "wall ball"], tags: ["hyrox"] },
-  { id: "wod_014", name: "Simple Bodyweight 15", format: "amrap", duration: 15, exercises: ["air squats", "push-ups", "sit-ups"], equipment: [], tags: ["bodyweight"] },
-  { id: "wod_015", name: "Sled + Burpee 20", format: "for_time", duration: 20, exercises: ["sled push", "burpees"], equipment: ["sled"], tags: ["hyrox"] },
-  { id: "wod_016", name: "Bike Intervals 12", format: "interval", duration: 12, exercises: ["bike"], equipment: ["bike"], tags: ["engine"] },
-  { id: "wod_017", name: "Run + Lunge 20", format: "amrap", duration: 20, exercises: ["running", "lunges"], equipment: [], tags: ["engine"] },
-  { id: "wod_018", name: "DB Core Burner", format: "amrap", duration: 15, exercises: ["dumbbell sit-ups", "plank", "burpees"], equipment: ["dumbbells"], tags: ["core"] },
-  { id: "wod_019", name: "Long Grind 30", format: "amrap", duration: 30, exercises: ["running", "wall balls", "burpees"], equipment: ["wall ball"], tags: ["long"] },
-  { id: "wod_020", name: "Row Run Combo", format: "for_time", duration: 18, exercises: ["rowing", "running"], equipment: ["rower"], tags: ["engine"] },
-  { id: "wod_021", name: "DB Push Engine", format: "amrap", duration: 12, exercises: ["dumbbell push press", "burpees"], equipment: ["dumbbells"], tags: ["mixed"] },
-  { id: "wod_022", name: "Wall Ball Sprint", format: "interval", duration: 10, exercises: ["wall balls"], equipment: ["wall ball"], tags: ["engine"] },
-  { id: "wod_023", name: "Lunge + Run Ladder", format: "ladder", duration: 20, exercises: ["lunges", "running"], equipment: [], tags: ["hyrox"] },
-  { id: "wod_024", name: "Ski + Burpee 15", format: "amrap", duration: 15, exercises: ["ski erg", "burpees"], equipment: ["ski erg"], tags: ["engine"] },
-  { id: "wod_025", name: "DB Full Body 20", format: "amrap", duration: 20, exercises: ["dumbbell snatch", "dumbbell lunges", "burpees"], equipment: ["dumbbells"], tags: ["dumbbell"] },
-  { id: "wod_026", name: "Simple EMOM 12", format: "emom", duration: 12, exercises: ["air squats", "push-ups"], equipment: [], tags: ["simple"] },
-  { id: "wod_027", name: "Run Only Builder", format: "interval", duration: 20, exercises: ["running"], equipment: [], tags: ["aerobic"] },
-  { id: "wod_028", name: "Bike + Sit-Up", format: "amrap", duration: 15, exercises: ["bike", "sit-ups"], equipment: ["bike"], tags: ["engine"] },
-  { id: "wod_029", name: "DB + Wall Ball 18", format: "for_time", duration: 18, exercises: ["dumbbell thrusters", "wall balls"], equipment: ["dumbbells", "wall ball"], tags: ["mixed"] },
-  { id: "wod_030", name: "Burpee Ladder 12", format: "ladder", duration: 12, exercises: ["burpees"], equipment: [], tags: ["engine"] },
-  { id: "wod_031", name: "Sled + Run Intervals", format: "interval", duration: 20, exercises: ["sled push", "running"], equipment: ["sled"], tags: ["hyrox"] },
-  { id: "wod_032", name: "DB Complex 15", format: "amrap", duration: 15, exercises: ["dumbbell clean", "dumbbell push press", "lunges"], equipment: ["dumbbells"], tags: ["strength endurance"] },
-  { id: "wod_033", name: "Wall Ball + Run 25", format: "amrap", duration: 25, exercises: ["wall balls", "running"], equipment: ["wall ball"], tags: ["hyrox"] },
-  { id: "wod_034", name: "Row + Burpee 15", format: "amrap", duration: 15, exercises: ["rowing", "burpees"], equipment: ["rower"], tags: ["engine"] },
-  { id: "wod_035", name: "Bodyweight Grinder", format: "amrap", duration: 20, exercises: ["air squats", "push-ups", "burpees"], equipment: [], tags: ["bodyweight"] },
-  { id: "wod_036", name: "DB + Run 20", format: "amrap", duration: 20, exercises: ["dumbbell lunges", "running"], equipment: ["dumbbells"], tags: ["hyrox"] },
-  { id: "wod_037", name: "Ski Erg Only", format: "interval", duration: 15, exercises: ["ski erg"], equipment: ["ski erg"], tags: ["engine"] },
-  { id: "wod_038", name: "Wall Ball + Sit-Up", format: "amrap", duration: 15, exercises: ["wall balls", "sit-ups"], equipment: ["wall ball"], tags: ["mixed"] },
-  { id: "wod_039", name: "Run + Burpee 30", format: "amrap", duration: 30, exercises: ["running", "burpees"], equipment: [], tags: ["long"] },
-  { id: "wod_040", name: "DB Push + Core", format: "amrap", duration: 12, exercises: ["dumbbell push press", "sit-ups"], equipment: ["dumbbells"], tags: ["mixed"] },
+const builtinWorkouts: WOD[] = [
+  { id: "wod_001", name: "10 Min Engine Push", format: "amrap", duration: 10, structure: "AMRAP 10: 200m run, 15 wall balls, 10 burpees", blocks: [{movement:"running",amount:200,unit:"m"},{movement:"wall balls",amount:15,unit:"reps"},{movement:"burpees",amount:10,unit:"reps"}], equipment: ["wall ball"], tags: ["engine","short"] },
+  { id: "wod_002", name: "DB Sweat 12", format: "amrap", duration: 12, structure: "AMRAP 12: 20 dumbbell lunges, 12 dumbbell push press, 20 sit-ups", blocks: [{movement:"dumbbell lunges",amount:20,unit:"reps"},{movement:"dumbbell push press",amount:12,unit:"reps"},{movement:"sit-ups",amount:20,unit:"reps"}], equipment: ["dumbbells"], tags: ["dumbbell"] },
+  { id: "wod_003", name: "Row Intervals", format: "interval", duration: 12, structure: "6 rounds: 250m row hard, 60s rest", rounds: 6, restSeconds: 60, blocks: [{movement:"rowing",amount:250,unit:"m"}], equipment: ["rower"], tags: ["engine"] },
+  { id: "wod_004", name: "Hybrid 15", format: "for_time", duration: 15, structure: "4 rounds: 400m run, 15 dumbbell thrusters, 12 burpees", rounds: 4, blocks: [{movement:"running",amount:400,unit:"m"},{movement:"dumbbell thrusters",amount:15,unit:"reps"},{movement:"burpees",amount:12,unit:"reps"}], equipment: ["dumbbells"], tags: ["hyrox"] },
+  { id: "wod_005", name: "EMOM Builder", format: "emom", duration: 12, structure: "EMOM 12: Min1 12 cal ski, Min2 15 goblet squats, Min3 30s plank", intervalStyle: "rotating", blocks: [{minute:1,movement:"ski erg",amount:12,unit:"cal"},{minute:2,movement:"goblet squats",amount:15,unit:"reps"},{minute:3,movement:"plank",amount:30,unit:"seconds"}], equipment: ["kettlebell","ski erg"], tags: ["simple"] },
+  { id: "wod_006", name: "20 Min Engine", format: "amrap", duration: 20, structure: "AMRAP 20: 400m run, 20 wall balls, 20 lunges", blocks: [{movement:"running",amount:400,unit:"m"},{movement:"wall balls",amount:20,unit:"reps"},{movement:"lunges",amount:20,unit:"reps"}], equipment: ["wall ball"], tags: ["engine"] },
+  { id: "wod_007", name: "Sled Grind", format: "for_time", duration: 18, structure: "5 rounds: 20m sled push, 200m run", rounds: 5, blocks: [{movement:"sled push",amount:20,unit:"m"},{movement:"running",amount:200,unit:"m"}], equipment: ["sled"], tags: ["hyrox"] },
+  { id: "wod_008", name: "DB Conditioning", format: "amrap", duration: 15, structure: "AMRAP 15: 15 dumbbell snatch, 12 burpees, 20 sit-ups", blocks: [{movement:"dumbbell snatch",amount:15,unit:"reps"},{movement:"burpees",amount:12,unit:"reps"},{movement:"sit-ups",amount:20,unit:"reps"}], equipment: ["dumbbells"], tags: ["mixed"] },
+  { id: "wod_009", name: "Long Aerobic", format: "amrap", duration: 30, structure: "AMRAP 30: 800m run, 500m row", blocks: [{movement:"running",amount:800,unit:"m"},{movement:"rowing",amount:500,unit:"m"}], equipment: ["rower"], tags: ["aerobic"] },
+  { id: "wod_010", name: "Wall Ball Ladder", format: "ladder", duration: 20, structure: "10-20-30-40 wall balls, 10 burpees after each set", blocks: [{movement:"wall balls",amount:10,unit:"reps"},{movement:"burpees",amount:10,unit:"reps"}], equipment: ["wall ball"], tags: ["hyrox"] },
+  { id: "wod_011", name: "Burpee Engine", format: "amrap", duration: 10, structure: "AMRAP 10: 12 burpees, 200m run", blocks: [{movement:"burpees",amount:12,unit:"reps"},{movement:"running",amount:200,unit:"m"}], equipment: [], tags: ["engine"] },
+  { id: "wod_012", name: "DB Ladder 15", format: "ladder", duration: 15, structure: "10-20-30 dumbbell thrusters + lunges", blocks: [{movement:"dumbbell thrusters",amount:10,unit:"reps"},{movement:"dumbbell lunges",amount:10,unit:"reps"}], equipment: ["dumbbells"], tags: ["dumbbell"] },
+  { id: "wod_013", name: "Row Wall Ball", format: "amrap", duration: 12, structure: "AMRAP 12: 250m row, 20 wall balls", blocks: [{movement:"rowing",amount:250,unit:"m"},{movement:"wall balls",amount:20,unit:"reps"}], equipment: ["rower","wall ball"], tags: ["hyrox"] },
+  { id: "wod_014", name: "Bodyweight 15", format: "amrap", duration: 15, structure: "AMRAP 15: 20 air squats, 15 push-ups, 20 sit-ups", blocks: [{movement:"air squats",amount:20,unit:"reps"},{movement:"push-ups",amount:15,unit:"reps"},{movement:"sit-ups",amount:20,unit:"reps"}], equipment: [], tags: ["bodyweight"] },
+  { id: "wod_015", name: "Sled Burpee", format: "for_time", duration: 20, structure: "4 rounds: 30m sled push, 15 burpees", rounds: 4, blocks: [{movement:"sled push",amount:30,unit:"m"},{movement:"burpees",amount:15,unit:"reps"}], equipment: ["sled"], tags: ["hyrox"] },
+  { id: "wod_016", name: "Bike Intervals", format: "interval", duration: 12, structure: "6 rounds: 15 cal bike, 60s rest", rounds: 6, restSeconds: 60, blocks: [{movement:"bike",amount:15,unit:"cal"}], equipment: ["bike"], tags: ["engine"] },
+  { id: "wod_017", name: "Run Lunge", format: "amrap", duration: 20, structure: "AMRAP 20: 400m run, 20 lunges", blocks: [{movement:"running",amount:400,unit:"m"},{movement:"lunges",amount:20,unit:"reps"}], equipment: [], tags: ["engine"] },
+  { id: "wod_018", name: "Core Burner", format: "amrap", duration: 15, structure: "AMRAP 15: 20 sit-ups, 30s plank, 10 burpees", blocks: [{movement:"sit-ups",amount:20,unit:"reps"},{movement:"plank",amount:30,unit:"seconds"},{movement:"burpees",amount:10,unit:"reps"}], equipment: [], tags: ["core"] },
+  { id: "wod_019", name: "Long Grind", format: "amrap", duration: 30, structure: "AMRAP 30: 400m run, 20 wall balls, 15 burpees", blocks: [{movement:"running",amount:400,unit:"m"},{movement:"wall balls",amount:20,unit:"reps"},{movement:"burpees",amount:15,unit:"reps"}], equipment: ["wall ball"], tags: ["long"] },
+  { id: "wod_020", name: "Row Run", format: "for_time", duration: 18, structure: "5 rounds: 300m row, 300m run", rounds: 5, blocks: [{movement:"rowing",amount:300,unit:"m"},{movement:"running",amount:300,unit:"m"}], equipment: ["rower"], tags: ["engine"] },
 ];
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -64,7 +56,7 @@ const FORMAT_LABELS: Record<string, string> = {
 const MOVEMENTS = [
   "running", "rowing", "ski erg", "bike", "wall balls", "burpees", "lunges",
   "dumbbell", "sled", "sit-ups", "plank", "kettlebell", "thruster",
-  "snatch", "goblet squat", "push press", "pull-up", "box jump",
+  "snatch", "goblet squat", "push press", "pull-up", "box jump", "air squats", "push-ups",
 ];
 
 function parseInput(input: string) {
@@ -88,16 +80,14 @@ function parseInput(input: string) {
 
   let duration: number | null = null;
   const minMatch = text.match(/(\d+)\s*min/);
-  if (minMatch) {
-    duration = parseInt(minMatch[1]);
-  } else {
+  if (minMatch) duration = parseInt(minMatch[1]);
+  else {
     const numMatch = text.match(/\d+/);
     if (numMatch) duration = parseInt(numMatch[0]);
   }
-
   if (duration === null) {
-    if (text.includes("short") || text.includes("quick") || text.includes("snappy")) duration = 10;
-    if (text.includes("long") || text.includes("grind") || text.includes("aerobic") || text.includes("endurance")) duration = 25;
+    if (text.includes("short") || text.includes("quick")) duration = 10;
+    if (text.includes("long") || text.includes("grind")) duration = 25;
     if (text.includes("medium")) duration = 15;
   }
 
@@ -106,49 +96,91 @@ function parseInput(input: string) {
   if (text.includes("hyrox")) tags.push("hyrox");
   if (text.includes("aerobic")) tags.push("aerobic");
   if (text.includes("mixed")) tags.push("mixed");
+  if (text.includes("core")) tags.push("core");
+  if (text.includes("bodyweight")) tags.push("bodyweight");
 
   return { include, exclude, format, duration, tags };
 }
 
-function scoreWorkout(wod: WOD, filters: ReturnType<typeof parseInput>): number {
+function getMovements(wod: WOD | any): string[] {
+  if (wod.blocks && Array.isArray(wod.blocks)) {
+    return (wod.blocks as Block[]).map(b => b.movement);
+  }
+  return [];
+}
+
+function scoreWorkout(wod: WOD | any, filters: ReturnType<typeof parseInput>): number {
   let score = 0;
+  const movements = getMovements(wod);
 
   for (const inc of filters.include) {
-    if (wod.exercises.some(e => e.includes(inc)) || wod.equipment.some(e => e.includes(inc))) score += 5;
+    if (movements.some(m => m.includes(inc)) || (wod.equipment ?? []).some((e: string) => e.includes(inc))) score += 5;
   }
-
   for (const exc of filters.exclude) {
-    if (wod.exercises.some(e => e.includes(exc))) return -1;
+    if (movements.some(m => m.includes(exc))) return -1;
   }
-
   if (filters.format && wod.format === filters.format) score += 8;
-
-  if (filters.duration !== null) {
+  if (filters.duration !== null && wod.duration) {
     const diff = Math.abs(wod.duration - filters.duration);
     if (diff === 0) score += 5;
     else if (diff <= 2) score += 3;
     else if (diff <= 5) score += 1;
   }
-
   for (const tag of filters.tags) {
-    if (wod.tags.includes(tag)) score += 3;
+    if ((wod.tags as string[]).includes(tag)) score += 3;
   }
-
   return score;
 }
 
 const router: IRouter = Router();
 
-router.post("/wod-brain/search", (req, res): void => {
-  const { query } = req.body as { query: string };
-  if (!query?.trim()) {
-    res.status(400).json({ error: "Query is required" });
+router.get("/wod-brain/workouts", async (_req, res): Promise<void> => {
+  try {
+    const custom = await db.select().from(wodLibraryTable).orderBy(wodLibraryTable.createdAt);
+    const customMapped = custom.map(w => ({
+      ...w,
+      id: `custom_wod_${w.id}`,
+      formatLabel: FORMAT_LABELS[w.format] ?? w.format,
+      source: "custom" as const,
+    }));
+    const builtin = builtinWorkouts.map(w => ({ ...w, formatLabel: FORMAT_LABELS[w.format] ?? w.format, source: "builtin" as const }));
+    res.json({ workouts: [...builtin, ...customMapped] });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load workouts" });
+  }
+});
+
+router.post("/wod-brain/workouts", async (req, res): Promise<void> => {
+  const { name, format, duration, structure, blocks, equipment, tags, rounds } = req.body;
+  if (!name?.trim() || !format || !duration || !structure || !blocks?.length) {
+    res.status(400).json({ error: "name, format, duration, structure and blocks are required" });
     return;
   }
+  try {
+    const [row] = await db.insert(wodLibraryTable).values({
+      name: name.trim(), format, duration: Number(duration), structure: structure.trim(),
+      blocks, equipment: equipment ?? [], tags: tags ?? [], rounds: rounds ?? null,
+    }).returning();
+    res.json({ workout: { ...row, id: `custom_wod_${row.id}`, formatLabel: FORMAT_LABELS[row.format] ?? row.format, source: "custom" } });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to save workout" });
+  }
+});
 
+router.post("/wod-brain/search", async (req, res): Promise<void> => {
+  const { query } = req.body as { query: string };
+  if (!query?.trim()) { res.status(400).json({ error: "Query is required" }); return; }
+
+  let custom: any[] = [];
+  try {
+    const rows = await db.select().from(wodLibraryTable);
+    custom = rows.map(w => ({ ...w, id: `custom_wod_${w.id}`, source: "custom" }));
+  } catch {}
+
+  const all = [...builtinWorkouts, ...custom];
   const filters = parseInput(query);
 
-  const results = workouts
+  const results = all
     .map(w => ({ ...w, score: scoreWorkout(w, filters), formatLabel: FORMAT_LABELS[w.format] ?? w.format }))
     .filter(w => w.score >= 0)
     .sort((a, b) => b.score - a.score)
