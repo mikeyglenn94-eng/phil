@@ -35,7 +35,7 @@ export default function ClientNutrition() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
     const r = new SR();
-    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+    r.continuous = true; r.interimResults = true; r.lang = "en-US";
     r.onresult = (e: any) => {
       let fin = ""; let int = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
