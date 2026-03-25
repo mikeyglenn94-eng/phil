@@ -7,6 +7,7 @@
  */
 
 export * from "./addNutritionEntryBody";
+export * from "./assignProgrammeBody";
 export * from "./calendarCommandBody";
 export * from "./calendarCommandResponse";
 export * from "./client";
@@ -16,6 +17,7 @@ export * from "./errorResponse";
 export * from "./exercise";
 export * from "./healthStatus";
 export * from "./listNutritionEntriesParams";
+export * from "./listProgrammesParams";
 export * from "./nutritionEntry";
 export * from "./parseLogBody";
 export * from "./parseLogResponse";

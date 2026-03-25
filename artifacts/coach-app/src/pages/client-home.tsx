@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { format, addWeeks, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
 import { useListProgrammes } from "@workspace/api-client-react";
 import type { Session } from "@workspace/api-client-react";
+import { useClientContext } from "@/contexts/client-context";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,7 +39,10 @@ function getWeekDates(weekStart: Date): Date[] {
 
 export default function ClientHome() {
   const [, setLocation] = useLocation();
-  const { data: programmes, isLoading } = useListProgrammes();
+  const { client } = useClientContext();
+  const { data: programmes, isLoading } = useListProgrammes(
+    client ? { clientId: client.id } : undefined
+  );
 
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);

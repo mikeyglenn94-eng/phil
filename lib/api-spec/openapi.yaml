@@ -36,6 +36,13 @@ paths:
       operationId: listProgrammes
       tags: [programmes]
       summary: List all programmes
+      parameters:
+        - name: clientId
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: If provided, returns programmes assigned to this client. Otherwise returns master programmes.
       responses:
         "200":
           description: List of programmes
@@ -373,6 +380,37 @@ paths:
         "204":
           description: Deleted
 
+  /clients/{clientId}/assign-programme:
+    post:
+      operationId: assignProgramme
+      tags: [clients]
+      summary: Assign a master programme to a client, re-dated from a given start date
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignProgrammeBody"
+      responses:
+        "201":
+          description: Assigned programme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+        "404":
+          description: Source programme not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -488,6 +526,9 @@ components:
           type: integer
         title:
           type: string
+        clientId:
+          type: integer
+          nullable: true
         sessions:
           type: array
           items:
@@ -516,6 +557,18 @@ components:
             $ref: "#/components/schemas/Session"
       required:
         - title
+
+    AssignProgrammeBody:
+      type: object
+      properties:
+        sourceProgrammeId:
+          type: integer
+        startDate:
+          type: string
+          format: date
+      required:
+        - sourceProgrammeId
+        - startDate
 
     UpdateProgrammeBody:
       type: object

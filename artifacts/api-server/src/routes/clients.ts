@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, clientsTable, nutritionEntriesTable } from "@workspace/db";
+import { db, clientsTable, nutritionEntriesTable, programmesTable } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import type { Session } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -93,6 +94,53 @@ router.delete("/clients/:clientId/nutrition/:entryId", async (req, res): Promise
   if (isNaN(entryId)) { res.status(400).json({ error: "Invalid entryId" }); return; }
   await db.delete(nutritionEntriesTable).where(eq(nutritionEntriesTable.id, entryId));
   res.status(204).send();
+});
+
+// Assign a programme to a client, re-dated from a given startDate
+router.post("/clients/:clientId/assign-programme", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+
+  const { sourceProgrammeId, startDate } = req.body as { sourceProgrammeId: number; startDate: string };
+  if (!sourceProgrammeId || !startDate) {
+    res.status(400).json({ error: "sourceProgrammeId and startDate are required" });
+    return;
+  }
+
+  const [source] = await db.select().from(programmesTable).where(eq(programmesTable.id, sourceProgrammeId));
+  if (!source) { res.status(404).json({ error: "Source programme not found" }); return; }
+
+  const sessions = (source.sessions as Session[]) ?? [];
+
+  // Calculate day offset from the earliest session date to the requested startDate
+  let redatedSessions = sessions;
+  if (sessions.length > 0) {
+    const sortedDates = sessions.map(s => new Date(s.date)).sort((a, b) => a.getTime() - b.getTime());
+    const earliest = sortedDates[0];
+    const newStart = new Date(startDate);
+    const offsetDays = Math.round((newStart.getTime() - earliest.getTime()) / 86400000);
+
+    redatedSessions = sessions.map(s => {
+      const orig = new Date(s.date);
+      const shifted = new Date(orig.getTime() + offsetDays * 86400000);
+      return {
+        ...s,
+        id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        date: shifted.toISOString().slice(0, 10),
+      };
+    });
+  }
+
+  const [assigned] = await db
+    .insert(programmesTable)
+    .values({
+      title: source.title,
+      clientId,
+      sessions: redatedSessions,
+    })
+    .returning();
+
+  res.status(201).json(assigned);
 });
 
 export default router;

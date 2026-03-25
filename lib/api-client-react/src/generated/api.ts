@@ -18,6 +18,7 @@ import type {
 
 import type {
   AddNutritionEntryBody,
+  AssignProgrammeBody,
   CalendarCommandBody,
   CalendarCommandResponse,
   Client,
@@ -26,6 +27,7 @@ import type {
   ErrorResponse,
   HealthStatus,
   ListNutritionEntriesParams,
+  ListProgrammesParams,
   NutritionEntry,
   ParseLogBody,
   ParseLogResponse,
@@ -124,41 +126,57 @@ export function useHealthCheck<
 /**
  * @summary List all programmes
  */
-export const getListProgrammesUrl = () => {
-  return `/api/programmes`;
+export const getListProgrammesUrl = (params?: ListProgrammesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/programmes?${stringifiedParams}`
+    : `/api/programmes`;
 };
 
 export const listProgrammes = async (
+  params?: ListProgrammesParams,
   options?: RequestInit,
 ): Promise<Programme[]> => {
-  return customFetch<Programme[]>(getListProgrammesUrl(), {
+  return customFetch<Programme[]>(getListProgrammesUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListProgrammesQueryKey = () => {
-  return [`/api/programmes`] as const;
+export const getListProgrammesQueryKey = (params?: ListProgrammesParams) => {
+  return [`/api/programmes`, ...(params ? [params] : [])] as const;
 };
 
 export const getListProgrammesQueryOptions = <
   TData = Awaited<ReturnType<typeof listProgrammes>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listProgrammes>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListProgrammesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listProgrammes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListProgrammesQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListProgrammesQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listProgrammes>>> = ({
     signal,
-  }) => listProgrammes({ signal, ...requestOptions });
+  }) => listProgrammes(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listProgrammes>>,
@@ -179,15 +197,18 @@ export type ListProgrammesQueryError = ErrorType<unknown>;
 export function useListProgrammes<
   TData = Awaited<ReturnType<typeof listProgrammes>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listProgrammes>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListProgrammesQueryOptions(options);
+>(
+  params?: ListProgrammesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listProgrammes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListProgrammesQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -1507,4 +1528,91 @@ export const useDeleteNutritionEntry = <
   TContext
 > => {
   return useMutation(getDeleteNutritionEntryMutationOptions(options));
+};
+
+/**
+ * @summary Assign a master programme to a client, re-dated from a given start date
+ */
+export const getAssignProgrammeUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/assign-programme`;
+};
+
+export const assignProgramme = async (
+  clientId: number,
+  assignProgrammeBody: AssignProgrammeBody,
+  options?: RequestInit,
+): Promise<Programme> => {
+  return customFetch<Programme>(getAssignProgrammeUrl(clientId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(assignProgrammeBody),
+  });
+};
+
+export const getAssignProgrammeMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof assignProgramme>>,
+    TError,
+    { clientId: number; data: BodyType<AssignProgrammeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof assignProgramme>>,
+  TError,
+  { clientId: number; data: BodyType<AssignProgrammeBody> },
+  TContext
+> => {
+  const mutationKey = ["assignProgramme"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof assignProgramme>>,
+    { clientId: number; data: BodyType<AssignProgrammeBody> }
+  > = (props) => {
+    const { clientId, data } = props ?? {};
+
+    return assignProgramme(clientId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AssignProgrammeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof assignProgramme>>
+>;
+export type AssignProgrammeMutationBody = BodyType<AssignProgrammeBody>;
+export type AssignProgrammeMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Assign a master programme to a client, re-dated from a given start date
+ */
+export const useAssignProgramme = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof assignProgramme>>,
+    TError,
+    { clientId: number; data: BodyType<AssignProgrammeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof assignProgramme>>,
+  TError,
+  { clientId: number; data: BodyType<AssignProgrammeBody> },
+  TContext
+> => {
+  return useMutation(getAssignProgrammeMutationOptions(options));
 };

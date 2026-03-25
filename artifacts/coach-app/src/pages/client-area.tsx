@@ -1,20 +1,30 @@
 import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import {
   useGetClient,
   useListProgrammes,
+  useAssignProgramme,
   useListNutritionEntries,
   useAddNutritionEntry,
   useDeleteNutritionEntry,
   getListNutritionEntriesQueryKey,
+  getListProgrammesQueryKey,
 } from "@workspace/api-client-react";
-import type { NutritionEntry } from "@workspace/api-client-react";
+import type { NutritionEntry, Programme } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 type Tab = "programmes" | "nutrition";
 
@@ -26,9 +36,34 @@ export default function ClientArea() {
   const { toast } = useToast();
 
   const { data: client, isLoading: clientLoading } = useGetClient(clientId);
-  const { data: programmes } = useListProgrammes();
+  const { data: masterProgrammes } = useListProgrammes(); // master programmes (no clientId)
+  const { data: clientProgrammes } = useListProgrammes({ clientId });
+  const assignMutation = useAssignProgramme();
 
   const [activeTab, setActiveTab] = useState<Tab>("nutrition");
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
+  const [assignStartDate, setAssignStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  async function handleAssign() {
+    if (!selectedSourceId || !assignStartDate) return;
+    setIsAssigning(true);
+    try {
+      await assignMutation.mutateAsync({
+        clientId,
+        data: { sourceProgrammeId: selectedSourceId, startDate: assignStartDate },
+      });
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      setAssignDialogOpen(false);
+      setSelectedSourceId(null);
+      toast({ title: "Programme assigned", description: "Sessions have been added to the client's calendar." });
+    } catch {
+      toast({ title: "Failed to assign programme", variant: "destructive" });
+    } finally {
+      setIsAssigning(false);
+    }
+  }
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: entries, isLoading: entriesLoading } = useListNutritionEntries(clientId, { date: selectedDate });
@@ -291,29 +326,123 @@ export default function ClientArea() {
 
       {/* Programmes Tab */}
       {activeTab === "programmes" && (
-        <div className="px-6 py-6 max-w-2xl mx-auto space-y-3">
-          {!programmes?.length ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No programmes yet. Create one on the Coach Calendar.</p>
+        <div className="px-6 py-6 max-w-2xl mx-auto space-y-6">
+
+          {/* Assigned programmes for this client */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Assigned Programmes</h3>
+              <Button size="sm" variant="default" onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}>
+                <Plus className="w-3.5 h-3.5 mr-1" /> Assign Programme
+              </Button>
             </div>
-          ) : (
-            programmes.map(prog => (
-              <button
-                key={prog.id}
-                onClick={() => setLocation("/")}
-                className="w-full bg-card border rounded-2xl px-5 py-4 flex items-center justify-between text-left hover:border-primary/40 hover:shadow-sm transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <Dumbbell className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <span className="font-semibold text-sm">{prog.title || "Untitled Programme"}</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-              </button>
-            ))
-          )}
+            {!clientProgrammes?.length ? (
+              <div className="text-center py-10 text-muted-foreground border border-dashed rounded-2xl">
+                <Calendar className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">No programmes assigned yet.</p>
+                <p className="text-xs mt-1 opacity-60">Click "Assign Programme" to add one to their calendar.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {clientProgrammes.map(prog => (
+                  <div key={prog.id} className="w-full bg-card border rounded-2xl px-5 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Dumbbell className="w-4 h-4 text-primary" />
+                      <div>
+                        <span className="font-semibold text-sm">{prog.title || "Untitled"}</span>
+                        <p className="text-xs text-muted-foreground">
+                          {prog.sessions?.length ?? 0} session{prog.sessions?.length !== 1 ? "s" : ""}
+                          {prog.sessions?.length
+                            ? ` · starts ${format(new Date(prog.sessions.sort((a, b) => a.date < b.date ? -1 : 1)[0].date + "T12:00:00"), "d MMM yyyy")}`
+                            : ""}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Master programmes available to assign */}
+          <div>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Master Programmes</h3>
+            {!masterProgrammes?.length ? (
+              <p className="text-sm text-muted-foreground">No programmes yet. Create one on the Coach Calendar.</p>
+            ) : (
+              <div className="space-y-2">
+                {masterProgrammes.map(prog => (
+                  <button
+                    key={prog.id}
+                    onClick={() => { setSelectedSourceId(prog.id); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
+                    className="w-full bg-muted/40 border rounded-2xl px-5 py-4 flex items-center justify-between text-left hover:border-primary/40 hover:bg-card hover:shadow-sm transition-all group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Dumbbell className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                      <div>
+                        <span className="font-semibold text-sm">{prog.title || "Untitled Programme"}</span>
+                        <p className="text-xs text-muted-foreground">{prog.sessions?.length ?? 0} sessions</p>
+                      </div>
+                    </div>
+                    <span className="text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">Assign →</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      {/* Assign Programme Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Assign Programme</DialogTitle>
+            <DialogDescription>
+              Choose a programme and start date. Sessions will be re-dated from that day.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Programme</label>
+              <div className="space-y-1.5">
+                {masterProgrammes?.map(prog => (
+                  <button
+                    key={prog.id}
+                    onClick={() => setSelectedSourceId(prog.id)}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                      selectedSourceId === prog.id
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:border-primary/40 hover:bg-muted/50"
+                    }`}
+                  >
+                    {prog.title || "Untitled Programme"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Start Date</label>
+              <Input
+                type="date"
+                value={assignStartDate}
+                onChange={e => setAssignStartDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleAssign}
+              disabled={!selectedSourceId || !assignStartDate || isAssigning}
+            >
+              {isAssigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Assign to {client?.name ?? "Client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

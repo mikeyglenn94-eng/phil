@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -43,6 +43,7 @@ export type Session = z.infer<typeof sessionSchema>;
 export const programmesTable = pgTable("programmes", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
+  clientId: integer("client_id"), // null = master programme; set = assigned to a specific client
   sessions: jsonb("sessions").notNull().$type<Session[]>().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

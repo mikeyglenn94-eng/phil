@@ -17,9 +17,19 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary List all programmes
  */
+export const ListProgrammesQueryParams = zod.object({
+  clientId: zod.coerce
+    .number()
+    .optional()
+    .describe(
+      "If provided, returns programmes assigned to this client. Otherwise returns master programmes.",
+    ),
+});
+
 export const ListProgrammesResponseItem = zod.object({
   id: zod.number(),
   title: zod.string(),
+  clientId: zod.number().nullish(),
   sessions: zod.array(
     zod.object({
       id: zod.string(),
@@ -162,6 +172,7 @@ export const GetProgrammeParams = zod.object({
 export const GetProgrammeResponse = zod.object({
   id: zod.number(),
   title: zod.string(),
+  clientId: zod.number().nullish(),
   sessions: zod.array(
     zod.object({
       id: zod.string(),
@@ -300,6 +311,7 @@ export const UpdateProgrammeBody = zod.object({
 export const UpdateProgrammeResponse = zod.object({
   id: zod.number(),
   title: zod.string(),
+  clientId: zod.number().nullish(),
   sessions: zod.array(
     zod.object({
       id: zod.string(),
@@ -732,4 +744,16 @@ export const AddNutritionEntryBody = zod.object({
 export const DeleteNutritionEntryParams = zod.object({
   clientId: zod.coerce.number(),
   entryId: zod.coerce.number(),
+});
+
+/**
+ * @summary Assign a master programme to a client, re-dated from a given start date
+ */
+export const AssignProgrammeParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const AssignProgrammeBody = zod.object({
+  sourceProgrammeId: zod.number(),
+  startDate: zod.date(),
 });

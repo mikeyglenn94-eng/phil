@@ -75,6 +75,7 @@ export interface Session {
 export interface Programme {
   id: number;
   title: string;
+  clientId?: number | null;
   sessions: Session[];
   createdAt: string;
   updatedAt: string;
@@ -83,6 +84,11 @@ export interface Programme {
 export interface CreateProgrammeBody {
   title: string;
   sessions?: Session[];
+}
+
+export interface AssignProgrammeBody {
+  sourceProgrammeId: number;
+  startDate: string;
 }
 
 export interface UpdateProgrammeBody {
@@ -159,6 +165,13 @@ export interface NutritionEntry {
   fats?: string | null;
   createdAt: string;
 }
+
+export type ListProgrammesParams = {
+  /**
+   * If provided, returns programmes assigned to this client. Otherwise returns master programmes.
+   */
+  clientId?: number;
+};
 
 export type TranscribeAudioBody = {
   audio: Blob;

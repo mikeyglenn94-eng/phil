@@ -1,14 +1,30 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { db, programmesTable } from "@workspace/db";
 import type { Session } from "@workspace/db";
 
 const router: IRouter = Router();
 
-router.get("/programmes", async (_req, res): Promise<void> => {
+router.get("/programmes", async (req, res): Promise<void> => {
+  const clientIdParam = req.query.clientId as string | undefined;
+
+  if (clientIdParam !== undefined) {
+    const clientId = parseInt(clientIdParam, 10);
+    if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+    const programmes = await db
+      .select()
+      .from(programmesTable)
+      .where(eq(programmesTable.clientId, clientId))
+      .orderBy(programmesTable.updatedAt);
+    res.json(programmes.reverse());
+    return;
+  }
+
+  // Default: master programmes (no client assigned)
   const programmes = await db
     .select()
     .from(programmesTable)
+    .where(isNull(programmesTable.clientId))
     .orderBy(programmesTable.updatedAt);
   res.json(programmes.reverse());
 });

@@ -10,6 +10,7 @@ import type { Session } from "./session";
 export interface Programme {
   id: number;
   title: string;
+  clientId?: number | null;
   sessions: Session[];
   createdAt: Date;
   updatedAt: Date;
