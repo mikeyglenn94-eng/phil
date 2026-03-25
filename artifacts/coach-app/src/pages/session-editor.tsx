@@ -253,6 +253,7 @@ export default function SessionEditor() {
             </div>
 
             {isConditioningSession ? (
+              <div className="space-y-4">
               <div className={`rounded-2xl border p-5 space-y-4 ${sessionSource === "run_brain" ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
                 <div className="flex items-center gap-2">
                   {sessionSource === "run_brain"
@@ -279,6 +280,14 @@ export default function SessionEditor() {
                     </li>
                   ))}
                 </ol>
+              </div>
+              {/* Client feedback (read-only for coach) */}
+              {(existingSession as any)?.clientComment && (
+                <div className="rounded-xl border bg-muted/30 p-4 space-y-1">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Client Feedback</p>
+                  <p className="text-sm text-foreground leading-relaxed">{(existingSession as any).clientComment}</p>
+                </div>
+              )}
               </div>
             ) : exercises.length === 0 ? (
               <div className="text-center py-12 border-2 border-dashed rounded-2xl bg-muted/20">

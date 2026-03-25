@@ -35,6 +35,7 @@ export const sessionSchema = z.object({
   color: z.string().optional(), // hex or named color
   source: z.enum(["wod_brain", "run_brain"]).optional(), // set when added from WOD/Run Brain
   structure: z.string().optional(), // full workout structure text for WOD/Run Brain sessions
+  clientComment: z.string().nullable().optional(), // session-level client feedback for WOD/Run Brain sessions
   exercises: z.array(exerciseSchema),
 });
 

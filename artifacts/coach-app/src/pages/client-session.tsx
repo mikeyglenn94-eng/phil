@@ -86,12 +86,19 @@ export default function ClientSession() {
   const [parsingFor, setParsingFor] = useState<string | null>(null);
   const logRecRef = useRef<any>(null);
 
-  // Comment state
+  // Comment state (per-exercise)
   const [comments, setComments] = useState<Record<string, string>>({});
   const [commentListeningFor, setCommentListeningFor] = useState<string | null>(null);
   const [commentInterim, setCommentInterim] = useState("");
   const commentRecRef = useRef<any>(null);
   const commentInterimRef = useRef(""); // sync ref so onend can read latest interim
+
+  // Session-level comment state (for WOD/Run Brain sessions)
+  const [sessionComment, setSessionComment] = useState("");
+  const [sessionCommentListening, setSessionCommentListening] = useState(false);
+  const [sessionCommentInterim, setSessionCommentInterim] = useState("");
+  const sessionCommentRecRef = useRef<any>(null);
+  const sessionCommentInterimRef = useRef("");
 
   // Init logs from saved data
   useEffect(() => {
@@ -111,6 +118,8 @@ export default function ClientSession() {
       if (ex.clientComment) savedComments[ex.id] = ex.clientComment;
     }
     setComments(savedComments);
+    // Init session-level comment
+    setSessionComment((session as any).clientComment || "");
   }, [session]);
 
   // Set up comment voice recognition (single-shot)
@@ -157,6 +166,47 @@ export default function ClientSession() {
     r.currentExId = exId;
     setCommentListeningFor(exId);
     setCommentInterim("");
+    try { r.start(); } catch {}
+  };
+
+  // Session-level comment voice recognition
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+    r.onresult = (e: any) => {
+      let fin = ""; let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      sessionCommentInterimRef.current = interim;
+      setSessionCommentInterim(interim);
+      if (fin) {
+        sessionCommentInterimRef.current = "";
+        setSessionComment(prev => (prev ? prev + " " : "") + fin.trim());
+        setSessionCommentInterim("");
+      }
+    };
+    r.onerror = () => { sessionCommentInterimRef.current = ""; setSessionCommentListening(false); setSessionCommentInterim(""); };
+    r.onend = () => {
+      const leftover = sessionCommentInterimRef.current.trim();
+      if (leftover) setSessionComment(prev => (prev ? prev + " " : "") + leftover);
+      sessionCommentInterimRef.current = "";
+      setSessionCommentListening(false);
+      setSessionCommentInterim("");
+    };
+    sessionCommentRecRef.current = r;
+    return () => { try { r.abort(); } catch {} };
+  }, []);
+
+  const toggleSessionCommentListening = () => {
+    const r = sessionCommentRecRef.current;
+    if (!r) return;
+    if (sessionCommentListening) { r.stop(); return; }
+    setSessionCommentListening(true);
+    setSessionCommentInterim("");
     try { r.start(); } catch {}
   };
 
@@ -365,8 +415,12 @@ export default function ClientSession() {
     if (!programme || !session) return;
     setIsSaving(true);
     try {
+      const isConditioningSession = (session as any).source === "wod_brain" || (session as any).source === "run_brain";
       const updatedSessions = (programme.sessions || []).map((s: Session) => {
         if (s.id !== sessionId) return s;
+        if (isConditioningSession) {
+          return { ...s, clientComment: sessionComment.trim() || null };
+        }
         const originalExercises = (s.exercises || []).map((ex: Exercise) => ({
           ...ex,
           name: nameOverrides[ex.id] || ex.name,
@@ -460,7 +514,68 @@ export default function ClientSession() {
         </div>
       )}
 
-      {/* Exercises */}
+      {/* Conditioning session (WOD Brain / Run Brain) */}
+      {((session as any).source === "wod_brain" || (session as any).source === "run_brain") && (
+        <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
+          {/* Workout block */}
+          <div className={`rounded-2xl border p-5 space-y-4 ${(session as any).source === "run_brain" ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
+            <div className="flex items-center gap-2">
+              {(session as any).source === "run_brain"
+                ? <Zap className="w-4 h-4 text-green-600 shrink-0" />
+                : <Clock className="w-4 h-4 text-purple-600 shrink-0" />
+              }
+              <span className={`text-xs font-bold uppercase tracking-wide ${(session as any).source === "run_brain" ? "text-green-700" : "text-purple-700"}`}>
+                {(session as any).source === "run_brain" ? "Run Brain" : "WOD Brain"}
+              </span>
+            </div>
+            {(session as any).structure && (
+              <p className={`text-sm italic leading-relaxed ${(session as any).source === "run_brain" ? "text-green-900" : "text-purple-900"}`}>
+                {(session as any).structure}
+              </p>
+            )}
+            <ol className="space-y-2">
+              {(session.exercises || []).map((ex, i) => (
+                <li key={ex.id} className="flex items-baseline gap-3">
+                  <span className={`text-sm font-bold shrink-0 w-5 ${(session as any).source === "run_brain" ? "text-green-600" : "text-purple-600"}`}>{i + 1}.</span>
+                  <div>
+                    <span className="text-sm font-semibold text-foreground capitalize">{ex.name}</span>
+                    {ex.notes && <span className="text-sm text-muted-foreground ml-2">{ex.notes}</span>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {/* Feedback section */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase px-1">Your Feedback</p>
+            <div className={`relative rounded-xl border transition-colors ${sessionCommentListening ? "border-primary/40 bg-primary/5" : "border-muted bg-muted/20 hover:border-muted-foreground/30"}`}>
+              <textarea
+                className="w-full bg-transparent text-sm rounded-xl px-3 py-3 pr-10 resize-none outline-none min-h-[80px]"
+                placeholder="How did it feel? Any notes for your coach…"
+                value={sessionCommentListening ? (sessionCommentInterim || sessionComment) : sessionComment}
+                onChange={e => { setSessionComment(e.target.value); setSaved(false); }}
+                disabled={sessionCommentListening}
+              />
+              <button
+                className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${sessionCommentListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                title={sessionCommentListening ? "Stop" : "Dictate feedback"}
+                onClick={toggleSessionCommentListening}
+              >
+                {sessionCommentListening ? <Square className="w-4 h-4 fill-current" /> : <Mic className="w-4 h-4" />}
+              </button>
+            </div>
+            {sessionCommentListening && (
+              <p className="text-xs text-primary animate-pulse px-1">
+                {sessionCommentInterim || "Listening…"}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Exercises (strength sessions only) */}
+      {!(session as any).source && (
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-5">
         {(session.exercises || []).map((ex, exIdx) => {
           const setsCount = ex.sets || 0;
@@ -856,6 +971,7 @@ export default function ClientSession() {
           </a>
         </div>
       </div>
+      )}
     </div>
   );
 }
