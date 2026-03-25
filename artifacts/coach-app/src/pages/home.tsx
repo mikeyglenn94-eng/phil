@@ -485,14 +485,14 @@ export default function Home() {
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
 
       {/* Top Bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-background shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b bg-background shrink-0">
+        <div className="flex items-center gap-1 sm:gap-3 min-w-0">
           {/* Programme Selector */}
           {programmes && programmes.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="font-bold text-xl gap-2 px-2 hover:bg-muted rounded-lg">
-                  {selectedProgramme?.title || "Select Programme"}
+                <Button variant="ghost" className="font-bold text-base sm:text-xl gap-2 px-2 hover:bg-muted rounded-lg max-w-[140px] sm:max-w-none">
+                  <span className="truncate">{selectedProgramme?.title || "Select Programme"}</span>
                   <ChevronRight className="w-4 h-4 rotate-90 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
@@ -536,7 +536,7 @@ export default function Home() {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 sm:gap-2">
           {/* Week navigation */}
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setWeekOffset(w => w - 1)}>
@@ -554,24 +554,29 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="rounded-lg gap-2 border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300"
+              className="rounded-lg gap-1.5 border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300 px-2 sm:px-3"
               onClick={() => { setRunResults([]); setRunQuery(""); setRunTargetDate(""); setRunBrainOpen(true); }}
+              title="Run Brain"
             >
-              <Zap className="w-4 h-4" /> Run Brain
+              <Zap className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Run Brain</span>
             </Button>
           )}
           {selectedProgramme && (
             <Button
               size="sm"
               variant="outline"
-              className="rounded-lg gap-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300"
+              className="rounded-lg gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300 px-2 sm:px-3"
               onClick={() => { setWodResults([]); setWodQuery(""); setWodTargetDate(""); setWodBrainOpen(true); }}
+              title="WOD Brain"
             >
-              <Brain className="w-4 h-4" /> WOD Brain
+              <Brain className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">WOD Brain</span>
             </Button>
           )}
-          <Button size="sm" className="rounded-lg gap-2" onClick={() => setNewProgrammeOpen(true)}>
-            <Plus className="w-4 h-4" /> New Programme
+          <Button size="sm" className="rounded-lg gap-1.5 px-2 sm:px-3" onClick={() => setNewProgrammeOpen(true)} title="New Programme">
+            <Plus className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">New Programme</span>
           </Button>
         </div>
       </div>
