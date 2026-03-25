@@ -5,7 +5,7 @@ import { ExerciseCard } from "@/components/exercise-card";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, ArrowLeft, Plus, Calendar } from "lucide-react";
+import { Loader2, Save, ArrowLeft, Plus, Calendar, Brain, Zap } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -177,6 +177,10 @@ export default function SessionEditor() {
     ? `${sessionName} — ${format(parseISO(safeDate), "EEE d MMM")}`
     : format(parseISO(safeDate), "EEEE, d MMMM yyyy");
 
+  const sessionSource = (existingSession as any)?.source as "wod_brain" | "run_brain" | undefined;
+  const isConditioningSession = sessionSource === "wod_brain" || sessionSource === "run_brain";
+  const sessionStructure = (existingSession as any)?.structure as string | undefined;
+
   return (
     <div className="flex flex-col lg:flex-row h-[100dvh] overflow-hidden bg-background">
 
@@ -237,14 +241,46 @@ export default function SessionEditor() {
             />
           </div>
 
-          {/* Exercises */}
+          {/* Exercises / Workout */}
           <div>
             <div className="flex items-center justify-between mb-3 px-1">
-              <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase">Exercises</h2>
-              <span className="text-xs bg-muted px-2 py-1 rounded-full text-muted-foreground">{exercises.length}</span>
+              <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase">
+                {isConditioningSession ? "Workout" : "Exercises"}
+              </h2>
+              {!isConditioningSession && (
+                <span className="text-xs bg-muted px-2 py-1 rounded-full text-muted-foreground">{exercises.length}</span>
+              )}
             </div>
 
-            {exercises.length === 0 ? (
+            {isConditioningSession ? (
+              <div className={`rounded-2xl border p-5 space-y-4 ${sessionSource === "run_brain" ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
+                <div className="flex items-center gap-2">
+                  {sessionSource === "run_brain"
+                    ? <Zap className="w-4 h-4 text-green-600 shrink-0" />
+                    : <Brain className="w-4 h-4 text-purple-600 shrink-0" />
+                  }
+                  <span className={`text-xs font-bold uppercase tracking-wide ${sessionSource === "run_brain" ? "text-green-700" : "text-purple-700"}`}>
+                    {sessionSource === "run_brain" ? "Run Brain" : "WOD Brain"}
+                  </span>
+                </div>
+                {sessionStructure && (
+                  <p className={`text-sm italic leading-relaxed ${sessionSource === "run_brain" ? "text-green-900" : "text-purple-900"}`}>
+                    {sessionStructure}
+                  </p>
+                )}
+                <ol className="space-y-2">
+                  {exercises.map((ex, i) => (
+                    <li key={ex.id} className="flex items-baseline gap-3">
+                      <span className={`text-sm font-bold shrink-0 w-5 ${sessionSource === "run_brain" ? "text-green-600" : "text-purple-600"}`}>{i + 1}.</span>
+                      <div>
+                        <span className="text-sm font-semibold text-foreground capitalize">{ex.name}</span>
+                        {ex.notes && <span className="text-sm text-muted-foreground ml-2">{ex.notes}</span>}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : exercises.length === 0 ? (
               <div className="text-center py-12 border-2 border-dashed rounded-2xl bg-muted/20">
                 <p className="text-muted-foreground text-sm">No exercises yet. Use voice above or add manually.</p>
                 <Button variant="outline" className="mt-4 rounded-xl" onClick={addEmptyExercise}>
