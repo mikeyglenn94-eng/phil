@@ -41,21 +41,8 @@ export default function ClientHome() {
   const [, setLocation] = useLocation();
   const { client } = useClientContext();
 
-  // Load both client-specific programmes and master programmes (no clientId)
-  const { data: clientProgrammes, isLoading: clientLoading } = useListProgrammes(
-    client ? { clientId: client.id } : undefined
-  );
-  const { data: masterProgrammes, isLoading: masterLoading } = useListProgrammes();
-  const isLoading = clientLoading || masterLoading;
-
-  // Merge: client-specific programmes first, then master ones not already represented by title
-  const programmes = useMemo(() => {
-    const cp = clientProgrammes ?? [];
-    const mp = masterProgrammes ?? [];
-    const clientTitles = new Set(cp.map(p => p.title));
-    const extraMasters = mp.filter(p => !clientTitles.has(p.title));
-    return [...cp, ...extraMasters];
-  }, [clientProgrammes, masterProgrammes]);
+  // Always load master programmes so the client sees exactly what the coach has built
+  const { data: programmes, isLoading } = useListProgrammes();
 
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
