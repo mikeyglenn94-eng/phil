@@ -1,0 +1,167 @@
+// ===== WOD DATASET =====
+const workouts = [
+  {
+    id: "wod_001",
+    name: "10 Min Engine Push",
+    format: "amrap",
+    duration: 10,
+    exercises: ["running", "wall balls", "burpees"],
+    equipment: ["wall ball"],
+    tags: ["engine", "short"]
+  },
+  {
+    id: "wod_002",
+    name: "DB Sweat 12",
+    format: "amrap",
+    duration: 12,
+    exercises: ["dumbbell lunges", "dumbbell push press", "sit-ups"],
+    equipment: ["dumbbells"],
+    tags: ["dumbbell", "mixed"]
+  },
+  {
+    id: "wod_003",
+    name: "Row Intervals",
+    format: "interval",
+    duration: 10,
+    exercises: ["rowing"],
+    equipment: ["rower"],
+    tags: ["engine"]
+  },
+  {
+    id: "wod_004",
+    name: "Hybrid 15",
+    format: "for_time",
+    duration: 15,
+    exercises: ["running", "dumbbell thrusters", "burpees"],
+    equipment: ["dumbbells"],
+    tags: ["hyrox"]
+  },
+  {
+    id: "wod_005",
+    name: "EMOM Builder",
+    format: "emom",
+    duration: 12,
+    exercises: ["ski erg", "goblet squats", "plank"],
+    equipment: ["kettlebell", "ski erg"],
+    tags: ["simple"]
+  },
+  {
+    id: "wod_006",
+    name: "20 Min Engine",
+    format: "amrap",
+    duration: 20,
+    exercises: ["running", "wall balls", "lunges"],
+    equipment: ["wall ball"],
+    tags: ["engine"]
+  },
+  {
+    id: "wod_007",
+    name: "Sled Grind",
+    format: "for_time",
+    duration: 18,
+    exercises: ["sled push", "running"],
+    equipment: ["sled"],
+    tags: ["hyrox"]
+  },
+  {
+    id: "wod_008",
+    name: "DB Conditioning",
+    format: "amrap",
+    duration: 15,
+    exercises: ["dumbbell snatch", "burpees", "sit-ups"],
+    equipment: ["dumbbells"],
+    tags: ["mixed"]
+  },
+  {
+    id: "wod_009",
+    name: "Long Aerobic",
+    format: "amrap",
+    duration: 30,
+    exercises: ["running", "rowing"],
+    equipment: ["rower"],
+    tags: ["aerobic"]
+  },
+  {
+    id: "wod_010",
+    name: "Wall Ball Ladder",
+    format: "ladder",
+    duration: 20,
+    exercises: ["wall balls", "burpees", "running"],
+    equipment: ["wall ball"],
+    tags: ["hyrox"]
+  }
+];
+
+
+// ===== SIMPLE PARSER =====
+function parseInput(input) {
+  const text = input.toLowerCase();
+
+  const movements = [
+    "running", "rowing", "ski erg", "bike",
+    "wall balls", "burpees", "lunges",
+    "dumbbell", "sled", "sit-ups", "plank"
+  ];
+
+  let include = [];
+  let exclude = [];
+
+  movements.forEach(m => {
+    if (text.includes(m)) include.push(m);
+  });
+
+  if (text.includes("no")) {
+    movements.forEach(m => {
+      if (text.includes("no " + m)) exclude.push(m);
+    });
+  }
+
+  let duration = null;
+  const match = text.match(/\d+/);
+  if (match) duration = parseInt(match[0]);
+
+  return { include, exclude, duration };
+}
+
+
+// ===== MATCHING ENGINE =====
+function scoreWorkout(wod, filters) {
+  let score = 0;
+
+  // include scoring
+  filters.include.forEach(i => {
+    if (wod.exercises.some(e => e.includes(i))) score += 5;
+  });
+
+  // exclude filter
+  for (let ex of filters.exclude) {
+    if (wod.exercises.some(e => e.includes(ex))) return -1;
+  }
+
+  // duration scoring
+  if (filters.duration) {
+    const diff = Math.abs(wod.duration - filters.duration);
+    if (diff <= 2) score += 3;
+    else if (diff <= 5) score += 1;
+  }
+
+  return score;
+}
+
+
+// ===== MAIN FUNCTION =====
+function getWODs(input) {
+  const filters = parseInput(input);
+
+  const results = workouts
+    .map(w => ({ ...w, score: scoreWorkout(w, filters) }))
+    .filter(w => w.score >= 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  return results;
+}
+
+
+// ===== EXPORT =====
+module.exports = { getWODs };
