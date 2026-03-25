@@ -188,6 +188,104 @@ export default function Home() {
     } finally { setWodAdding(null); }
   };
 
+  // ── Run Brain ──
+  const [runBrainOpen, setRunBrainOpen] = useState(false);
+  const [runQuery, setRunQuery] = useState("");
+  const [runListening, setRunListening] = useState(false);
+  const [runInterim, setRunInterim] = useState("");
+  const runInterimRef = useRef("");
+  const runRecRef = useRef<any>(null);
+  const [runSearching, setRunSearching] = useState(false);
+  const [runResults, setRunResults] = useState<any[]>([]);
+  const [runTargetDate, setRunTargetDate] = useState("");
+  const [runAdding, setRunAdding] = useState<string | null>(null);
+
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = true; r.interimResults = true; r.lang = "en-US";
+    r.onresult = (e: any) => {
+      let fin = ""; let int = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else int += e.results[i][0].transcript;
+      }
+      runInterimRef.current = int;
+      setRunInterim(int);
+      if (fin) { runInterimRef.current = ""; setRunQuery(prev => (prev ? prev + " " : "") + fin.trim()); setRunInterim(""); }
+    };
+    r.onerror = () => { setRunListening(false); setRunInterim(""); runInterimRef.current = ""; };
+    r.onend = () => {
+      const leftover = runInterimRef.current.trim();
+      if (leftover) setRunQuery(prev => (prev ? prev + " " : "") + leftover);
+      runInterimRef.current = ""; setRunListening(false); setRunInterim("");
+    };
+    runRecRef.current = r;
+    return () => { try { r.abort(); } catch {} };
+  }, []);
+
+  const toggleRunListening = () => {
+    if (runListening) { runRecRef.current?.stop(); return; }
+    setRunListening(true); setRunInterim(""); runInterimRef.current = "";
+    try { runRecRef.current?.start(); } catch {}
+  };
+
+  const searchRuns = async () => {
+    const q = runQuery.trim();
+    if (!q) return;
+    if (runListening) { runRecRef.current?.stop(); setRunListening(false); }
+    setRunSearching(true);
+    try {
+      const res = await fetch("/api/run-brain/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+      const data = await res.json();
+      setRunResults(data.results ?? []);
+      if ((data.results?.length ?? 0) === 0) toast({ title: "No matching runs found", description: "Try different keywords." });
+    } catch {
+      toast({ title: "Run Brain error", variant: "destructive" });
+    } finally { setRunSearching(false); }
+  };
+
+  const addRunToCalendar = async (run: any) => {
+    if (!selectedProgramme || !runTargetDate) return;
+    setRunAdding(run.id);
+    const typeLabel = run.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+    const sessionName = `${typeLabel}: ${run.name}`;
+    const newSession: Session = {
+      id: `session-${Date.now()}`,
+      date: runTargetDate,
+      name: sessionName,
+      exercises: [{
+        id: `ex-${Date.now()}-0`,
+        name: run.name,
+        sets: null,
+        reps: null,
+        notes: run.structure + ` · ${run.intensityLabel} · Run Brain`,
+      }],
+    };
+    const existingOnDay = (selectedProgramme.sessions || []).find((s: any) => s.date === runTargetDate);
+    if (existingOnDay && !confirm(`${format(new Date(runTargetDate + "T12:00:00"), "EEE d MMM")} already has a session. Replace it?`)) {
+      setRunAdding(null); return;
+    }
+    const updatedSessions = [
+      ...(selectedProgramme.sessions || []).filter((s: any) => s.date !== runTargetDate),
+      newSession,
+    ];
+    try {
+      await updateMutation.mutateAsync({ id: selectedProgramme.id, data: { sessions: updatedSessions as any } });
+      queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      toast({ title: `"${sessionName}" added to ${format(new Date(runTargetDate + "T12:00:00"), "EEE d MMM")}` });
+      setRunBrainOpen(false);
+      setRunResults([]); setRunQuery(""); setRunTargetDate("");
+    } catch {
+      toast({ title: "Failed to add session", variant: "destructive" });
+    } finally { setRunAdding(null); }
+  };
+
   // Calendar command bar
   const [commandText, setCommandText] = useState("");
   const [commandListening, setCommandListening] = useState(false);
@@ -456,6 +554,16 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
+              className="rounded-lg gap-2 border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300"
+              onClick={() => { setRunResults([]); setRunQuery(""); setRunTargetDate(""); setRunBrainOpen(true); }}
+            >
+              <Zap className="w-4 h-4" /> Run Brain
+            </Button>
+          )}
+          {selectedProgramme && (
+            <Button
+              size="sm"
+              variant="outline"
               className="rounded-lg gap-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300"
               onClick={() => { setWodResults([]); setWodQuery(""); setWodTargetDate(""); setWodBrainOpen(true); }}
             >
@@ -690,6 +798,125 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Run Brain Dialog */}
+      <Dialog open={runBrainOpen} onOpenChange={open => { if (!open) { try { runRecRef.current?.stop(); } catch {} setRunListening(false); setRunInterim(""); } setRunBrainOpen(open); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-green-600" />
+              Run Brain
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">Describe the run session — type, duration, distance, terrain, intensity.</p>
+              <div className="relative flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <Input
+                    placeholder='e.g. "threshold 25 min" or "easy long run hills"'
+                    value={runListening ? (runQuery + (runInterim ? " " + runInterim : "")) : runQuery}
+                    onChange={e => !runListening && setRunQuery(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && !runSearching && searchRuns()}
+                    className={runListening ? "border-red-300 bg-red-50 pr-2" : ""}
+                    autoFocus
+                  />
+                  {runListening && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5">
+                      {[0, 1, 2].map(i => (
+                        <span key={i} className="w-0.5 bg-red-500 rounded-full animate-bounce" style={{ height: 12 + i * 4, animationDelay: `${i * 0.1}s` }} />
+                      ))}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant={runListening ? "destructive" : "outline"}
+                  size="icon"
+                  className="shrink-0 h-10 w-10 rounded-lg"
+                  onClick={toggleRunListening}
+                  title={runListening ? "Stop recording" : "Speak your query"}
+                >
+                  {runListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
+                <Button
+                  size="sm"
+                  className="shrink-0 gap-1.5 rounded-lg h-10 px-4 bg-green-600 hover:bg-green-700"
+                  onClick={searchRuns}
+                  disabled={!runQuery.trim() || runSearching}
+                >
+                  {runSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                  Find
+                </Button>
+              </div>
+            </div>
+
+            {runResults.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-1.5">Add to which day?</p>
+                <Select value={runTargetDate} onValueChange={setRunTargetDate}>
+                  <SelectTrigger className="w-full rounded-lg">
+                    <SelectValue placeholder="Choose a day from current week…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currentWeekDates.map(d => (
+                      <SelectItem key={d.toISOString()} value={format(d, "yyyy-MM-dd")}>
+                        {format(d, "EEEE · d MMM")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {runResults.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-muted-foreground">Top matches</p>
+                {runResults.map((run, idx) => {
+                  const typeLabel = run.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                  const meta: string[] = [];
+                  if (run.duration) meta.push(`${run.duration} min`);
+                  if (run.distanceKm) meta.push(`${run.distanceKm} km`);
+                  return (
+                    <div key={run.id} className="rounded-xl border border-green-100 bg-green-50/40 p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-xs font-bold text-green-700 bg-green-100 rounded px-2 py-0.5">{typeLabel}</span>
+                            {meta.length > 0 && <span className="text-xs text-muted-foreground">{meta.join(" · ")}</span>}
+                            <span className="text-xs text-amber-600 font-bold">#{idx + 1}</span>
+                          </div>
+                          <p className="font-semibold text-sm">{run.name}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="shrink-0 rounded-lg gap-1.5 bg-green-600 hover:bg-green-700 text-xs"
+                          disabled={!runTargetDate || runAdding === run.id}
+                          onClick={() => addRunToCalendar(run)}
+                          title={!runTargetDate ? "Choose a day first" : `Add to ${runTargetDate}`}
+                        >
+                          {runAdding === run.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                          Add
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-snug">{run.structure}</p>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        <span className="text-xs bg-white border border-green-100 rounded-full px-2 py-0.5 text-green-800">{run.intensityLabel}</span>
+                        {run.terrain.map((t: string) => (
+                          <span key={t} className="text-xs bg-white border border-green-100 rounded-full px-2 py-0.5 text-green-800 capitalize">{t}</span>
+                        ))}
+                        {run.tags.slice(0, 3).map((tag: string) => (
+                          <span key={tag} className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">{tag.replace(/_/g, " ")}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* WOD Brain Dialog */}
       <Dialog open={wodBrainOpen} onOpenChange={open => { if (!open) { try { wodRecRef.current?.stop(); } catch {} setWodListening(false); setWodInterim(""); } setWodBrainOpen(open); }}>

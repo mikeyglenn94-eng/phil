@@ -1,0 +1,164 @@
+import { Router, type IRouter } from "express";
+
+interface RunWorkout {
+  id: string;
+  name: string;
+  type: string;
+  duration: number | null;
+  distanceKm: number | null;
+  structure: string;
+  tags: string[];
+  terrain: string[];
+  intensity: string;
+}
+
+const runWorkouts: RunWorkout[] = [
+  { id: "run_001", name: "30 Min Easy Run", type: "easy", duration: 30, distanceKm: null, structure: "30 minutes easy continuous running", tags: ["easy", "aerobic", "continuous"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_002", name: "45 Min Easy Run", type: "easy", duration: 45, distanceKm: null, structure: "45 minutes easy continuous running", tags: ["easy", "aerobic", "continuous"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_003", name: "60 Min Easy Run", type: "easy", duration: 60, distanceKm: null, structure: "60 minutes easy continuous running", tags: ["easy", "aerobic", "continuous", "long"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_004", name: "5 km Easy Run", type: "easy", duration: null, distanceKm: 5, structure: "5 km easy continuous running", tags: ["easy", "distance", "aerobic"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_005", name: "8 km Easy Run", type: "easy", duration: null, distanceKm: 8, structure: "8 km easy continuous running", tags: ["easy", "distance", "aerobic"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_006", name: "10 km Easy Run", type: "easy", duration: null, distanceKm: 10, structure: "10 km easy continuous running", tags: ["easy", "distance", "aerobic", "long"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_007", name: "6 x 400 m Intervals", type: "intervals", duration: null, distanceKm: null, structure: "6 x 400 m hard with 200 m easy jog recovery", tags: ["intervals", "speed", "track"], terrain: ["flat", "track"], intensity: "hard" },
+  { id: "run_008", name: "8 x 400 m Intervals", type: "intervals", duration: null, distanceKm: null, structure: "8 x 400 m hard with 200 m easy jog recovery", tags: ["intervals", "speed", "track"], terrain: ["flat", "track"], intensity: "hard" },
+  { id: "run_009", name: "5 x 800 m Intervals", type: "intervals", duration: null, distanceKm: null, structure: "5 x 800 m at 5k effort with 2 minute jog recovery", tags: ["intervals", "speed", "track"], terrain: ["flat", "track"], intensity: "hard" },
+  { id: "run_010", name: "4 x 1 km Intervals", type: "intervals", duration: null, distanceKm: null, structure: "4 x 1 km at 10k effort with 2 minute easy jog recovery", tags: ["intervals", "speed", "threshold"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_011", name: "6 x 1 km Intervals", type: "intervals", duration: null, distanceKm: null, structure: "6 x 1 km at 10k effort with 90 second jog recovery", tags: ["intervals", "speed", "threshold"], terrain: ["flat"], intensity: "hard" },
+  { id: "run_012", name: "10 x 1 Min On Off", type: "intervals", duration: 20, distanceKm: null, structure: "10 x 1 minute hard, 1 minute easy", tags: ["intervals", "speed", "time_based"], terrain: ["flat"], intensity: "hard" },
+  { id: "run_013", name: "12 x 1 Min On Off", type: "intervals", duration: 24, distanceKm: null, structure: "12 x 1 minute hard, 1 minute easy", tags: ["intervals", "speed", "time_based"], terrain: ["flat"], intensity: "hard" },
+  { id: "run_014", name: "8 x 2 Min On Off", type: "intervals", duration: 32, distanceKm: null, structure: "8 x 2 minutes at hard controlled effort, 2 minutes easy", tags: ["intervals", "speed", "time_based"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_015", name: "6 x 3 Min On Off", type: "intervals", duration: 36, distanceKm: null, structure: "6 x 3 minutes at 5k to 10k effort, 2 minutes easy jog", tags: ["intervals", "speed", "time_based"], terrain: ["flat"], intensity: "hard" },
+  { id: "run_016", name: "20 Min Threshold", type: "threshold", duration: 20, distanceKm: null, structure: "10 min easy, 20 min threshold, 10 min easy", tags: ["threshold", "tempo", "continuous"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_017", name: "25 Min Threshold", type: "threshold", duration: 25, distanceKm: null, structure: "10 min easy, 25 min threshold, 10 min easy", tags: ["threshold", "tempo", "continuous"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_018", name: "2 x 10 Min Threshold", type: "threshold", duration: 20, distanceKm: null, structure: "2 x 10 minutes threshold with 3 minutes easy jog between reps", tags: ["threshold", "tempo", "broken"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_019", name: "3 x 8 Min Threshold", type: "threshold", duration: 24, distanceKm: null, structure: "3 x 8 minutes threshold with 2 minutes easy jog recovery", tags: ["threshold", "tempo", "broken"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_020", name: "4 x 6 Min Threshold", type: "threshold", duration: 24, distanceKm: null, structure: "4 x 6 minutes threshold with 90 second easy jog recovery", tags: ["threshold", "tempo", "broken"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_021", name: "Hill Sprints 10 x 20 Sec", type: "hills", duration: null, distanceKm: null, structure: "10 x 20 second steep hill sprints with walk back recovery", tags: ["hills", "power", "speed"], terrain: ["hill"], intensity: "hard" },
+  { id: "run_022", name: "Hill Reps 8 x 45 Sec", type: "hills", duration: null, distanceKm: null, structure: "8 x 45 second uphill reps with jog down recovery", tags: ["hills", "strength", "speed"], terrain: ["hill"], intensity: "hard" },
+  { id: "run_023", name: "Hill Repeats 6 x 2 Min", type: "hills", duration: null, distanceKm: null, structure: "6 x 2 minutes uphill at strong effort with easy jog down", tags: ["hills", "strength", "threshold"], terrain: ["hill"], intensity: "hard" },
+  { id: "run_024", name: "Progression 30", type: "progression", duration: 30, distanceKm: null, structure: "30 minutes continuous, starting easy and building every 10 minutes", tags: ["progression", "negative_split", "continuous"], terrain: ["flat"], intensity: "moderate" },
+  { id: "run_025", name: "Progression 45", type: "progression", duration: 45, distanceKm: null, structure: "45 minutes continuous, last 15 minutes at steady to strong effort", tags: ["progression", "negative_split", "continuous"], terrain: ["flat"], intensity: "moderate" },
+  { id: "run_026", name: "Negative Split 10 km", type: "progression", duration: null, distanceKm: 10, structure: "10 km with second half faster than the first half", tags: ["progression", "negative_split", "distance"], terrain: ["flat"], intensity: "moderate" },
+  { id: "run_027", name: "Steady 40", type: "steady", duration: 40, distanceKm: null, structure: "40 minutes steady running, comfortably harder than easy", tags: ["steady", "aerobic", "continuous"], terrain: ["flat"], intensity: "moderate" },
+  { id: "run_028", name: "Steady 60", type: "steady", duration: 60, distanceKm: null, structure: "60 minutes steady aerobic running", tags: ["steady", "aerobic", "continuous", "long"], terrain: ["flat"], intensity: "moderate" },
+  { id: "run_029", name: "Long Run 75", type: "long_run", duration: 75, distanceKm: null, structure: "75 minutes easy continuous running", tags: ["long_run", "easy", "aerobic", "long"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_030", name: "Long Run 90", type: "long_run", duration: 90, distanceKm: null, structure: "90 minutes easy continuous running", tags: ["long_run", "easy", "aerobic", "long"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_031", name: "Long Run 105", type: "long_run", duration: 105, distanceKm: null, structure: "105 minutes easy continuous running", tags: ["long_run", "easy", "aerobic", "long"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_032", name: "Long Run with Fast Finish", type: "long_run", duration: 90, distanceKm: null, structure: "70 minutes easy then 20 minutes steady strong finish", tags: ["long_run", "progression", "fast_finish"], terrain: ["flat"], intensity: "moderate" },
+  { id: "run_033", name: "Fartlek 30", type: "fartlek", duration: 30, distanceKm: null, structure: "10 min easy then 10 x 1 min on 1 min off", tags: ["fartlek", "speed", "time_based"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_034", name: "Fartlek 40", type: "fartlek", duration: 40, distanceKm: null, structure: "10 min easy then 6 x 2 min on 2 min off then easy to finish", tags: ["fartlek", "speed", "time_based"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_035", name: "Pyramid Session", type: "intervals", duration: null, distanceKm: null, structure: "1 min hard, 2 min hard, 3 min hard, 4 min hard, 3 min hard, 2 min hard, 1 min hard with equal easy recoveries", tags: ["intervals", "pyramid", "speed"], terrain: ["flat"], intensity: "hard" },
+  { id: "run_036", name: "Track 200s", type: "intervals", duration: null, distanceKm: null, structure: "12 x 200 m fast with 200 m walk or jog recovery", tags: ["intervals", "track", "speed"], terrain: ["track", "flat"], intensity: "hard" },
+  { id: "run_037", name: "Track 600s", type: "intervals", duration: null, distanceKm: null, structure: "6 x 600 m at 3k to 5k effort with 200 m jog recovery", tags: ["intervals", "track", "speed"], terrain: ["track", "flat"], intensity: "hard" },
+  { id: "run_038", name: "Marathon Tempo Blocks", type: "tempo", duration: null, distanceKm: null, structure: "3 x 15 minutes at marathon effort with 5 minutes easy between", tags: ["tempo", "steady", "broken"], terrain: ["flat"], intensity: "moderate" },
+  { id: "run_039", name: "20 Min Steady Hills", type: "hills", duration: 20, distanceKm: null, structure: "20 minutes continuous rolling hills at steady effort", tags: ["hills", "steady", "continuous"], terrain: ["hill", "rolling"], intensity: "moderate" },
+  { id: "run_040", name: "Easy Run with Strides", type: "easy", duration: 40, distanceKm: null, structure: "40 minutes easy plus 6 x 20 second strides with full walk recovery", tags: ["easy", "strides", "aerobic"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_041", name: "Recovery 25", type: "recovery", duration: 25, distanceKm: null, structure: "25 minutes very easy recovery run", tags: ["recovery", "easy", "continuous"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_042", name: "Recovery 35", type: "recovery", duration: 35, distanceKm: null, structure: "35 minutes very easy recovery run", tags: ["recovery", "easy", "continuous"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_043", name: "Tempo 5 km", type: "tempo", duration: null, distanceKm: 5, structure: "5 km continuous at comfortably hard tempo effort", tags: ["tempo", "distance", "continuous"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_044", name: "Tempo 8 km", type: "tempo", duration: null, distanceKm: 8, structure: "8 km continuous at steady strong tempo effort", tags: ["tempo", "distance", "continuous"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_045", name: "Cruise Intervals", type: "threshold", duration: null, distanceKm: null, structure: "5 x 1 mile at threshold effort with 1 minute easy jog between", tags: ["threshold", "tempo", "intervals"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_046", name: "3-2-1 Threshold Set", type: "threshold", duration: null, distanceKm: null, structure: "3 km threshold, 2 km threshold, 1 km threshold with 2 minutes easy between", tags: ["threshold", "distance", "broken"], terrain: ["flat"], intensity: "moderate_hard" },
+  { id: "run_047", name: "Rolling Hill Long Run", type: "long_run", duration: 80, distanceKm: null, structure: "80 minutes easy on rolling terrain", tags: ["long_run", "easy", "hills"], terrain: ["rolling", "hill"], intensity: "easy" },
+  { id: "run_048", name: "Hill Fartlek", type: "hills", duration: 35, distanceKm: null, structure: "35 minutes with every uphill segment run strong and flats easy", tags: ["hills", "fartlek", "strength"], terrain: ["hill", "rolling"], intensity: "moderate_hard" },
+  { id: "run_049", name: "60 Min Negative Split", type: "progression", duration: 60, distanceKm: null, structure: "30 minutes easy then 20 minutes steady then 10 minutes strong", tags: ["progression", "negative_split", "continuous"], terrain: ["flat"], intensity: "moderate" },
+  { id: "run_050", name: "90 Min Easy to Steady", type: "long_run", duration: 90, distanceKm: null, structure: "60 minutes easy then 30 minutes steady", tags: ["long_run", "progression", "fast_finish"], terrain: ["flat"], intensity: "moderate" },
+];
+
+const TYPE_KEYWORDS = [
+  "easy", "recovery", "intervals", "threshold", "tempo", "steady",
+  "hills", "hill", "progression", "negative split", "negative splits",
+  "fartlek", "long run", "track",
+];
+
+const INTENSITY_LABELS: Record<string, string> = {
+  easy: "Easy",
+  moderate: "Moderate",
+  moderate_hard: "Moderate / Hard",
+  hard: "Hard",
+};
+
+function parseRunInput(input: string) {
+  const text = input.toLowerCase();
+  const include: string[] = [];
+  const exclude: string[] = [];
+
+  TYPE_KEYWORDS.forEach(keyword => {
+    if (text.includes(`no ${keyword}`)) exclude.push(keyword);
+    else if (text.includes(keyword)) include.push(keyword);
+  });
+
+  let duration: number | null = null;
+  let distanceKm: number | null = null;
+
+  const minMatch = text.match(/(\d+)\s*(min|mins|minute|minutes)/);
+  if (minMatch) duration = parseInt(minMatch[1], 10);
+
+  const kmMatch = text.match(/(\d+)\s*(k|km)/);
+  if (kmMatch) distanceKm = parseInt(kmMatch[1], 10);
+
+  return { include, exclude, duration, distanceKm };
+}
+
+function scoreRunWorkout(workout: RunWorkout, filters: ReturnType<typeof parseRunInput>): number {
+  let score = 0;
+
+  for (const ex of filters.exclude) {
+    if (
+      workout.type.includes(ex) ||
+      workout.tags.some(tag => tag.includes(ex)) ||
+      workout.terrain.some(t => t.includes(ex))
+    ) return -1;
+  }
+
+  filters.include.forEach(term => {
+    if (workout.type.includes(term)) score += 5;
+    if (workout.tags.some(tag => tag.includes(term))) score += 4;
+    if (workout.terrain.some(t => t.includes(term))) score += 3;
+
+    if (term === "hill" && workout.terrain.includes("hill")) score += 4;
+    if ((term === "negative split" || term === "negative splits") && workout.tags.includes("negative_split")) score += 5;
+    if (term === "long run" && workout.type === "long_run") score += 5;
+    if (term === "track" && workout.terrain.includes("track")) score += 5;
+  });
+
+  if (filters.duration && workout.duration) {
+    const diff = Math.abs(workout.duration - filters.duration);
+    if (diff <= 5) score += 4;
+    else if (diff <= 10) score += 2;
+  }
+
+  if (filters.distanceKm && workout.distanceKm) {
+    const diff = Math.abs(workout.distanceKm - filters.distanceKm);
+    if (diff <= 1) score += 4;
+    else if (diff <= 2) score += 2;
+  }
+
+  return score;
+}
+
+const router: IRouter = Router();
+
+router.post("/run-brain/search", (req, res): void => {
+  const { query } = req.body as { query: string };
+  if (!query?.trim()) {
+    res.status(400).json({ error: "Query is required" });
+    return;
+  }
+
+  const filters = parseRunInput(query);
+
+  const results = runWorkouts
+    .map(w => ({
+      ...w,
+      score: scoreRunWorkout(w, filters),
+      intensityLabel: INTENSITY_LABELS[w.intensity] ?? w.intensity,
+    }))
+    .filter(w => w.score >= 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+
+  res.json({ results, filters });
+});
+
+export default router;
