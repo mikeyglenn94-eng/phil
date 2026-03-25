@@ -1029,8 +1029,8 @@ export default function Home() {
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {wod.exercises.map((ex: string) => (
-                        <span key={ex} className="text-xs bg-white border border-purple-100 rounded-full px-2 py-0.5 text-purple-800 capitalize">{ex}</span>
+                      {(wod.blocks ?? []).map((block: any, i: number) => (
+                        <span key={i} className="text-xs bg-white border border-purple-100 rounded-full px-2 py-0.5 text-purple-800 capitalize">{block.movement} · {block.amount} {block.unit}</span>
                       ))}
                     </div>
                     {wod.tags?.length > 0 && (
