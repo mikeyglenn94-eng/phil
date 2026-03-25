@@ -112,26 +112,26 @@ function scoreRunWorkout(workout: RunWorkout, filters: ReturnType<typeof parseRu
   }
 
   filters.include.forEach(term => {
-    if (workout.type.includes(term)) score += 5;
-    if (workout.tags.some(tag => tag.includes(term))) score += 4;
-    if (workout.terrain.some(t => t.includes(term))) score += 3;
+    if (workout.type.includes(term)) score += 10;
+    if (workout.tags.some(tag => tag.includes(term))) score += 7;
+    if (workout.terrain.some(t => t.includes(term))) score += 5;
 
-    if (term === "hill" && workout.terrain.includes("hill")) score += 4;
-    if ((term === "negative split" || term === "negative splits") && workout.tags.includes("negative_split")) score += 5;
-    if (term === "long run" && workout.type === "long_run") score += 5;
-    if (term === "track" && workout.terrain.includes("track")) score += 5;
+    if (term === "hill" && workout.terrain.includes("hill")) score += 6;
+    if ((term === "negative split" || term === "negative splits") && workout.tags.includes("negative_split")) score += 8;
+    if (term === "long run" && workout.type === "long_run") score += 8;
+    if (term === "track" && workout.terrain.includes("track")) score += 8;
   });
 
   if (filters.duration && workout.duration) {
     const diff = Math.abs(workout.duration - filters.duration);
-    if (diff <= 5) score += 4;
-    else if (diff <= 10) score += 2;
+    if (diff <= 5) score += 2;
+    else if (diff <= 10) score += 1;
   }
 
   if (filters.distanceKm && workout.distanceKm) {
     const diff = Math.abs(workout.distanceKm - filters.distanceKm);
-    if (diff <= 1) score += 4;
-    else if (diff <= 2) score += 2;
+    if (diff <= 1) score += 2;
+    else if (diff <= 2) score += 1;
   }
 
   return score;

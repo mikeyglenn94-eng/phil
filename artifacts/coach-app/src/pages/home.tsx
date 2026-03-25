@@ -559,6 +559,7 @@ export default function Home() {
               title="Run Brain"
             >
               <Zap className="w-4 h-4 shrink-0" />
+              <span className="sm:hidden">Find Runs</span>
               <span className="hidden sm:inline">Run Brain</span>
             </Button>
           )}
@@ -571,6 +572,7 @@ export default function Home() {
               title="WOD Brain"
             >
               <Brain className="w-4 h-4 shrink-0" />
+              <span className="sm:hidden">Find WODs</span>
               <span className="hidden sm:inline">WOD Brain</span>
             </Button>
           )}
