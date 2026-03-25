@@ -9,9 +9,11 @@ import Home from "./pages/home";
 import SessionEditor from "./pages/session-editor";
 import ClientHome from "./pages/client-home";
 import ClientSession from "./pages/client-session";
+import ClientNutrition from "./pages/client-nutrition";
 import ClientsList from "./pages/clients-list";
 import ClientArea from "./pages/client-area";
 import { AppSidebar } from "./components/app-sidebar";
+import { ClientSidebar } from "./components/client-sidebar";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,10 +39,17 @@ function App() {
             <Route path="/programmes/:programmeId/sessions/:sessionId" component={SessionEditor} />
             <Route path="/client/programmes/:programmeId/sessions/:sessionId" component={ClientSession} />
 
-            {/* Client calendar — no sidebar, clean layout */}
+            {/* Client routes — with client sidebar */}
+            <Route path="/client/nutrition">
+              <div className="flex h-[100dvh] w-full overflow-hidden">
+                <ClientSidebar />
+                <main className="flex-1 overflow-hidden flex flex-col"><ClientNutrition /></main>
+              </div>
+            </Route>
             <Route path="/client">
-              <div className="flex h-[100dvh] w-full overflow-hidden flex-col">
-                <ClientHome />
+              <div className="flex h-[100dvh] w-full overflow-hidden">
+                <ClientSidebar />
+                <main className="flex-1 overflow-hidden flex flex-col"><ClientHome /></main>
               </div>
             </Route>
 
