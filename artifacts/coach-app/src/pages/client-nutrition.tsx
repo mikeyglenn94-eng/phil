@@ -129,8 +129,8 @@ export default function ClientNutrition() {
       </div>
 
       <div className="px-6 py-5 max-w-2xl space-y-4">
-        {/* Daily totals */}
-        {(entries?.length ?? 0) > 0 && (() => {
+        {/* Daily goals tracker — always visible when goals are set */}
+        {(() => {
           const goals = {
             calories: clientData?.dailyCalorieGoal ?? null,
             protein: clientData?.dailyProteinGoal ?? null,
@@ -144,25 +144,34 @@ export default function ClientNutrition() {
             { label: "Carbs", actual: Math.round(totals.carbs), goal: goals.carbs, unit: "g", color: "bg-yellow-400", textColor: "text-yellow-600" },
             { label: "Fats", actual: Math.round(totals.fats), goal: goals.fats, unit: "g", color: "bg-pink-400", textColor: "text-pink-500" },
           ];
-          return (
-            <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4">
-              <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-3">Daily Totals</p>
-              {hasGoals ? (
+
+          if (hasGoals) {
+            return (
+              <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4">
+                <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-3">Daily Goals</p>
                 <div className="space-y-3">
                   {macros.map(({ label, actual, goal, unit, color, textColor }) => {
+                    const remaining = goal !== null ? goal - actual : null;
                     const pct = goal ? Math.min((actual / goal) * 100, 100) : 0;
-                    const over = goal !== null && actual > goal;
+                    const over = remaining !== null && remaining < 0;
                     return (
                       <div key={label}>
-                        <div className="flex justify-between items-baseline mb-1">
-                          <span className="text-xs text-muted-foreground font-medium">{label}</span>
-                          <span className={`text-sm font-bold ${over ? "text-red-500" : textColor}`}>
-                            {actual}<span className="text-xs font-normal text-muted-foreground"> / {goal} {unit}</span>
+                        <div className="flex justify-between items-baseline mb-1.5">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-sm font-semibold text-foreground">{label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {actual} / {goal} {unit}
+                            </span>
+                          </div>
+                          <span className={`text-xs font-bold tabular-nums ${over ? "text-red-500" : "text-muted-foreground"}`}>
+                            {over
+                              ? `${Math.abs(remaining!)} ${unit} over`
+                              : `${remaining} ${unit} left`}
                           </span>
                         </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${over ? "bg-red-400" : color}`}
+                            className={`h-full rounded-full transition-all duration-300 ${over ? "bg-red-400" : color}`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -170,7 +179,15 @@ export default function ClientNutrition() {
                     );
                   })}
                 </div>
-              ) : (
+              </div>
+            );
+          }
+
+          // No goals set — show simple totals only when there are entries
+          if ((entries?.length ?? 0) > 0) {
+            return (
+              <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4">
+                <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-3">Daily Totals</p>
                 <div className="grid grid-cols-4 gap-3 text-center">
                   {macros.map(({ label, actual, unit, textColor }) => (
                     <div key={label}>
@@ -180,9 +197,11 @@ export default function ClientNutrition() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          );
+              </div>
+            );
+          }
+
+          return null;
         })()}
 
         {/* Add food input */}
