@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, Calendar } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, Calendar, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
@@ -41,6 +41,20 @@ export default function ClientArea() {
   const { data: clientProgrammes } = useListProgrammes({ clientId });
   const assignMutation = useAssignProgramme();
   const deleteProgrammeMutation = useDeleteProgramme();
+
+  const [resettingPassword, setResettingPassword] = useState(false);
+  async function handleResetPassword() {
+    if (!confirm(`Reset ${client?.name ?? "this client"}'s password? They will be asked to set a new one next time they log in.`)) return;
+    setResettingPassword(true);
+    try {
+      await fetch(`/api/clients/${clientId}/reset-password`, { method: "POST" });
+      toast({ title: "Password reset", description: `${client?.name ?? "Client"} will create a new password on their next login.` });
+    } catch {
+      toast({ title: "Failed to reset password", variant: "destructive" });
+    } finally {
+      setResettingPassword(false);
+    }
+  }
 
   async function handleDeleteClientProgramme(programmeId: number, title: string) {
     if (!confirm(`Remove "${title}" from ${client?.name ?? "this client"}'s calendar?`)) return;
@@ -193,6 +207,17 @@ export default function ClientArea() {
             </div>
             <h1 className="font-display font-bold text-lg truncate">{client.name}</h1>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleResetPassword}
+            disabled={resettingPassword}
+            className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+            title="Reset client's portal password"
+          >
+            {resettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+            Reset PW
+          </Button>
         </div>
 
         {/* Tabs */}

@@ -183,6 +183,18 @@ export default function ClientPicker() {
               {busy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Continue
             </Button>
+            <p className="text-center text-xs text-muted-foreground pt-1">
+              Forgotten your password?{" "}
+              <a
+                href="https://wa.me/447928712251"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground transition-colors"
+              >
+                Message your coach
+              </a>{" "}
+              to get it reset.
+            </p>
           </div>
         </div>
       </div>
