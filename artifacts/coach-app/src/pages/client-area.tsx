@@ -466,28 +466,52 @@ export default function ClientArea() {
             )}
           </div>
 
-          {/* Master programmes available to assign */}
+          {/* Master programmes available to view / assign */}
           <div>
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Master Programmes</h3>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Programmes</h3>
+                <p className="text-[11px] text-muted-foreground/60 mt-0.5">Client results are tracked here</p>
+              </div>
+            </div>
             {!masterProgrammes?.length ? (
               <p className="text-sm text-muted-foreground">No programmes yet. Create one on the Coach Calendar.</p>
             ) : (
               <div className="space-y-2">
                 {masterProgrammes.map(prog => (
-                  <button
+                  <div
                     key={prog.id}
-                    onClick={() => { setSelectedSourceId(prog.id); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
-                    className="w-full bg-muted/40 border rounded-2xl px-5 py-4 flex items-center justify-between text-left hover:border-primary/40 hover:bg-card hover:shadow-sm transition-all group"
+                    className="w-full bg-muted/40 border rounded-2xl px-4 py-3.5 flex items-center justify-between hover:border-primary/40 hover:bg-card hover:shadow-sm transition-all group"
                   >
-                    <div className="flex items-center gap-3">
-                      <Dumbbell className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <div>
-                        <span className="font-semibold text-sm">{prog.title || "Untitled Programme"}</span>
+                    <button
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                      onClick={() => setLocation(`/clients/${clientId}/programmes/${prog.id}`)}
+                    >
+                      <Dumbbell className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                      <div className="min-w-0">
+                        <span className="font-semibold text-sm truncate block">{prog.title || "Untitled Programme"}</span>
                         <p className="text-xs text-muted-foreground">{prog.sessions?.length ?? 0} sessions</p>
                       </div>
+                    </button>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl text-xs h-7 px-2.5 gap-1"
+                        onClick={() => setLocation(`/clients/${clientId}/programmes/${prog.id}`)}
+                      >
+                        <CalendarDays className="w-3 h-3" /> View
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="rounded-xl text-xs h-7 px-2.5 text-muted-foreground"
+                        onClick={() => { setSelectedSourceId(prog.id); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
+                      >
+                        Assign
+                      </Button>
                     </div>
-                    <span className="text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">Assign →</span>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
