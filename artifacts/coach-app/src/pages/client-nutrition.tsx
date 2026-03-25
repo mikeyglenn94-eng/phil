@@ -11,10 +11,11 @@ import {
 import type { NutritionEntry } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-
-const CLIENT_ID = 1; // Mikey G
+import { useClientContext } from "@/contexts/client-context";
 
 export default function ClientNutrition() {
+  const { client } = useClientContext();
+  const CLIENT_ID = client?.id ?? 0;
   const queryClient = useQueryClient();
   const { toast } = useToast();
 

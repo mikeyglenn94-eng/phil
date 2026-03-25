@@ -1,8 +1,14 @@
 import { Link, useLocation } from "wouter";
-import { Dumbbell, Utensils } from "lucide-react";
+import { Dumbbell, Utensils, RefreshCw } from "lucide-react";
+import { useClientContext } from "@/contexts/client-context";
 
 export function ClientSidebar() {
   const [location] = useLocation();
+  const { client, clearClient } = useClientContext();
+
+  const initials = client
+    ? client.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
+    : "?";
 
   const items = [
     { href: "/client", label: "Training", icon: Dumbbell },
@@ -11,7 +17,8 @@ export function ClientSidebar() {
 
   return (
     <aside className="h-full w-[13rem] flex-shrink-0 border-r bg-sidebar text-sidebar-foreground flex flex-col">
-      <div className="p-4 pt-6 px-5 mb-2">
+      {/* Logo */}
+      <div className="px-5 pt-6 pb-3">
         <div className="flex items-center gap-2.5">
           <div className="bg-primary/20 p-1.5 rounded-lg">
             <Dumbbell className="w-5 h-5 text-primary" />
@@ -25,6 +32,27 @@ export function ClientSidebar() {
         </div>
       </div>
 
+      {/* Client identity card — clickable to switch */}
+      {client && (
+        <div className="px-3 pb-3">
+          <button
+            onClick={clearClient}
+            title="Switch account"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/15 transition-colors group text-left"
+          >
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-sm font-semibold text-sidebar-foreground truncate leading-tight">{client.name}</p>
+              <p className="text-[10px] text-sidebar-foreground/50">Tap to switch</p>
+            </div>
+            <RefreshCw className="w-3.5 h-3.5 text-sidebar-foreground/30 group-hover:text-primary transition-colors flex-shrink-0" />
+          </button>
+        </div>
+      )}
+
+      {/* Nav items */}
       <nav className="flex-1 px-3 space-y-0.5">
         {items.map(({ href, label, icon: Icon }) => {
           const isActive = href === "/client"
@@ -46,18 +74,6 @@ export function ClientSidebar() {
           );
         })}
       </nav>
-
-      <div className="p-4">
-        <div className="flex items-center gap-2.5 px-2 py-2.5 rounded-xl bg-sidebar-accent/30 border border-sidebar-border/50">
-          <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
-            MG
-          </div>
-          <div className="overflow-hidden">
-            <p className="text-xs font-semibold text-sidebar-foreground truncate">Mikey G</p>
-            <p className="text-[10px] text-sidebar-foreground/50">Client</p>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 }

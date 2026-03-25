@@ -10,10 +10,12 @@ import SessionEditor from "./pages/session-editor";
 import ClientHome from "./pages/client-home";
 import ClientSession from "./pages/client-session";
 import ClientNutrition from "./pages/client-nutrition";
+import ClientPicker from "./pages/client-picker";
 import ClientsList from "./pages/clients-list";
 import ClientArea from "./pages/client-area";
 import { AppSidebar } from "./components/app-sidebar";
 import { ClientSidebar } from "./components/client-sidebar";
+import { ClientProvider, useClientContext } from "./contexts/client-context";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +25,17 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
+  const { client } = useClientContext();
+  if (!client) return <ClientPicker />;
+  return (
+    <div className="flex h-[100dvh] w-full overflow-hidden">
+      <ClientSidebar />
+      <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
+    </div>
+  );
+}
 
 function App() {
   const style = {
@@ -39,18 +52,16 @@ function App() {
             <Route path="/programmes/:programmeId/sessions/:sessionId" component={SessionEditor} />
             <Route path="/client/programmes/:programmeId/sessions/:sessionId" component={ClientSession} />
 
-            {/* Client routes — with client sidebar */}
+            {/* Client routes — gated by client picker */}
             <Route path="/client/nutrition">
-              <div className="flex h-[100dvh] w-full overflow-hidden">
-                <ClientSidebar />
-                <main className="flex-1 overflow-hidden flex flex-col"><ClientNutrition /></main>
-              </div>
+              <ClientProvider>
+                <ClientPortalWrapper><ClientNutrition /></ClientPortalWrapper>
+              </ClientProvider>
             </Route>
             <Route path="/client">
-              <div className="flex h-[100dvh] w-full overflow-hidden">
-                <ClientSidebar />
-                <main className="flex-1 overflow-hidden flex flex-col"><ClientHome /></main>
-              </div>
+              <ClientProvider>
+                <ClientPortalWrapper><ClientHome /></ClientPortalWrapper>
+              </ClientProvider>
             </Route>
 
             {/* Coach routes — sidebar layout */}
