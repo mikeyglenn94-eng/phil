@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
@@ -299,28 +299,17 @@ export default function ClientArea() {
             </div>
           ) : (
             programmes.map(prog => (
-              <div key={prog.id} className="bg-card border rounded-2xl px-5 py-4">
-                <p className="font-semibold text-sm mb-3">{prog.title || "Untitled Programme"}</p>
-                {(prog.sessions || []).length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No sessions</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {(prog.sessions || []).slice(0, 5).map(session => (
-                      <button
-                        key={session.id}
-                        onClick={() => setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`)}
-                        className="w-full flex items-center justify-between text-left text-xs bg-muted/40 hover:bg-muted rounded-xl px-3 py-2 transition-colors"
-                      >
-                        <span className="font-medium">{session.name || "Session"}</span>
-                        <span className="text-muted-foreground">{session.date}</span>
-                      </button>
-                    ))}
-                    {(prog.sessions || []).length > 5 && (
-                      <p className="text-xs text-muted-foreground text-center pt-1">+{(prog.sessions || []).length - 5} more sessions</p>
-                    )}
-                  </div>
-                )}
-              </div>
+              <button
+                key={prog.id}
+                onClick={() => setLocation("/")}
+                className="w-full bg-card border rounded-2xl px-5 py-4 flex items-center justify-between text-left hover:border-primary/40 hover:shadow-sm transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <Dumbbell className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <span className="font-semibold text-sm">{prog.title || "Untitled Programme"}</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+              </button>
             ))
           )}
         </div>
