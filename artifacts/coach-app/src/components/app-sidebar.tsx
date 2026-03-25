@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Dumbbell, FileText, Users } from "lucide-react";
+import { LayoutDashboard, Dumbbell, FileText, Users, Eye } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -67,6 +67,16 @@ export function AppSidebar({ onNewProgramme, onSelectProgramme, selectedProgramm
                   >
                     <Users className="w-4 h-4" />
                     <span>Clients</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <Link href="/client">
+                  <SidebarMenuButton
+                    className="hover:bg-sidebar-accent/50 font-medium rounded-lg text-primary/80 hover:text-primary"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>Client View</span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>
