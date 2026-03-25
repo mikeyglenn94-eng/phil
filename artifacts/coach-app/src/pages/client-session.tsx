@@ -83,6 +83,7 @@ export default function ClientSession() {
   // Voice log state
   const [listeningFor, setListeningFor] = useState<string | null>(null);
   const [interimText, setInterimText] = useState("");
+  const [logAccText, setLogAccText] = useState(""); // accumulated finals shown in live transcript
   const [parsingFor, setParsingFor] = useState<string | null>(null);
   const logRecRef = useRef<any>(null);
 
@@ -229,6 +230,7 @@ export default function ClientSession() {
     logActiveRef.current = true;
     setListeningFor(exId);
     setInterimText("");
+    setLogAccText("");
     spawnLogRec();
   };
 
@@ -241,8 +243,14 @@ export default function ClientSession() {
         if (e.results[i].isFinal) fin += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
       }
-      setInterimText(interim || fin);
-      if (fin) logAccRef.current = (logAccRef.current + " " + fin).trim();
+      setInterimText(interim || (fin ? "" : ""));
+      if (fin) {
+        logAccRef.current = (logAccRef.current + " " + fin).trim();
+        setLogAccText(logAccRef.current);
+        setInterimText("");
+      } else {
+        setInterimText(interim);
+      }
     };
     r.onerror = (e: any) => {
       if (e.error === "not-allowed" || e.error === "audio-capture") {
@@ -260,7 +268,7 @@ export default function ClientSession() {
       // User stopped — process accumulated transcript
       const exId = logExIdRef.current;
       const final = logAccRef.current.trim();
-      setListeningFor(null); setInterimText("");
+      setListeningFor(null); setInterimText(""); setLogAccText("");
       logAccRef.current = "";
       if (!final || !exId || !session) return;
       const ex = session.exercises?.find((e: Exercise) => e.id === exId);
@@ -490,23 +498,46 @@ export default function ClientSession() {
       </div>
 
       {/* Log voice listening banner */}
-      {listeningFor && (
-        <div className="max-w-lg mx-auto px-4 pt-4">
-          <div className="bg-primary/5 border border-primary/30 rounded-2xl px-4 py-3 flex items-center gap-3">
-            <span className="relative"><span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" /><Volume2 className="w-5 h-5 text-primary relative z-10" /></span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-primary">Listening...</p>
-              <p className="text-xs text-muted-foreground truncate italic">{interimText || "Speak your results..."}</p>
+      {listeningFor && (() => {
+        const listeningExName = session?.exercises?.find((e: Exercise) => e.id === listeningFor)
+          ? (nameOverrides[listeningFor] || session.exercises!.find((e: Exercise) => e.id === listeningFor)!.name)
+          : null;
+        const hasWords = logAccText || interimText;
+        return (
+          <div className="max-w-lg mx-auto px-4 pt-4">
+            <div className="bg-primary/5 border border-primary/30 rounded-2xl overflow-hidden shadow-sm">
+              {/* Header */}
+              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-primary/20">
+                <span className="relative shrink-0">
+                  <span className="absolute inset-0 rounded-full bg-red-400/40 animate-ping" />
+                  <Mic className="w-4 h-4 text-red-500 relative z-10" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-primary uppercase tracking-wide leading-none">Recording</p>
+                  {listeningExName && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{listeningExName}</p>}
+                </div>
+                <Button size="sm" variant="outline" className="shrink-0 rounded-xl h-8 px-3 text-xs" onClick={() => {
+                  logActiveRef.current = false;
+                  stopRef(logRecRef);
+                }}>
+                  <Square className="w-3 h-3 mr-1.5 fill-current" />Done
+                </Button>
+              </div>
+              {/* Live transcript */}
+              <div className="px-4 py-3 min-h-[56px]">
+                {hasWords ? (
+                  <p className="text-sm leading-relaxed text-foreground">
+                    {logAccText && <span>{logAccText} </span>}
+                    {interimText && <span className="text-muted-foreground/70 italic">{interimText}</span>}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground/50 italic">Say your sets… e.g. "60kg 3 sets of 8"</p>
+                )}
+              </div>
             </div>
-            <Button size="sm" variant="outline" className="shrink-0 rounded-xl" onClick={() => {
-              logActiveRef.current = false;
-              stopRef(logRecRef);
-            }}>
-              <Square className="w-3.5 h-3.5 mr-1.5 fill-current" />Done
-            </Button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Conditioning session (WOD Brain / Run Brain) */}
       {((session as any).source === "wod_brain" || (session as any).source === "run_brain") && (
