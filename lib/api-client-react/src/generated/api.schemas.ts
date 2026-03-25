@@ -147,7 +147,21 @@ export interface TranscribeResponse {
 export interface Client {
   id: number;
   name: string;
+  hasPassword: boolean;
   createdAt: string;
+}
+
+export interface SetPasswordBody {
+  /** @minLength 4 */
+  password: string;
+}
+
+export interface VerifyPasswordBody {
+  password: string;
+}
+
+export interface VerifyPasswordResult {
+  success: boolean;
 }
 
 export interface NutritionEntry {

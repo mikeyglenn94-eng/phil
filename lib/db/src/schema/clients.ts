@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const clientsTable = pgTable("clients", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  passwordHash: text("password_hash"), // null = no password set yet
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

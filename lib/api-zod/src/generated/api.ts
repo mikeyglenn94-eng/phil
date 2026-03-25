@@ -676,6 +676,7 @@ export const TranscribeAudioResponse = zod.object({
 export const ListClientsResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
+  hasPassword: zod.boolean(),
   createdAt: zod.date(),
 });
 export const ListClientsResponse = zod.array(ListClientsResponseItem);
@@ -697,7 +698,43 @@ export const GetClientParams = zod.object({
 export const GetClientResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
+  hasPassword: zod.boolean(),
   createdAt: zod.date(),
+});
+
+/**
+ * @summary Set or reset a client's password
+ */
+export const SetClientPasswordParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const setClientPasswordBodyPasswordMin = 4;
+
+export const SetClientPasswordBody = zod.object({
+  password: zod.string().min(setClientPasswordBodyPasswordMin),
+});
+
+export const SetClientPasswordResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  hasPassword: zod.boolean(),
+  createdAt: zod.date(),
+});
+
+/**
+ * @summary Verify a client's password
+ */
+export const VerifyClientPasswordParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const VerifyClientPasswordBody = zod.object({
+  password: zod.string(),
+});
+
+export const VerifyClientPasswordResponse = zod.object({
+  success: zod.boolean(),
 });
 
 /**

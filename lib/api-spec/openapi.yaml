@@ -305,6 +305,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/Client"
 
+  /clients/{clientId}/set-password:
+    post:
+      operationId: setClientPassword
+      tags: [clients]
+      summary: Set or reset a client's password
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPasswordBody"
+      responses:
+        "200":
+          description: Password set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+
+  /clients/{clientId}/verify-password:
+    post:
+      operationId: verifyClientPassword
+      tags: [clients]
+      summary: Verify a client's password
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyPasswordBody"
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyPasswordResult"
+
   /clients/{clientId}/nutrition:
     get:
       operationId: listNutritionEntries
@@ -695,10 +745,34 @@ components:
           type: integer
         name:
           type: string
+        hasPassword:
+          type: boolean
         createdAt:
           type: string
           format: date-time
-      required: [id, name, createdAt]
+      required: [id, name, hasPassword, createdAt]
+
+    SetPasswordBody:
+      type: object
+      properties:
+        password:
+          type: string
+          minLength: 4
+      required: [password]
+
+    VerifyPasswordBody:
+      type: object
+      properties:
+        password:
+          type: string
+      required: [password]
+
+    VerifyPasswordResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required: [success]
 
     NutritionEntry:
       type: object

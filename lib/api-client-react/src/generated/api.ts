@@ -34,9 +34,12 @@ import type {
   ParseTranscriptBody,
   ParseTranscriptResponse,
   Programme,
+  SetPasswordBody,
   TranscribeAudioBody,
   TranscribeResponse,
   UpdateProgrammeBody,
+  VerifyPasswordBody,
+  VerifyPasswordResult,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1234,6 +1237,183 @@ export function useGetClient<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Set or reset a client's password
+ */
+export const getSetClientPasswordUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/set-password`;
+};
+
+export const setClientPassword = async (
+  clientId: number,
+  setPasswordBody: SetPasswordBody,
+  options?: RequestInit,
+): Promise<Client> => {
+  return customFetch<Client>(getSetClientPasswordUrl(clientId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setPasswordBody),
+  });
+};
+
+export const getSetClientPasswordMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setClientPassword>>,
+    TError,
+    { clientId: number; data: BodyType<SetPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setClientPassword>>,
+  TError,
+  { clientId: number; data: BodyType<SetPasswordBody> },
+  TContext
+> => {
+  const mutationKey = ["setClientPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setClientPassword>>,
+    { clientId: number; data: BodyType<SetPasswordBody> }
+  > = (props) => {
+    const { clientId, data } = props ?? {};
+
+    return setClientPassword(clientId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetClientPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setClientPassword>>
+>;
+export type SetClientPasswordMutationBody = BodyType<SetPasswordBody>;
+export type SetClientPasswordMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Set or reset a client's password
+ */
+export const useSetClientPassword = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setClientPassword>>,
+    TError,
+    { clientId: number; data: BodyType<SetPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setClientPassword>>,
+  TError,
+  { clientId: number; data: BodyType<SetPasswordBody> },
+  TContext
+> => {
+  return useMutation(getSetClientPasswordMutationOptions(options));
+};
+
+/**
+ * @summary Verify a client's password
+ */
+export const getVerifyClientPasswordUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/verify-password`;
+};
+
+export const verifyClientPassword = async (
+  clientId: number,
+  verifyPasswordBody: VerifyPasswordBody,
+  options?: RequestInit,
+): Promise<VerifyPasswordResult> => {
+  return customFetch<VerifyPasswordResult>(
+    getVerifyClientPasswordUrl(clientId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(verifyPasswordBody),
+    },
+  );
+};
+
+export const getVerifyClientPasswordMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyClientPassword>>,
+    TError,
+    { clientId: number; data: BodyType<VerifyPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof verifyClientPassword>>,
+  TError,
+  { clientId: number; data: BodyType<VerifyPasswordBody> },
+  TContext
+> => {
+  const mutationKey = ["verifyClientPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof verifyClientPassword>>,
+    { clientId: number; data: BodyType<VerifyPasswordBody> }
+  > = (props) => {
+    const { clientId, data } = props ?? {};
+
+    return verifyClientPassword(clientId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type VerifyClientPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof verifyClientPassword>>
+>;
+export type VerifyClientPasswordMutationBody = BodyType<VerifyPasswordBody>;
+export type VerifyClientPasswordMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Verify a client's password
+ */
+export const useVerifyClientPassword = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyClientPassword>>,
+    TError,
+    { clientId: number; data: BodyType<VerifyPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof verifyClientPassword>>,
+  TError,
+  { clientId: number; data: BodyType<VerifyPasswordBody> },
+  TContext
+> => {
+  return useMutation(getVerifyClientPasswordMutationOptions(options));
+};
 
 /**
  * @summary List nutrition entries for a client on a given date

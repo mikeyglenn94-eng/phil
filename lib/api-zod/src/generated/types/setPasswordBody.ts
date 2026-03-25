@@ -6,9 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Client {
-  id: number;
-  name: string;
-  hasPassword: boolean;
-  createdAt: Date;
+export interface SetPasswordBody {
+  /** @minLength 4 */
+  password: string;
 }

@@ -3,13 +3,21 @@ import { eq, and } from "drizzle-orm";
 import { db, clientsTable, nutritionEntriesTable, programmesTable } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import type { Session } from "@workspace/db";
+import bcrypt from "bcryptjs";
+
+const SALT_ROUNDS = 10;
+
+function toPublicClient(c: typeof clientsTable.$inferSelect) {
+  const { passwordHash, ...rest } = c;
+  return { ...rest, hasPassword: !!passwordHash };
+}
 
 const router: IRouter = Router();
 
 // List clients
 router.get("/clients", async (_req, res): Promise<void> => {
   const clients = await db.select().from(clientsTable).orderBy(clientsTable.name);
-  res.json(clients);
+  res.json(clients.map(toPublicClient));
 });
 
 // Create client
@@ -17,7 +25,7 @@ router.post("/clients", async (req, res): Promise<void> => {
   const { name } = req.body as { name: string };
   if (!name?.trim()) { res.status(400).json({ error: "Name is required" }); return; }
   const [client] = await db.insert(clientsTable).values({ name: name.trim() }).returning();
-  res.status(201).json(client);
+  res.status(201).json(toPublicClient(client));
 });
 
 // Get client
@@ -26,7 +34,34 @@ router.get("/clients/:clientId", async (req, res): Promise<void> => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, id));
   if (!client) { res.status(404).json({ error: "Client not found" }); return; }
-  res.json(client);
+  res.json(toPublicClient(client));
+});
+
+// Set password (first time or reset)
+router.post("/clients/:clientId/set-password", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.clientId, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { password } = req.body as { password: string };
+  if (!password || password.length < 4) {
+    res.status(400).json({ error: "Password must be at least 4 characters" }); return;
+  }
+  const hash = await bcrypt.hash(password, SALT_ROUNDS);
+  const [client] = await db.update(clientsTable).set({ passwordHash: hash }).where(eq(clientsTable.id, id)).returning();
+  if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+  res.json(toPublicClient(client));
+});
+
+// Verify password
+router.post("/clients/:clientId/verify-password", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.clientId, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { password } = req.body as { password: string };
+  if (!password) { res.status(400).json({ error: "Password is required" }); return; }
+  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, id));
+  if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+  if (!client.passwordHash) { res.json({ success: false, reason: "no_password" }); return; }
+  const ok = await bcrypt.compare(password, client.passwordHash);
+  res.json({ success: ok });
 });
 
 // List nutrition entries for a client (optionally filtered by date)
