@@ -304,7 +304,7 @@ router.post("/generate-programme", async (req, res): Promise<void> => {
 - Spread sessions sensibly — avoid consecutive days where possible (aim for rest days between hard sessions)
 - Typical pattern: Mon/Wed/Fri for 3x strength, add Tue or Thu for run/WOD
 - For 5+ sessions/week, days like Mon/Tue/Thu/Fri/Sat are reasonable
-- Schedule for the EXACT number of weeks requested
+- Schedule for the number of weeks requested, with a hard maximum of 6 weeks. If more than 6 weeks are requested, cap at 6 weeks.
 - Generate varied sessions week to week — don't repeat identical exercises every week. Rotate movements, vary rep ranges, increase load week to week (periodisation). Use different exercise variations across weeks.
 - Each session must have a unique id: "session-gen-{unique 8 chars}"
 
