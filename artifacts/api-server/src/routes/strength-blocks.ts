@@ -314,6 +314,217 @@ const templates: StrengthBlockTemplate[] = [
       ]},
     ],
   },
+  {
+    id: "smolov-powerlifting-split",
+    name: "Smolov Powerlifting Split (SBD)",
+    liftFocus: "squat,bench,deadlift",
+    durationWeeks: 11,
+    sessionsPerWeek: 3,
+    level: "advanced",
+    tags: ["powerlifting", "peaking", "intensity", "SBD", "squat", "bench", "deadlift"],
+    description: "11-week powerlifting peaking cycle covering all three competition lifts. Introduction, base mesocycle, switching test, and intense peaking phases with max-out in Week 11.",
+    notes: "Mon = Squat · Wed = Bench · Fri = Deadlift. Percentages based on current 1RM for each lift independently. test_max = open selection attempt.",
+    weeks: [
+      {
+        week: 1, label: "Introduction — Week 1",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — Wave Loading",
+            exercises: [
+              { name: "Back Squat", sets: 3, reps: "8", percentage: "65%" },
+              { name: "Back Squat", sets: 1, reps: "5", percentage: "70%" },
+              { name: "Back Squat", sets: 2, reps: "2", percentage: "75%" },
+              { name: "Back Squat", sets: 1, reps: "1", percentage: "80%" },
+            ],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — Wave Loading",
+            exercises: [
+              { name: "Bench Press", sets: 3, reps: "8", percentage: "65%" },
+              { name: "Bench Press", sets: 1, reps: "5", percentage: "70%" },
+              { name: "Bench Press", sets: 2, reps: "2", percentage: "75%" },
+              { name: "Bench Press", sets: 1, reps: "1", percentage: "80%" },
+            ],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — Wave Loading",
+            exercises: [
+              { name: "Deadlift", sets: 4, reps: "5", percentage: "70%" },
+              { name: "Deadlift", sets: 1, reps: "3", percentage: "75%" },
+              { name: "Deadlift", sets: 2, reps: "2", percentage: "80%" },
+              { name: "Deadlift", sets: 1, reps: "1", percentage: "90%" },
+            ],
+          },
+        ],
+      },
+      {
+        week: 2, label: "Test Week — Week 2",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 2×2 @ 85%",
+            exercises: [{ name: "Back Squat", sets: 2, reps: "2", percentage: "85%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 1×3 @ 85%",
+            exercises: [{ name: "Bench Press", sets: 1, reps: "3", percentage: "85%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 1×5 @ 85%",
+            exercises: [{ name: "Deadlift", sets: 1, reps: "5", percentage: "85%" }],
+          },
+        ],
+      },
+      {
+        week: 3, label: "Base Mesocycle — Week 1 of 3",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 4×9 @ 70%",
+            exercises: [{ name: "Back Squat", sets: 4, reps: "9", percentage: "70%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 5×7 @ 75%",
+            exercises: [{ name: "Bench Press", sets: 5, reps: "7", percentage: "75%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 7×5 @ 80%",
+            exercises: [{ name: "Deadlift", sets: 7, reps: "5", percentage: "80%" }],
+          },
+        ],
+      },
+      {
+        week: 4, label: "Base Mesocycle — Week 2 of 3",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 4×9 @ 70% +load",
+            exercises: [{ name: "Back Squat", sets: 4, reps: "9", percentage: "70%", notes: "+load vs last week" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 5×7 @ 75% +load",
+            exercises: [{ name: "Bench Press", sets: 5, reps: "7", percentage: "75%", notes: "+load vs last week" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 7×5 @ 80% +load",
+            exercises: [{ name: "Deadlift", sets: 7, reps: "5", percentage: "80%", notes: "+load vs last week" }],
+          },
+        ],
+      },
+      {
+        week: 5, label: "Base Mesocycle — Week 3 of 3",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 4×9 @ 70% +load",
+            exercises: [{ name: "Back Squat", sets: 4, reps: "9", percentage: "70%", notes: "+load vs last week" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 5×7 @ 75% +load",
+            exercises: [{ name: "Bench Press", sets: 5, reps: "7", percentage: "75%", notes: "+load vs last week" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 7×5 @ 80% +load",
+            exercises: [{ name: "Deadlift", sets: 7, reps: "5", percentage: "80%", notes: "+load vs last week" }],
+          },
+        ],
+      },
+      {
+        week: 6, label: "Switching Week — Max Test (SQ/BP)",
+        sessions: [
+          {
+            dayOfWeek: 3, name: "Back Squat — 1RM Test",
+            exercises: [{ name: "Back Squat", sets: 1, reps: "1", percentage: "", notes: "Max test — select opening attempts" }],
+          },
+          {
+            dayOfWeek: 5, name: "Bench Press — 1RM Test",
+            exercises: [{ name: "Bench Press", sets: 1, reps: "1", percentage: "", notes: "Max test — select opening attempts" }],
+          },
+        ],
+      },
+      {
+        week: 7, label: "Intense Mesocycle — Week 1 of 4",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 5×5 @ 80%",
+            exercises: [{ name: "Back Squat", sets: 5, reps: "5", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 5×3 @ 85%",
+            exercises: [{ name: "Bench Press", sets: 5, reps: "3", percentage: "85%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 5×2 @ 88%",
+            exercises: [{ name: "Deadlift", sets: 5, reps: "2", percentage: "88%" }],
+          },
+        ],
+      },
+      {
+        week: 8, label: "Intense Mesocycle — Week 2 of 4",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 5×4 @ 82%",
+            exercises: [{ name: "Back Squat", sets: 5, reps: "4", percentage: "82%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 5×2 @ 88%",
+            exercises: [{ name: "Bench Press", sets: 5, reps: "2", percentage: "88%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 4×4 @ 85%",
+            exercises: [{ name: "Deadlift", sets: 4, reps: "4", percentage: "85%" }],
+          },
+        ],
+      },
+      {
+        week: 9, label: "Intense Mesocycle — Week 3 of 4",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 4×4 @ 85%",
+            exercises: [{ name: "Back Squat", sets: 4, reps: "4", percentage: "85%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 4×2 @ 90%",
+            exercises: [{ name: "Bench Press", sets: 4, reps: "2", percentage: "90%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 3×3 @ 87%",
+            exercises: [{ name: "Deadlift", sets: 3, reps: "3", percentage: "87%" }],
+          },
+        ],
+      },
+      {
+        week: 10, label: "Intense Mesocycle — Week 4 of 4",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 3×3 @ 87%",
+            exercises: [{ name: "Back Squat", sets: 3, reps: "3", percentage: "87%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 3×1 @ 92%",
+            exercises: [{ name: "Bench Press", sets: 3, reps: "1", percentage: "92%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 3×1 @ 92%",
+            exercises: [{ name: "Deadlift", sets: 3, reps: "1", percentage: "92%" }],
+          },
+        ],
+      },
+      {
+        week: 11, label: "Competition Week — Max Test (SBD)",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 1RM Test",
+            exercises: [{ name: "Back Squat", sets: 1, reps: "1", percentage: "", notes: "Competition max — opening attempt selection" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 1RM Test",
+            exercises: [{ name: "Bench Press", sets: 1, reps: "1", percentage: "", notes: "Competition max — opening attempt selection" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 1RM Test",
+            exercises: [{ name: "Deadlift", sets: 1, reps: "1", percentage: "", notes: "Competition max — opening attempt selection" }],
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -359,6 +570,11 @@ function scoreTemplate(template: StrengthBlockTemplate, query: string): number {
 
   // Classic / Soviet / Russian style
   if ((q.includes("soviet") || q.includes("russian") || q.includes("classic")) && template.id === "russian_squat") score += 10;
+
+  // Powerlifting / SBD / multi-lift
+  if ((q.includes("powerlifting") || q.includes("sbd") || q.includes("bench") || q.includes("deadlift") || q.includes("competition") || q.includes("meet") || q.includes("total")) && template.id === "smolov-powerlifting-split") score += 16;
+  if ((q.includes("11 week") || q.includes("eleven week")) && template.durationWeeks === 11) score += 8;
+  if (q.includes("all three") && template.id === "smolov-powerlifting-split") score += 8;
 
   // Any match at all gets a baseline
   const nameMatch = template.name.toLowerCase().split(" ").some(w => w.length > 3 && q.includes(w));

@@ -1,0 +1,146 @@
+{
+  "id": "smolov-powerlifting-split",
+  "name": "Smolov Powerlifting Split (SBD)",
+  "category": "strength_block",
+  "focus": ["squat", "bench", "deadlift"],
+  "level": "advanced",
+  "duration_weeks": 11,
+  "schedule_rules": {
+    "pattern": [
+      {"day": 1, "lift": "Back Squat", "offset_days": 0},
+      {"day": 2, "lift": "Bench Press", "offset_days": 2},
+      {"day": 3, "lift": "Deadlift", "offset_days": 4}
+    ],
+    "notes": "1 day between squat and bench, 2 days before deadlift"
+  },
+  "sessions": [
+
+    // WEEK 1
+    {"week": 1, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 3, "reps": 8, "percent": 65},
+      {"sets": 1, "reps": 5, "percent": 70},
+      {"sets": 2, "reps": 2, "percent": 75},
+      {"sets": 1, "reps": 1, "percent": 80}
+    ]},
+    {"week": 1, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 3, "reps": 8, "percent": 65},
+      {"sets": 1, "reps": 5, "percent": 70},
+      {"sets": 2, "reps": 2, "percent": 75},
+      {"sets": 1, "reps": 1, "percent": 80}
+    ]},
+    {"week": 1, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 4, "reps": 5, "percent": 70},
+      {"sets": 1, "reps": 3, "percent": 75},
+      {"sets": 2, "reps": 2, "percent": 80},
+      {"sets": 1, "reps": 1, "percent": 90}
+    ]},
+
+    // WEEK 2
+    {"week": 2, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 2, "reps": 2, "percent": 85}
+    ]},
+    {"week": 2, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 1, "reps": 3, "percent": 85}
+    ]},
+    {"week": 2, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 1, "reps": 5, "percent": 85}
+    ]},
+
+    // WEEK 3
+    {"week": 3, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 4, "reps": 9, "percent": 70}
+    ]},
+    {"week": 3, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 5, "reps": 7, "percent": 75}
+    ]},
+    {"week": 3, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 7, "reps": 5, "percent": 80}
+    ]},
+
+    // WEEK 4
+    {"week": 4, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 4, "reps": 9, "percent": 70, "note": "+load"}
+    ]},
+    {"week": 4, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 5, "reps": 7, "percent": 75, "note": "+load"}
+    ]},
+    {"week": 4, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 7, "reps": 5, "percent": 80, "note": "+load"}
+    ]},
+
+    // WEEK 5
+    {"week": 5, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 4, "reps": 9, "percent": 70, "note": "+load"}
+    ]},
+    {"week": 5, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 5, "reps": 7, "percent": 75, "note": "+load"}
+    ]},
+    {"week": 5, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 7, "reps": 5, "percent": 80, "note": "+load"}
+    ]},
+
+    // WEEK 6
+    {"week": 6, "day": 1, "exercise": "Rest", "sets": []},
+    {"week": 6, "day": 2, "exercise": "Back Squat", "sets": [
+      {"sets": 1, "reps": 1, "percent": null, "note": "test_max"}
+    ]},
+    {"week": 6, "day": 3, "exercise": "Bench Press", "sets": [
+      {"sets": 1, "reps": 1, "percent": null, "note": "test_max"}
+    ]},
+
+    // WEEK 7
+    {"week": 7, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 5, "reps": 5, "percent": 80}
+    ]},
+    {"week": 7, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 5, "reps": 3, "percent": 85}
+    ]},
+    {"week": 7, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 5, "reps": 2, "percent": 88}
+    ]},
+
+    // WEEK 8
+    {"week": 8, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 5, "reps": 4, "percent": 82}
+    ]},
+    {"week": 8, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 5, "reps": 2, "percent": 88}
+    ]},
+    {"week": 8, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 4, "reps": 4, "percent": 85}
+    ]},
+
+    // WEEK 9
+    {"week": 9, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 4, "reps": 4, "percent": 85}
+    ]},
+    {"week": 9, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 4, "reps": 2, "percent": 90}
+    ]},
+    {"week": 9, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 3, "reps": 3, "percent": 87}
+    ]},
+
+    // WEEK 10
+    {"week": 10, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 3, "reps": 3, "percent": 87}
+    ]},
+    {"week": 10, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 3, "reps": 1, "percent": 92}
+    ]},
+    {"week": 10, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 3, "reps": 1, "percent": 92}
+    ]},
+
+    // WEEK 11
+    {"week": 11, "day": 1, "exercise": "Back Squat", "sets": [
+      {"sets": 1, "reps": 1, "percent": null, "note": "test_max"}
+    ]},
+    {"week": 11, "day": 2, "exercise": "Bench Press", "sets": [
+      {"sets": 1, "reps": 1, "percent": null, "note": "test_max"}
+    ]},
+    {"week": 11, "day": 3, "exercise": "Deadlift", "sets": [
+      {"sets": 1, "reps": 1, "percent": null, "note": "test_max"}
+    ]}
+  ]
+}
