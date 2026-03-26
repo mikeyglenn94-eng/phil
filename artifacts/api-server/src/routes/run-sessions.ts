@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
-import { db, runSessionsTable, enduranceRunTemplatesTable } from "@workspace/db";
+import { db, runSessionsTable, enduranceRunTemplatesTable, programmesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { addDays, format, parseISO } from "date-fns";
 import {
   PACE_LEXICON,
   EFFORT_LEXICON,
@@ -251,6 +253,93 @@ router.delete("/endurance-run-templates/:id", async (req, res): Promise<void> =>
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Failed to delete template" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Insert an endurance run template into a client's calendar as a programme
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.post("/endurance-run-templates/insert", async (req, res): Promise<void> => {
+  const { templateId, clientId, startDate } = req.body as { templateId: number | string; clientId: number; startDate: string };
+
+  if (!templateId || !clientId || !startDate) {
+    res.status(400).json({ error: "templateId, clientId, and startDate are required" });
+    return;
+  }
+
+  const tId = typeof templateId === "string" ? parseInt(templateId, 10) : templateId;
+  if (isNaN(tId)) { res.status(400).json({ error: "Invalid templateId" }); return; }
+
+  try {
+    // Fetch template
+    const [template] = await db.select().from(enduranceRunTemplatesTable).where(eq(enduranceRunTemplatesTable.id, tId));
+    if (!template) { res.status(404).json({ error: "Template not found" }); return; }
+
+    const templateSessions = (template.sessions ?? []) as Array<{ week: number; day?: number; runSessionId: number; notes?: string }>;
+    if (templateSessions.length === 0) {
+      res.status(400).json({ error: "Template has no sessions" });
+      return;
+    }
+
+    // Fetch all run sessions (map by id for fast lookup)
+    const runSessionRows = await db.select().from(runSessionsTable);
+    const runSessionMap = new Map(runSessionRows.map(r => [r.id, r]));
+
+    const anchor = parseISO(startDate);
+
+    // Build calendar sessions
+    const sessions = templateSessions.map(entry => {
+      const runSession = runSessionMap.get(entry.runSessionId);
+      const weekOffset = (entry.week - 1) * 7;
+      const dayOffset = entry.day !== undefined ? entry.day - 1 : 0;
+      const sessionDate = format(addDays(anchor, weekOffset + dayOffset), "yyyy-MM-dd");
+
+      const blocks = (runSession?.blocks ?? []) as RunBlock[];
+
+      // Build exercise list from blocks
+      const exercises = blocks.length > 0
+        ? blocks.map(b => ({
+            id: `ex-${randomUUID().slice(0, 8)}`,
+            name: runSession?.name ?? "Run",
+            sets: null,
+            reps: null,
+            rpe: null,
+            notes: formatRunBlock(b),
+            rawText: "",
+          }))
+        : [{
+            id: `ex-${randomUUID().slice(0, 8)}`,
+            name: runSession?.name ?? "Run",
+            sets: null,
+            reps: null,
+            rpe: null,
+            notes: entry.notes ?? runSession?.notes ?? "",
+            rawText: "",
+          }];
+
+      return {
+        id: `session-${randomUUID().slice(0, 8)}`,
+        date: sessionDate,
+        name: runSession?.name ?? `Week ${entry.week} Run`,
+        source: "run_brain" as any,
+        exercises,
+      };
+    });
+
+    // Sort by date
+    sessions.sort((a, b) => a.date.localeCompare(b.date));
+
+    const [programme] = await db.insert(programmesTable).values({
+      title: `${template.name} — from ${format(anchor, "d MMM yyyy")}`,
+      clientId,
+      sessions,
+    }).returning();
+
+    res.status(201).json({ programme, sessionCount: sessions.length });
+  } catch (err) {
+    console.error("endurance-run-templates/insert error:", err);
+    res.status(500).json({ error: "Failed to insert template" });
   }
 });
 

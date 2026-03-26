@@ -536,6 +536,19 @@ export default function ClientArea() {
         return;
       }
 
+      if (result.category === "run_template") {
+        const res = await fetch("/api/endurance-run-templates/insert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: result.id, clientId, startDate: date }),
+        });
+        if (!res.ok) throw new Error();
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        toast({ title: `${result.name} added`, description: `${result.totalWeeks}-week run block from ${format(parseISO(date), "d MMM yyyy")}` });
+        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
+        return;
+      }
+
       // wod or run — single session
       const raw = result.raw ?? {};
       const newSession = result.category === "run"
@@ -1528,20 +1541,23 @@ export default function ClientArea() {
                     run: "border-green-100 bg-green-50/40",
                     cycle: "border-blue-100 bg-blue-50/40",
                     strength: "border-orange-100 bg-orange-50/40",
+                    run_template: "border-teal-100 bg-teal-50/40",
                   };
                   const badgeColor: Record<string, string> = {
                     wod: "bg-purple-100 text-purple-700",
                     run: "bg-green-100 text-green-700",
                     cycle: "bg-blue-100 text-blue-700",
                     strength: "bg-orange-100 text-orange-700",
+                    run_template: "bg-teal-100 text-teal-700",
                   };
                   const btnColor: Record<string, string> = {
                     wod: "bg-purple-600 hover:bg-purple-700",
                     run: "bg-green-600 hover:bg-green-700",
                     cycle: "bg-blue-600 hover:bg-blue-700",
                     strength: "bg-orange-600 hover:bg-orange-700",
+                    run_template: "bg-teal-600 hover:bg-teal-700",
                   };
-                  const catLabel: Record<string, string> = { wod: "WOD", run: "Run", cycle: "Endurance Cycle", strength: "Strength Block" };
+                  const catLabel: Record<string, string> = { wod: "WOD", run: "Run", cycle: "Endurance Cycle", strength: "Strength Block", run_template: "Run Block" };
 
                   return (
                     <div key={result.id} className={`rounded-xl border p-4 space-y-2 ${catColor[result.category] ?? ""}`}>
@@ -1577,7 +1593,7 @@ export default function ClientArea() {
                           disabled={!brainDates[result.id] || brainAdding === result.id}
                         >
                           {brainAdding === result.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                          {result.category === "cycle" ? "Insert Cycle" : result.category === "strength" ? "Insert Block" : "Add Session"}
+                          {result.category === "cycle" ? "Insert Cycle" : result.category === "strength" || result.category === "run_template" ? "Insert Block" : "Add Session"}
                         </Button>
                       </div>
                     </div>

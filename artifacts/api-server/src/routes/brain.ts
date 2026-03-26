@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { db, enduranceRunTemplatesTable } from "@workspace/db";
 import { searchWodsSync } from "./wod-brain";
 import { searchRunsSync } from "./run-brain";
 import { searchCyclesSync } from "./endurance-cycles";
@@ -7,14 +8,15 @@ import { searchStrengthSync } from "./strength-blocks";
 const router: IRouter = Router();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Intent detection — keyword-based routing across all four libraries
+// Intent detection — keyword-based routing across all libraries
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Intent = "wod" | "run" | "cycle" | "strength" | "all";
 
 const STRENGTH_KW = ["strength", "squat", "bench", "deadlift", "powerlifting", "barbell", "sbd", "smolov", "lift", "1rm", "heavy", "olympic"];
 const CYCLE_KW = ["cycle", "programme", "progressive", "weeks", "endurance cycle", "ergs", "mikko", "triangle", "emom ergs", "6 week"];
-const RUN_KW = ["run", "running", "tempo", "easy run", "jog", "pace", "km", "miles", "aerobic", "threshold", "hills", "fartlek", "long run", "recovery run", "track", "intervals running"];
+// hyrox appears in both RUN and WOD to trigger "all" intent — catches both WODs and run blocks
+const RUN_KW = ["run", "running", "tempo", "easy run", "jog", "pace", "km", "miles", "aerobic", "threshold", "hills", "fartlek", "long run", "recovery run", "track", "intervals running", "hyrox", "run block", "run programme"];
 const WOD_KW = ["wod", "workout", "amrap", "emom", "for time", "metcon", "conditioning", "circuit", "burpee", "wall ball", "dumbbell", "hyrox", "sled", "ski erg"];
 
 function detectIntent(query: string): Intent {
@@ -33,7 +35,33 @@ function detectIntent(query: string): Intent {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Normalise results to a common shape for the frontend
+// Score a DB endurance_run_template against a query
+// ─────────────────────────────────────────────────────────────────────────────
+
+function scoreRunTemplate(template: any, query: string): number {
+  const q = query.toLowerCase();
+  const name = (template.name ?? "").toLowerCase();
+  const desc = (template.description ?? "").toLowerCase();
+  const tags: string[] = (template.tags ?? []).map((t: string) => t.toLowerCase());
+
+  let score = 0;
+
+  // Exact phrase in name — highest weight
+  if (name.includes(q)) score += 20;
+
+  // Individual meaningful words
+  const words = q.split(/\s+/).filter(w => w.length > 2);
+  words.forEach(word => {
+    if (name.includes(word)) score += 10;
+    if (desc.includes(word)) score += 4;
+    if (tags.some(t => t.includes(word))) score += 7;
+  });
+
+  return score;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Normalisers
 // ─────────────────────────────────────────────────────────────────────────────
 
 function normaliseWod(w: any) {
@@ -91,11 +119,28 @@ function normaliseStrength(t: any) {
   };
 }
 
+function normaliseRunTemplate(t: any, score: number) {
+  const sessions: any[] = t.sessions ?? [];
+  const totalWeeks = sessions.length > 0 ? Math.max(...sessions.map((s: any) => s.week)) : 0;
+  const sessionsPerWeek = totalWeeks > 0 ? Math.round(sessions.length / totalWeeks) : sessions.length;
+  return {
+    id: String(t.id),
+    name: t.name,
+    category: "run_template" as const,
+    subtitle: `${totalWeeks}-week run block · ${sessionsPerWeek} sessions/wk`,
+    tags: t.tags ?? [],
+    totalWeeks,
+    sessionCount: sessions.length,
+    score,
+    raw: t,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Route
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.post("/brain/search", (req, res): void => {
+router.post("/brain/search", async (req, res): Promise<void> => {
   const { query } = req.body as { query: string };
   if (!query?.trim()) { res.status(400).json({ error: "Query is required" }); return; }
 
@@ -115,8 +160,22 @@ router.post("/brain/search", (req, res): void => {
     searchStrengthSync(query, intent === "all" ? 1 : 2).forEach(t => results.push(normaliseStrength(t)));
   }
 
+  // Always search endurance run templates from DB (coach-uploaded run programmes)
+  try {
+    const dbTemplates = await db.select().from(enduranceRunTemplatesTable);
+    const runTemplateLimit = intent === "all" ? 2 : intent === "run" ? 3 : 1;
+    dbTemplates
+      .map(t => ({ t, score: scoreRunTemplate(t, query) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, runTemplateLimit)
+      .forEach(({ t, score }) => results.push(normaliseRunTemplate(t, score)));
+  } catch {
+    // DB unavailable — skip silently
+  }
+
   // Sort by score descending when mixing categories
-  if (intent === "all") results.sort((a, b) => b.score - a.score);
+  results.sort((a, b) => b.score - a.score);
 
   res.json({ intent, results: results.slice(0, 8) });
 });
