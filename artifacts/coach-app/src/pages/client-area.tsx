@@ -522,9 +522,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     try {
       const targetProgramme = clientProgrammes?.[0];
       if (targetProgramme) {
-        const existingOnDay = (targetProgramme.sessions || []).find((s: any) => s.date === date);
-        if (existingOnDay && !confirm(`${format(parseISO(date), "EEE d MMM")} already has a session. Replace it?`)) { setAdding(null); return; }
-        const updatedSessions = [...(targetProgramme.sessions || []).filter((s: any) => s.date !== date), newSession];
+        const updatedSessions = [...(targetProgramme.sessions || []), newSession];
         await fetch(`/api/programmes/${targetProgramme.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions: updatedSessions }) });
       } else {
         await fetch("/api/programmes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Sessions", clientId, sessions: [newSession] }) });
