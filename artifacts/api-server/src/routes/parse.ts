@@ -258,6 +258,120 @@ Return format:
   }
 });
 
+router.post("/generate-programme", async (req, res): Promise<void> => {
+  const { description, startDate } = req.body as { description: string; startDate: string };
+  if (!description || !startDate) {
+    res.status(400).json({ error: "description and startDate are required" });
+    return;
+  }
+
+  const systemPrompt = `You are an expert fitness programming AI. A coach is describing the training plan they want for a client. Generate a complete, realistic multi-week training programme as a JSON object.
+
+## Session types and rules
+
+### Strength sessions (no source field):
+- "source" field must be OMITTED entirely (do not set it to null or undefined — just leave it out)
+- Must have a "name" (e.g. "Upper Body", "Lower Body", "Full Body", "Push", "Pull", "Legs")
+- Must have 4–6 exercises, each with:
+  - id: "ex-gen-{unique 6 chars}"
+  - name: proper exercise name (e.g. "Back Squat", "Bench Press", "Romanian Deadlift")
+  - sets: integer (3–5)
+  - reps: string (e.g. "5", "8-10", "12", "failure")
+  - rpe: string or null (e.g. "7", "8-9", null)
+  - rest: string or null (e.g. "90s", "2 min", "3 min", null)
+  - tempo: null
+  - notes: null
+  - rawText: ""
+  - weekProgression: []
+
+### WOD sessions (source: "wod_brain"):
+- "source": "wod_brain"
+- "name": "WOD" or a specific name (e.g. "WOD – Cardio Blast")
+- "structure": the workout description (e.g. "21-15-9 Thrusters 42.5kg and Pull-ups for time" or "AMRAP 20: 10 Box Jumps, 10 Burpees, 200m Run")
+- "color": "#7c3aed"
+- exercises: list of the movements as exercises (name only, sets:1, reps per the structure, rest:null, rpe:null, tempo:null, notes:null, weekProgression:[])
+
+### Run sessions (source: "run_brain"):
+- "source": "run_brain"
+- "name": "Run" or a specific name (e.g. "Tempo Run", "Easy Run")
+- "structure": the run description (e.g. "5km easy Z2 run" or "4×1km at threshold with 90s rest" or "20 min tempo run at Z3")
+- "color": "#16a34a"
+- exercises: the run broken into segments as exercises (e.g. {name:"5km Easy Run", sets:1, reps:"5km", rest:null, ...})
+
+## Scheduling rules
+- Start from the provided startDate
+- Week starts on Monday
+- Spread sessions sensibly — avoid consecutive days where possible (aim for rest days between hard sessions)
+- Typical pattern: Mon/Wed/Fri for 3x strength, add Tue or Thu for run/WOD
+- For 5+ sessions/week, days like Mon/Tue/Thu/Fri/Sat are reasonable
+- Schedule for the EXACT number of weeks requested
+- Generate varied sessions week to week — don't repeat identical exercises every week. Rotate movements, vary rep ranges, increase load week to week (periodisation). Use different exercise variations across weeks.
+- Each session must have a unique id: "session-gen-{unique 8 chars}"
+
+## Output format
+Return ONLY valid JSON (no markdown):
+{
+  "title": "6-Week Strength & Conditioning Block",
+  "sessions": [
+    {
+      "id": "session-gen-abc12345",
+      "date": "2026-03-30",
+      "name": "Upper Body",
+      "exercises": [...]
+    },
+    {
+      "id": "session-gen-def67890",
+      "date": "2026-04-01",
+      "name": "WOD",
+      "source": "wod_brain",
+      "structure": "21-15-9 Thrusters 42.5kg and Pull-ups for time",
+      "color": "#7c3aed",
+      "exercises": [...]
+    }
+  ]
+}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 32768,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Start date: ${startDate}\n\nDescription: "${description}"` },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    let parsed: { title: string; sessions: any[] };
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      req.log.warn({ raw }, "Failed to parse generate-programme LLM response");
+      res.status(500).json({ error: "AI returned invalid JSON — try rephrasing your description" });
+      return;
+    }
+
+    const sessions = (parsed.sessions ?? []).map((s: any) => {
+      const base: any = {
+        ...s,
+        id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        exercises: (s.exercises ?? []).map((ex: any) => ({
+          ...ex,
+          id: `ex-${randomUUID().slice(0, 8)}`,
+          weekProgression: ex.weekProgression ?? [],
+        })),
+      };
+      if (!s.source) delete base.source;
+      return base;
+    });
+
+    res.json({ title: parsed.title || "Custom Programme", sessions });
+  } catch (err) {
+    req.log.error({ err }, "Error generating programme");
+    res.status(500).json({ error: "Failed to generate programme" });
+  }
+});
+
 router.post("/parse-log", async (req, res): Promise<void> => {
   const { transcript, exerciseName, totalSets } = req.body as {
     transcript: string;

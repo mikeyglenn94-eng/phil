@@ -147,6 +147,54 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [allProgrammes, setAllProgrammes] = useState<{ id: number; title: string }[]>([]);
   const [assignSearch, setAssignSearch] = useState("");
 
+  // ── Build-from-description mode ──
+  const [buildMode, setBuildMode] = useState<"template" | "describe">("template");
+  const [describeText, setDescribeText] = useState("");
+  const [describeGenerating, setDescribeGenerating] = useState(false);
+  const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[] } | null>(null);
+  const [confirmingGenerated, setConfirmingGenerated] = useState(false);
+
+  async function handleGenerateProgramme() {
+    if (!describeText.trim() || !assignStartDate) return;
+    setDescribeGenerating(true);
+    setGeneratedPreview(null);
+    try {
+      const res = await fetch("/api/generate-programme", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: describeText.trim(), startDate: assignStartDate }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setGeneratedPreview(data);
+    } catch (e: any) {
+      toast({ title: "Couldn't generate programme", description: e?.message ?? "Try rephrasing your description.", variant: "destructive" });
+    } finally {
+      setDescribeGenerating(false);
+    }
+  }
+
+  async function handleConfirmGenerated() {
+    if (!generatedPreview) return;
+    setConfirmingGenerated(true);
+    try {
+      await fetch("/api/programmes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: generatedPreview.title, sessions: generatedPreview.sessions, clientId }),
+      });
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      setAssignDialogOpen(false);
+      setGeneratedPreview(null);
+      setDescribeText("");
+      toast({ title: "Programme built!", description: `"${generatedPreview.title}" added to the calendar.` });
+    } catch {
+      toast({ title: "Failed to save programme", variant: "destructive" });
+    } finally {
+      setConfirmingGenerated(false);
+    }
+  }
+
   // ── Training calendar state ──
   const [trainingWeekOffset, setTrainingWeekOffset] = useState(0);
   const [selectedTrainingSession, setSelectedTrainingSession] = useState<Session | null>(null);
@@ -1278,10 +1326,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   size="sm"
                   variant="default"
                   className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1"
-                  onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
+                  onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setBuildMode("template"); setGeneratedPreview(null); setDescribeText(""); setAssignDialogOpen(true); }}
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Assign Programme</span>
+                  <span className="hidden sm:inline">Build Programme</span>
                 </Button>
               </div>
             </div>
@@ -1541,66 +1589,146 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         </div>
       )}
 
-      {/* Assign Programme Dialog */}
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="max-w-sm">
+      {/* Build Programme Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) setGeneratedPreview(null); }}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Assign Programme</DialogTitle>
-            <DialogDescription>
-              Choose a programme and start date. Sessions will be re-dated from that day.
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <Dumbbell className="w-5 h-5 text-primary" />
+              Build Your Programme
+            </DialogTitle>
+            <DialogDescription className="sr-only">Choose a template or describe a new programme for {client?.name ?? "this client"}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Programme</label>
-              <Input
-                placeholder="Search programmes…"
-                value={assignSearch}
-                onChange={e => setAssignSearch(e.target.value)}
-                className="rounded-xl"
-                autoFocus
-              />
-              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
-                {(allProgrammes.length ? allProgrammes : (masterProgrammes ?? []).map(p => ({ id: p.id, title: p.title || "Untitled" })))
-                  .filter(p => !assignSearch.trim() || p.title.toLowerCase().includes(assignSearch.toLowerCase()))
-                  .map(prog => (
-                    <button
-                      key={prog.id}
-                      onClick={() => setSelectedSourceId(prog.id)}
-                      className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                        selectedSourceId === prog.id
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:border-primary/40 hover:bg-muted/50"
-                      }`}
-                    >
-                      {prog.title}
-                    </button>
-                  ))}
-                {allProgrammes.length > 0 && !allProgrammes.some(p => !assignSearch.trim() || p.title.toLowerCase().includes(assignSearch.toLowerCase())) && (
-                  <p className="text-xs text-muted-foreground text-center py-2">No programmes match</p>
-                )}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Start Date</label>
-              <Input
-                type="date"
-                value={assignStartDate}
-                onChange={e => setAssignStartDate(e.target.value)}
-                className="w-full"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleAssign}
-              disabled={!selectedSourceId || !assignStartDate || isAssigning}
+
+          {/* Mode tabs */}
+          <div className="flex rounded-xl bg-muted p-1 gap-1">
+            <button
+              className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-all ${buildMode === "template" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => { setBuildMode("template"); setGeneratedPreview(null); }}
             >
-              {isAssigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Assign to {client?.name ?? "Client"}
-            </Button>
-          </DialogFooter>
+              From Template
+            </button>
+            <button
+              className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-all ${buildMode === "describe" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => { setBuildMode("describe"); setSelectedSourceId(null); }}
+            >
+              Describe It
+            </button>
+          </div>
+
+          {/* From Template mode */}
+          {buildMode === "template" && (
+            <div className="space-y-4 py-1">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Programme</label>
+                <Input
+                  placeholder="Search programmes…"
+                  value={assignSearch}
+                  onChange={e => setAssignSearch(e.target.value)}
+                  className="rounded-xl"
+                  autoFocus
+                />
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
+                  {(allProgrammes.length ? allProgrammes : (masterProgrammes ?? []).map(p => ({ id: p.id, title: p.title || "Untitled" })))
+                    .filter(p => !assignSearch.trim() || p.title.toLowerCase().includes(assignSearch.toLowerCase()))
+                    .map(prog => (
+                      <button
+                        key={prog.id}
+                        onClick={() => setSelectedSourceId(prog.id)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                          selectedSourceId === prog.id
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:border-primary/40 hover:bg-muted/50"
+                        }`}
+                      >
+                        {prog.title}
+                      </button>
+                    ))}
+                  {allProgrammes.length > 0 && !allProgrammes.some(p => !assignSearch.trim() || p.title.toLowerCase().includes(assignSearch.toLowerCase())) && (
+                    <p className="text-xs text-muted-foreground text-center py-2">No programmes match</p>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Start Date</label>
+                <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
+              </div>
+              <DialogFooter className="pt-0">
+                <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleAssign} disabled={!selectedSourceId || !assignStartDate || isAssigning}>
+                  {isAssigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Assign to {client?.name ?? "Client"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {/* Describe It mode */}
+          {buildMode === "describe" && (
+            <div className="space-y-4 py-1">
+              {!generatedPreview ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Describe the programme</label>
+                    <textarea
+                      className="w-full min-h-[110px] rounded-xl border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
+                      placeholder={"e.g. 3 days strength per week (upper/lower split), 1 run and 1 WOD — 6 week block starting easy and building intensity each week"}
+                      value={describeText}
+                      onChange={e => setDescribeText(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Start Date</label>
+                    <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
+                  </div>
+                  <DialogFooter className="pt-0">
+                    <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+                    <Button
+                      onClick={handleGenerateProgramme}
+                      disabled={!describeText.trim() || !assignStartDate || describeGenerating}
+                      className="gap-2"
+                    >
+                      {describeGenerating
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Building…</>
+                        : <><Sparkles className="w-4 h-4" /> Generate</>}
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+                    <p className="font-semibold text-base">{generatedPreview.title}</p>
+                    <p className="text-sm text-muted-foreground">{generatedPreview.sessions.length} sessions generated</p>
+                    <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                      {generatedPreview.sessions.slice(0, 30).map((s: any) => {
+                        const isWod = s.source === "wod_brain";
+                        const isRun = s.source === "run_brain";
+                        return (
+                          <div key={s.id} className="flex items-center gap-2 text-xs">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${isWod ? "bg-violet-500" : isRun ? "bg-green-500" : "bg-primary"}`} />
+                            <span className="text-muted-foreground w-16 shrink-0">{format(parseISO(s.date), "EEE d MMM")}</span>
+                            <span className="font-medium truncate">{s.name}</span>
+                            {s.structure && <span className="text-muted-foreground truncate hidden sm:inline">{s.structure}</span>}
+                          </div>
+                        );
+                      })}
+                      {generatedPreview.sessions.length > 30 && (
+                        <p className="text-xs text-muted-foreground text-center pt-1">+{generatedPreview.sessions.length - 30} more sessions</p>
+                      )}
+                    </div>
+                  </div>
+                  <DialogFooter className="pt-0">
+                    <Button variant="outline" onClick={() => setGeneratedPreview(null)}>Regenerate</Button>
+                    <Button onClick={handleConfirmGenerated} disabled={confirmingGenerated} className="gap-2">
+                      {confirmingGenerated ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      Add to {client?.name ?? "Client"}'s Calendar
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
