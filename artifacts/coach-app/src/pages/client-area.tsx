@@ -1318,13 +1318,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           {/* Calendar toolbar */}
           <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
             <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w - 1)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w - 4)}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               <Button variant="ghost" size="sm" className="h-7 px-3 text-xs rounded-md" onClick={() => setTrainingWeekOffset(0)}>
                 Today
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w + 1)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w + 4)}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
