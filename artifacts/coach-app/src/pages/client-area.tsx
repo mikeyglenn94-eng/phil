@@ -210,6 +210,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     toast({ title: "Session moved" });
   };
 
+  const deleteSession = async (sessionId: string, programmeId: number | undefined) => {
+    if (!programmeId) return;
+    const prog = (clientProgrammes ?? []).find(p => p.id === programmeId);
+    if (!prog) return;
+    const updatedSessions = (prog.sessions as Session[]).filter(s => s.id !== sessionId);
+    await fetch(`/api/programmes/${programmeId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessions: updatedSessions }),
+    });
+    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+    toast({ title: "Session deleted" });
+  };
+
   // ── AI Reschedule command helpers ──
   const DAY_WORDS: Record<string, number> = {
     monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 0,
@@ -1377,7 +1391,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             );
                             const isTouchPicked = touchDragRef.current?.sessionId === session.id;
                             return (
-                              <button
+                              <div
                                 key={session.id}
                                 draggable
                                 onDragStart={() => {
@@ -1429,10 +1443,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     setSelectedTrainingSession(session);
                                   }
                                 }}
-                                className={`w-full text-left px-1.5 py-1 rounded-md transition-colors text-[10px] leading-tight font-medium truncate block cursor-grab active:cursor-grabbing ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
+                                className={`relative group w-full text-left px-1.5 py-1 rounded-md transition-colors text-[10px] leading-tight font-medium cursor-grab active:cursor-grabbing ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
                               >
-                                {session.name || "Session"}
-                              </button>
+                                <span className="block truncate pr-3">{session.name || "Session"}</span>
+                                <button
+                                  onTouchStart={e => e.stopPropagation()}
+                                  onClick={e => { e.stopPropagation(); deleteSession(session.id, prog?.id); }}
+                                  className={`absolute top-0.5 right-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${isTouchPicked ? "text-primary-foreground hover:bg-white/20" : "text-primary hover:bg-primary/30"}`}
+                                  title="Delete session"
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
