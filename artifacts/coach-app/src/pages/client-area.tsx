@@ -1339,7 +1339,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Ask Daddy</span>
+                  <span>Build From Brain</span>
                 </Button>
                 <Button
                   size="sm"
@@ -1348,7 +1348,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setBuildMode("template"); setGeneratedPreview(null); setDescribeText(""); setAssignDialogOpen(true); }}
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Build Programme</span>
+                  <span>Build From Scratch</span>
                 </Button>
               </div>
             </div>
