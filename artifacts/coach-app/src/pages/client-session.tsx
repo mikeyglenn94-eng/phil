@@ -12,6 +12,7 @@ import {
   getListProgrammesQueryKey,
   parseLog,
   parseTranscript,
+  transcribeAudio,
 } from "@workspace/api-client-react";
 import type { Exercise, Session } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -212,25 +213,102 @@ export default function ClientSession() {
     try { r.start(); } catch {}
   };
 
-  // ── Log voice (simulates continuous by restarting fresh instances) ────────
-  // Shared state stored in a ref so onend closures can read the latest values
-  const logAccRef = useRef("");   // accumulated finals across restarts
-  const logExIdRef = useRef("");  // which exercise is being logged
-  const logActiveRef = useRef(false); // should we keep listening?
+  // ── Log voice (Web Speech for preview + Whisper for accuracy) ────────────
+  const logAccRef = useRef("");
+  const logExIdRef = useRef("");
+  const logActiveRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaChunksRef = useRef<Blob[]>([]);
+  const usingMediaRecorderRef = useRef(false);
+
+  // Final processing: tries Whisper first, falls back to Web Speech transcript
+  async function processLogRecording(exId: string, audioBlob: Blob | null) {
+    let transcript = logAccRef.current.trim();
+    setListeningFor(null); setInterimText(""); setLogAccText("");
+    logAccRef.current = "";
+
+    if (!exId || !session) return;
+    const ex = session.exercises?.find((e: Exercise) => e.id === exId);
+    if (!ex) return;
+
+    setParsingFor(exId);
+
+    // Whisper pass — much better in noisy environments
+    if (audioBlob && audioBlob.size > 1500) {
+      try {
+        const result = await transcribeAudio({ audio: audioBlob });
+        if (result.transcript?.trim()) transcript = result.transcript.trim();
+      } catch {
+        // Whisper unavailable — fall back to Web Speech text
+      }
+    }
+
+    if (!transcript) { setParsingFor(null); return; }
+
+    try {
+      const result = await parseLog({ transcript, exerciseName: nameOverrides[exId] || ex.name, totalSets: ex.sets || 0 });
+      setLogs(prev => {
+        const current = [...(prev[exId] || [])];
+        for (const s of result.sets) {
+          if (s.setIndex < current.length) {
+            current[s.setIndex] = {
+              weight: s.weight !== undefined ? s.weight : current[s.setIndex]?.weight ?? null,
+              reps: s.reps !== undefined ? s.reps : current[s.setIndex]?.reps ?? null,
+            };
+          }
+        }
+        return { ...prev, [exId]: current };
+      });
+      setSaved(false);
+      toast({ title: "Log parsed!" });
+    } catch {
+      toast({ title: "Couldn't parse log — try again", variant: "destructive" });
+    } finally { setParsingFor(null); }
+  }
+
+  function stopLogRecording() {
+    logActiveRef.current = false;
+    stopRef(logRecRef);
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop(); // onstop → processLogRecording
+    } else if (!usingMediaRecorderRef.current) {
+      // MediaRecorder never started — onend will call processLogRecording
+    }
+  }
 
   const startLogListening = (exId: string) => {
-    if (logActiveRef.current) {
-      // User tapped again — stop and process
-      logActiveRef.current = false;
-      stopRef(logRecRef);
-      return;
-    }
+    if (logActiveRef.current) { stopLogRecording(); return; }
+
     logAccRef.current = "";
     logExIdRef.current = exId;
     logActiveRef.current = true;
+    usingMediaRecorderRef.current = false;
     setListeningFor(exId);
     setInterimText("");
     setLogAccText("");
+
+    // Start MediaRecorder for Whisper (async — Web Speech starts immediately below)
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then(stream => {
+          if (!logActiveRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
+          const mimeType = ["audio/webm", "audio/mp4", "audio/ogg"].find(t => MediaRecorder.isTypeSupported(t)) ?? "";
+          const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+          mediaChunksRef.current = [];
+          mr.ondataavailable = e => { if (e.data.size > 0) mediaChunksRef.current.push(e.data); };
+          mr.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            usingMediaRecorderRef.current = false;
+            const blob = new Blob(mediaChunksRef.current, { type: mimeType || "audio/webm" });
+            await processLogRecording(logExIdRef.current, blob);
+          };
+          mr.start(500);
+          mediaRecorderRef.current = mr;
+          usingMediaRecorderRef.current = true;
+        })
+        .catch(() => { /* mic denied or unavailable — Web Speech only */ });
+    }
+
     spawnLogRec();
   };
 
@@ -243,7 +321,6 @@ export default function ClientSession() {
         if (e.results[i].isFinal) fin += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
       }
-      setInterimText(interim || (fin ? "" : ""));
       if (fin) {
         logAccRef.current = (logAccRef.current + " " + fin).trim();
         setLogAccText(logAccRef.current);
@@ -257,42 +334,16 @@ export default function ClientSession() {
         logActiveRef.current = false;
         setListeningFor(null); setInterimText("");
       }
-      // other errors (no-speech, network): onend will restart if still active
     };
     r.onend = async () => {
-      if (logActiveRef.current) {
-        // Silence timeout — spawn a new instance and keep going
-        setTimeout(spawnLogRec, 100);
-        return;
+      if (logActiveRef.current) { setTimeout(spawnLogRec, 100); return; }
+      // Stopped by user — if MediaRecorder is handling it, just clear visuals
+      if (usingMediaRecorderRef.current) {
+        setListeningFor(null); setInterimText(""); setLogAccText("");
+      } else {
+        // No MediaRecorder — process now with Web Speech text
+        await processLogRecording(logExIdRef.current, null);
       }
-      // User stopped — process accumulated transcript
-      const exId = logExIdRef.current;
-      const final = logAccRef.current.trim();
-      setListeningFor(null); setInterimText(""); setLogAccText("");
-      logAccRef.current = "";
-      if (!final || !exId || !session) return;
-      const ex = session.exercises?.find((e: Exercise) => e.id === exId);
-      if (!ex) return;
-      setParsingFor(exId);
-      try {
-        const result = await parseLog({ transcript: final, exerciseName: nameOverrides[exId] || ex.name, totalSets: ex.sets || 0 });
-        setLogs(prev => {
-          const current = [...(prev[exId] || [])];
-          for (const s of result.sets) {
-            if (s.setIndex < current.length) {
-              current[s.setIndex] = {
-                weight: s.weight !== undefined ? s.weight : current[s.setIndex]?.weight ?? null,
-                reps: s.reps !== undefined ? s.reps : current[s.setIndex]?.reps ?? null,
-              };
-            }
-          }
-          return { ...prev, [exId]: current };
-        });
-        setSaved(false);
-        toast({ title: "Log parsed!" });
-      } catch {
-        toast({ title: "Couldn't parse log — try again", variant: "destructive" });
-      } finally { setParsingFor(null); }
     };
     logRecRef.current = r;
     try { r.start(); } catch { logActiveRef.current = false; setListeningFor(null); }
@@ -516,10 +567,7 @@ export default function ClientSession() {
                   <p className="text-xs font-bold text-primary uppercase tracking-wide leading-none">Recording</p>
                   {listeningExName && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{listeningExName}</p>}
                 </div>
-                <Button size="sm" variant="outline" className="shrink-0 rounded-xl h-8 px-3 text-xs" onClick={() => {
-                  logActiveRef.current = false;
-                  stopRef(logRecRef);
-                }}>
+                <Button size="sm" variant="outline" className="shrink-0 rounded-xl h-8 px-3 text-xs" onClick={stopLogRecording}>
                   <Square className="w-3 h-3 mr-1.5 fill-current" />Done
                 </Button>
               </div>
