@@ -602,29 +602,33 @@ export default function ClientSession() {
         );
       })()}
 
-      {/* Conditioning session (WOD Brain / Run Brain) */}
-      {((session as any).source === "wod_brain" || (session as any).source === "run_brain") && (
+      {/* Conditioning session (WOD Brain / Run Brain / Endurance Cycle) */}
+      {((session as any).source === "wod_brain" || (session as any).source === "run_brain" || (session as any).source === "endurance_cycle") && (() => {
+        const src = (session as any).source as string;
+        const isGreen = src === "run_brain" || src === "endurance_cycle";
+        const label = src === "run_brain" ? "Run Brain" : src === "endurance_cycle" ? "Endurance Cycle" : "WOD Brain";
+        return (
         <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
           {/* Workout block */}
-          <div className={`rounded-2xl border p-5 space-y-4 ${(session as any).source === "run_brain" ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
+          <div className={`rounded-2xl border p-5 space-y-4 ${isGreen ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
             <div className="flex items-center gap-2">
-              {(session as any).source === "run_brain"
+              {isGreen
                 ? <Zap className="w-4 h-4 text-green-600 shrink-0" />
                 : <Clock className="w-4 h-4 text-purple-600 shrink-0" />
               }
-              <span className={`text-xs font-bold uppercase tracking-wide ${(session as any).source === "run_brain" ? "text-green-700" : "text-purple-700"}`}>
-                {(session as any).source === "run_brain" ? "Run Brain" : "WOD Brain"}
+              <span className={`text-xs font-bold uppercase tracking-wide ${isGreen ? "text-green-700" : "text-purple-700"}`}>
+                {label}
               </span>
             </div>
             {(session as any).structure && (
-              <p className={`text-sm italic leading-relaxed ${(session as any).source === "run_brain" ? "text-green-900" : "text-purple-900"}`}>
+              <p className={`text-sm italic leading-relaxed ${isGreen ? "text-green-900" : "text-purple-900"}`}>
                 {(session as any).structure}
               </p>
             )}
             <ol className="space-y-2">
               {(session.exercises || []).map((ex, i) => (
                 <li key={ex.id} className="flex items-baseline gap-3">
-                  <span className={`text-sm font-bold shrink-0 w-5 ${(session as any).source === "run_brain" ? "text-green-600" : "text-purple-600"}`}>{i + 1}.</span>
+                  <span className={`text-sm font-bold shrink-0 w-5 ${isGreen ? "text-green-600" : "text-purple-600"}`}>{i + 1}.</span>
                   <div>
                     <span className="text-sm font-semibold text-foreground capitalize">{ex.name}</span>
                     {ex.notes && <span className="text-sm text-muted-foreground ml-2">{ex.notes}</span>}
@@ -660,10 +664,11 @@ export default function ClientSession() {
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
-      {/* Exercises (strength sessions only) */}
-      {!(session as any).source && (
+      {/* Exercises (strength sessions — no source, or source = strength_block) */}
+      {(!(session as any).source || (session as any).source === "strength_block") && (
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-5">
         {(session.exercises || []).map((ex, exIdx) => {
           const setsCount = ex.sets || 0;
