@@ -32,6 +32,20 @@ import {
 
 type Tab = "training" | "nutrition";
 
+function getSessionHighlight(session: Session): string {
+  const isConditioning = session.source === "wod_brain" || session.source === "run_brain";
+  if (isConditioning && session.structure) return session.structure;
+  const exs = session.exercises ?? [];
+  return exs
+    .slice(0, 3)
+    .map(ex => {
+      const setsReps = ex.sets && ex.reps ? ` ${ex.sets}×${ex.reps}` : ex.sets ? ` ${ex.sets}×` : "";
+      return `${ex.name}${setsReps}`;
+    })
+    .filter(Boolean)
+    .join(" · ");
+}
+
 interface ClientAreaProps {
   clientIdOverride?: number;
   mode?: "coach" | "client";
@@ -1390,6 +1404,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                               (p.sessions as Session[]).some(s => s.id === session.id)
                             );
                             const isTouchPicked = touchDragRef.current?.sessionId === session.id;
+                            const highlight = getSessionHighlight(session);
                             return (
                               <div
                                 key={session.id}
@@ -1446,6 +1461,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                 className={`relative group w-full text-left px-1.5 py-1 rounded-md transition-colors text-[10px] leading-tight font-medium cursor-grab active:cursor-grabbing ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
                               >
                                 <span className="block truncate pr-3">{session.name || "Session"}</span>
+                                {highlight && (
+                                  <span className={`block truncate text-[9px] leading-tight mt-0.5 font-normal ${isTouchPicked ? "opacity-80" : "opacity-60"}`}>{highlight}</span>
+                                )}
                                 <button
                                   onTouchStart={e => e.stopPropagation()}
                                   onClick={e => { e.stopPropagation(); deleteSession(session.id, prog?.id); }}
