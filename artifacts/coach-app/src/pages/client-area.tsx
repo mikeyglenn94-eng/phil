@@ -130,6 +130,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [assignStartDate, setAssignStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [isAssigning, setIsAssigning] = useState(false);
+  const [allProgrammes, setAllProgrammes] = useState<{ id: number; title: string }[]>([]);
+  const [assignSearch, setAssignSearch] = useState("");
 
   // ── Training calendar state ──
   const [trainingWeekOffset, setTrainingWeekOffset] = useState(0);
@@ -873,6 +875,22 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     return () => { try { r.abort(); } catch {} };
   }, []);
 
+  useEffect(() => {
+    if (!assignDialogOpen) { setAssignSearch(""); setSelectedSourceId(null); return; }
+    fetch("/api/programmes?all=true")
+      .then(r => r.json())
+      .then((all: { id: number; title: string }[]) => {
+        const seen = new Set<string>();
+        const deduped: { id: number; title: string }[] = [];
+        for (const p of all) {
+          const base = p.title.replace(/\s*—\s*(from\s+)?\d{1,2}\s+\w+\s+\d{4}$/, "").trim();
+          if (!seen.has(base)) { seen.add(base); deduped.push({ id: p.id, title: base }); }
+        }
+        setAllProgrammes(deduped);
+      })
+      .catch(() => {});
+  }, [assignDialogOpen]);
+
   const toggleCmdListening = () => {
     const r = cmdRecRef.current;
     if (!r) return;
@@ -1469,20 +1487,32 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Programme</label>
-              <div className="space-y-1.5">
-                {masterProgrammes?.map(prog => (
-                  <button
-                    key={prog.id}
-                    onClick={() => setSelectedSourceId(prog.id)}
-                    className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                      selectedSourceId === prog.id
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border hover:border-primary/40 hover:bg-muted/50"
-                    }`}
-                  >
-                    {prog.title || "Untitled Programme"}
-                  </button>
-                ))}
+              <Input
+                placeholder="Search programmes…"
+                value={assignSearch}
+                onChange={e => setAssignSearch(e.target.value)}
+                className="rounded-xl"
+                autoFocus
+              />
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+                {(allProgrammes.length ? allProgrammes : (masterProgrammes ?? []).map(p => ({ id: p.id, title: p.title || "Untitled" })))
+                  .filter(p => !assignSearch.trim() || p.title.toLowerCase().includes(assignSearch.toLowerCase()))
+                  .map(prog => (
+                    <button
+                      key={prog.id}
+                      onClick={() => setSelectedSourceId(prog.id)}
+                      className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                        selectedSourceId === prog.id
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/40 hover:bg-muted/50"
+                      }`}
+                    >
+                      {prog.title}
+                    </button>
+                  ))}
+                {allProgrammes.length > 0 && !allProgrammes.some(p => !assignSearch.trim() || p.title.toLowerCase().includes(assignSearch.toLowerCase())) && (
+                  <p className="text-xs text-muted-foreground text-center py-2">No programmes match</p>
+                )}
               </div>
             </div>
             <div className="space-y-1.5">

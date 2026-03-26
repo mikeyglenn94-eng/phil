@@ -7,6 +7,13 @@ const router: IRouter = Router();
 
 router.get("/programmes", async (req, res): Promise<void> => {
   const clientIdParam = req.query.clientId as string | undefined;
+  const all = req.query.all === "true";
+
+  if (all) {
+    const programmes = await db.select().from(programmesTable).orderBy(programmesTable.updatedAt);
+    res.json(programmes.reverse());
+    return;
+  }
 
   if (clientIdParam !== undefined) {
     const clientId = parseInt(clientIdParam, 10);
