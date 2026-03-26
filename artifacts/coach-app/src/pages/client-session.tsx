@@ -517,7 +517,7 @@ export default function ClientSession() {
   if (!session) return (
     <div className="flex h-screen items-center justify-center flex-col gap-4">
       <p className="text-muted-foreground">Session not found.</p>
-      <Button variant="outline" onClick={() => setLocation("/client")}>Back</Button>
+      <Button variant="outline" onClick={() => setLocation("/client?tab=training")}>Back</Button>
     </div>
   );
 
@@ -534,7 +534,7 @@ export default function ClientSession() {
       <div className="sticky top-0 z-20 bg-background border-b shadow-sm">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/client")}>
+            <Button variant="ghost" size="icon" onClick={() => setLocation("/client?tab=training")}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div className="min-w-0">

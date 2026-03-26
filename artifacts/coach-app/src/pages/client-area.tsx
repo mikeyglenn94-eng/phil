@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useRoute, useLocation, Link } from "wouter";
+import { useRoute, useLocation, Link, useSearch } from "wouter";
 import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ interface ClientAreaProps {
 export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientAreaProps = {}) {
   const [, params] = useRoute("/clients/:clientId");
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const clientId = clientIdOverride ?? parseInt(params?.clientId || "0", 10);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -121,7 +122,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     }
   }
 
-  const [activeTab, setActiveTab] = useState<Tab>("nutrition");
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const params = new URLSearchParams(search);
+    return params.get("tab") === "training" ? "training" : "nutrition";
+  });
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [assignStartDate, setAssignStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
