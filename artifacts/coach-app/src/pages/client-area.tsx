@@ -552,7 +552,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         rawText: `${block.amount} ${block.unit} ${block.movement}`,
       })),
     };
-    await addSessionToClientCalendar(wodClientTargetDate, newSession, setWodClientAdding, wod.id, () => { setWodClientBrainOpen(false); setWodClientResults([]); setWodClientQuery(""); setWodClientTargetDate(""); }, sessionName);
+    const navigateWod = () => {
+      if (wodClientTargetDate) {
+        const target = startOfWeek(parseISO(wodClientTargetDate), { weekStartsOn: 1 });
+        const today = startOfWeek(new Date(), { weekStartsOn: 1 });
+        setTrainingWeekOffset(Math.round(differenceInDays(target, today) / 7));
+      }
+    };
+    await addSessionToClientCalendar(wodClientTargetDate, newSession, setWodClientAdding, wod.id, () => { navigateWod(); setWodClientBrainOpen(false); setWodClientResults([]); setWodClientQuery(""); setWodClientTargetDate(""); }, sessionName);
   };
 
   const addRunToClientCalendar = async (run: any) => {
@@ -566,7 +573,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       structure: run.structure ?? "",
       exercises: [{ id: `ex-${Date.now()}`, name: run.name, sets: null, reps: null, rpe: null, notes: `${run.duration ? run.duration + " min" : ""}${run.distanceKm ? " · " + run.distanceKm + " km" : ""} ${run.intensity ?? ""}`.trim(), rawText: run.structure ?? "" }],
     };
-    await addSessionToClientCalendar(runClientTargetDate, newSession, setRunClientAdding, run.id, () => { setRunClientBrainOpen(false); setRunClientResults([]); setRunClientQuery(""); setRunClientTargetDate(""); }, sessionName);
+    const navigateRun = () => {
+      if (runClientTargetDate) {
+        const target = startOfWeek(parseISO(runClientTargetDate), { weekStartsOn: 1 });
+        const today = startOfWeek(new Date(), { weekStartsOn: 1 });
+        setTrainingWeekOffset(Math.round(differenceInDays(target, today) / 7));
+      }
+    };
+    await addSessionToClientCalendar(runClientTargetDate, newSession, setRunClientAdding, run.id, () => { navigateRun(); setRunClientBrainOpen(false); setRunClientResults([]); setRunClientQuery(""); setRunClientTargetDate(""); }, sessionName);
   };
 
   // ── Strength Brain ──
@@ -716,6 +730,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     finally { setBrainSearching(false); }
   };
 
+  const navigateToWeekOf = (dateStr: string) => {
+    if (!dateStr) return;
+    const target = startOfWeek(parseISO(dateStr), { weekStartsOn: 1 });
+    const today = startOfWeek(new Date(), { weekStartsOn: 1 });
+    setTrainingWeekOffset(Math.round(differenceInDays(target, today) / 7));
+  };
+
   const brainAddItem = async (result: any) => {
     const date = brainDates[result.id] ?? format(new Date(), "yyyy-MM-dd");
     if (!clientId) return;
@@ -731,6 +752,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         if (!res.ok) throw new Error();
         await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
         toast({ title: `${result.name} added`, description: `${result.totalWeeks}-week cycle from ${format(parseISO(date), "d MMM yyyy")}` });
+        navigateToWeekOf(date);
         setBrainOpen(false); setBrainResults([]); setBrainQuery("");
         return;
       }
@@ -744,6 +766,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         if (!res.ok) throw new Error();
         await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
         toast({ title: `${result.name} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
+        navigateToWeekOf(date);
         setBrainOpen(false); setBrainResults([]); setBrainQuery("");
         return;
       }
@@ -757,6 +780,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         if (!res.ok) throw new Error();
         await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
         toast({ title: `${result.name} added`, description: `${result.totalWeeks}-week run block from ${format(parseISO(date), "d MMM yyyy")}` });
+        navigateToWeekOf(date);
         setBrainOpen(false); setBrainResults([]); setBrainQuery("");
         return;
       }
@@ -780,7 +804,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             order: 0,
             exercises: [{ id: `ex-${Date.now()}`, name: result.name, sets: raw.sets ?? null, reps: raw.reps ?? null, rpe: null, notes: raw.notes ?? "", rawText: raw.description ?? "" }],
           };
-      await addSessionToClientCalendar(date, newSession, setBrainAdding as any, result.id, () => { setBrainOpen(false); setBrainResults([]); setBrainQuery(""); }, result.name);
+      await addSessionToClientCalendar(date, newSession, setBrainAdding as any, result.id, () => { navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); }, result.name);
     } catch {
       toast({ title: "Failed to add to calendar", variant: "destructive" });
     } finally {
