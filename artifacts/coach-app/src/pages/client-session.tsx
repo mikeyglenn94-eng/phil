@@ -636,6 +636,13 @@ export default function ClientSession() {
                 </li>
               ))}
             </ol>
+            {(session as any).guidance && (
+              <div className={`border-t pt-3 mt-1 space-y-1.5 ${isGreen ? "border-green-200" : "border-purple-200"}`}>
+                {((session as any).guidance as string).split(/\n\n+/).map((para: string, pi: number) => (
+                  <p key={pi} className={`text-xs leading-relaxed ${isGreen ? "text-green-900/80" : "text-purple-900/80"}`}>{para.trim()}</p>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Feedback section */}

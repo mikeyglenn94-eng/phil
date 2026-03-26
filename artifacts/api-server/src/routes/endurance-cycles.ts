@@ -22,6 +22,7 @@ interface EnduranceCycle {
   equipment: string[];
   tags: string[];
   description: string;
+  guidance?: string;
   intervals: string[];
   weeks: CycleWeek[];
 }
@@ -39,6 +40,8 @@ const cycles: EnduranceCycle[] = [
     tags: ["emom", "ergs", "engine", "endurance", "6-week"],
     description:
       "6-week EMOM progression on the ergs. Duration builds from 24 min up to 39 min in week 5 (target session), then a deload week at 30 min. Use any erg combination — rower, ski, bike. Keep output consistent each round.",
+    guidance:
+      "Set a target number of calories and complete that number of calories each minute through the entire workout. A common target for Rx-level athletes is 20 calories per minute for each station.\n\nScore is the total number of calories completed (for example, if athlete does 20 calories per minute, they will complete 600 total calories for the entire workout).\n\nScaling: Reduce the number of calories per minute to a number which will be challenging to hold each minute for the entire workout.",
     intervals: [
       "1 minute Row",
       "1 minute SkiErg",
@@ -118,6 +121,7 @@ function generateCycleSessions(cycle: EnduranceCycle, startDate: string) {
       name: `${cycle.name} — ${label} (${w.durationMin} min)`,
       source: "endurance_cycle",
       structure: `EMOM ${w.durationMin} min · ${w.note}`,
+      ...(cycle.guidance ? { guidance: cycle.guidance } : {}),
       exercises,
     };
   });
