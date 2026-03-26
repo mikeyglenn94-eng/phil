@@ -157,6 +157,7 @@ export default function ClientArea() {
   }
   // ── WOD Brain (client view) ──
   const [wodClientBrainOpen, setWodClientBrainOpen] = useState(false);
+  const [wodBrainTab, setWodBrainTab] = useState<"workouts" | "cycles">("workouts");
   const [wodClientQuery, setWodClientQuery] = useState("");
   const [wodClientListening, setWodClientListening] = useState(false);
   const [wodClientInterim, setWodClientInterim] = useState("");
@@ -166,6 +167,17 @@ export default function ClientArea() {
   const [wodClientResults, setWodClientResults] = useState<any[]>([]);
   const [wodClientTargetDate, setWodClientTargetDate] = useState("");
   const [wodClientAdding, setWodClientAdding] = useState<string | null>(null);
+
+  // ── Endurance Cycles (inside WOD Brain) ──
+  const [cycleQuery, setCycleQuery] = useState("");
+  const [cycleListening, setCycleListening] = useState(false);
+  const [cycleInterim, setCycleInterim] = useState("");
+  const cycleInterimRef = useRef("");
+  const cycleRecRef = useRef<any>(null);
+  const [cycleSearching, setCycleSearching] = useState(false);
+  const [cycleResults, setCycleResults] = useState<any[]>([]);
+  const [cycleStartDate, setCycleStartDate] = useState("");
+  const [cycleInserting, setCycleInserting] = useState<string | null>(null);
 
   // ── Run Brain (client view) ──
   const [runClientBrainOpen, setRunClientBrainOpen] = useState(false);
@@ -209,7 +221,12 @@ export default function ClientArea() {
     }
     wodClientRecRef.current = makeRec(setWodClientInterim, wodClientInterimRef, setWodClientQuery, setWodClientListening);
     runClientRecRef.current = makeRec(setRunClientInterim, runClientInterimRef, setRunClientQuery, setRunClientListening);
-    return () => { try { wodClientRecRef.current?.abort(); } catch {} try { runClientRecRef.current?.abort(); } catch {} };
+    cycleRecRef.current = makeRec(setCycleInterim, cycleInterimRef, setCycleQuery, setCycleListening);
+    return () => {
+      try { wodClientRecRef.current?.abort(); } catch {}
+      try { runClientRecRef.current?.abort(); } catch {}
+      try { cycleRecRef.current?.abort(); } catch {}
+    };
   }, []);
 
   const toggleWodClientListening = () => {
@@ -247,6 +264,43 @@ export default function ClientArea() {
       if (!(data.results?.length)) toast({ title: "No matching runs found", description: "Try different keywords." });
     } catch { toast({ title: "Run Brain error", variant: "destructive" }); }
     finally { setRunClientSearching(false); }
+  };
+
+  const toggleCycleListening = () => {
+    if (cycleListening) { cycleRecRef.current?.stop(); return; }
+    setCycleListening(true); setCycleInterim(""); cycleInterimRef.current = "";
+    try { cycleRecRef.current?.start(); } catch {}
+  };
+
+  const searchClientCycles = async () => {
+    const q = cycleQuery.trim(); if (!q) return;
+    if (cycleListening) { cycleRecRef.current?.stop(); setCycleListening(false); }
+    setCycleSearching(true);
+    try {
+      const res = await fetch("/api/endurance-cycles/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) });
+      const data = await res.json();
+      setCycleResults(data.results ?? []);
+      if (!(data.results?.length)) toast({ title: "No matching cycles found", description: "Try different keywords." });
+    } catch { toast({ title: "Endurance Cycles error", variant: "destructive" }); }
+    finally { setCycleSearching(false); }
+  };
+
+  const insertCycle = async (cycle: any) => {
+    if (!cycleStartDate) return;
+    setCycleInserting(cycle.id);
+    try {
+      const res = await fetch("/api/endurance-cycles/insert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cycleId: cycle.id, clientId, startDate: cycleStartDate }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({ title: `${cycle.name} added`, description: `${cycle.totalWeeks} sessions from ${format(parseISO(cycleStartDate), "d MMM yyyy")}` });
+      setWodClientBrainOpen(false);
+      setCycleResults([]); setCycleQuery(""); setCycleStartDate("");
+    } catch { toast({ title: "Failed to insert cycle", variant: "destructive" }); }
+    finally { setCycleInserting(null); }
   };
 
   async function addSessionToClientCalendar(date: string, newSession: any, setAdding: (id: string | null) => void, sessionId: string, closeDialog: () => void, label: string) {
@@ -941,11 +995,16 @@ export default function ClientArea() {
         </DialogContent>
       </Dialog>
 
-      {/* WOD Brain Dialog */}
+      {/* WOD Brain Dialog — Workouts + Cycles */}
       <Dialog
         open={wodClientBrainOpen}
         onOpenChange={open => {
-          if (!open) { try { wodClientRecRef.current?.stop(); } catch {} setWodClientListening(false); setWodClientInterim(""); }
+          if (!open) {
+            try { wodClientRecRef.current?.stop(); } catch {}
+            try { cycleRecRef.current?.stop(); } catch {}
+            setWodClientListening(false); setWodClientInterim("");
+            setCycleListening(false); setCycleInterim("");
+          }
           setWodClientBrainOpen(open);
         }}
       >
@@ -955,58 +1014,130 @@ export default function ClientArea() {
               <Brain className="w-5 h-5 text-purple-600" />
               WOD Brain
             </DialogTitle>
-            <DialogDescription>Search 20 WODs and add one to this client's calendar.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 pt-1">
-            <div className="flex gap-2">
-              <Input
-                placeholder="e.g. AMRAP dumbbell engine 15 min…"
-                value={wodClientQuery + (wodClientInterim ? ` ${wodClientInterim}` : "")}
-                onChange={e => setWodClientQuery(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && searchClientWods()}
-                className="flex-1 rounded-xl"
-              />
-              <Button size="icon" variant={wodClientListening ? "destructive" : "outline"} className="shrink-0 rounded-xl" onClick={toggleWodClientListening} title={wodClientListening ? "Stop listening" : "Speak your search"}>
-                {wodClientListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </Button>
-              <Button size="icon" variant="default" className="shrink-0 rounded-xl bg-purple-600 hover:bg-purple-700" onClick={searchClientWods} disabled={!wodClientQuery.trim() || wodClientSearching}>
-                {wodClientSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
-              </Button>
-            </div>
-            {wodClientListening && (
-              <p className="text-xs text-purple-600 animate-pulse">{wodClientInterim ? `"${wodClientInterim}"` : "Listening…"}</p>
-            )}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Target date</label>
-              <input
-                type="date"
-                value={wodClientTargetDate}
-                onChange={e => setWodClientTargetDate(e.target.value)}
-                className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-              />
-            </div>
-            {wodClientResults.length > 0 && (
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {wodClientResults.map((wod: any) => (
-                  <div key={wod.id} className="flex items-start justify-between gap-3 rounded-xl border p-3 bg-purple-50/40">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate">{wod.name}</p>
-                      <p className="text-xs text-muted-foreground">{wod.formatLabel ?? wod.format} · {wod.duration} · {(wod.tags ?? []).join(", ")}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="shrink-0 rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
-                      disabled={!wodClientTargetDate || wodClientAdding === wod.id}
-                      onClick={() => addWodToClientCalendar(wod)}
-                      title={!wodClientTargetDate ? "Choose a date first" : `Add to ${wodClientTargetDate}`}
-                    >
-                      {wodClientAdding === wod.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+
+          {/* Tab switcher */}
+          <div className="flex gap-1 border-b -mx-1 px-1">
+            <button
+              onClick={() => setWodBrainTab("workouts")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${wodBrainTab === "workouts" ? "border-purple-600 text-purple-700" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              <Brain className="w-3.5 h-3.5" /> Workouts <span className="font-normal opacity-60">(20)</span>
+            </button>
+            <button
+              onClick={() => setWodBrainTab("cycles")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${wodBrainTab === "cycles" ? "border-purple-600 text-purple-700" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              <Zap className="w-3.5 h-3.5" /> Endurance Cycles
+            </button>
           </div>
+
+          {/* ── Workouts tab ── */}
+          {wodBrainTab === "workouts" && (
+            <div className="space-y-4 pt-1">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. AMRAP dumbbell engine 15 min…"
+                  value={wodClientQuery + (wodClientInterim ? ` ${wodClientInterim}` : "")}
+                  onChange={e => setWodClientQuery(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && searchClientWods()}
+                  className="flex-1 rounded-xl"
+                />
+                <Button size="icon" variant={wodClientListening ? "destructive" : "outline"} className="shrink-0 rounded-xl" onClick={toggleWodClientListening} title={wodClientListening ? "Stop" : "Speak"}>
+                  {wodClientListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
+                <Button size="icon" className="shrink-0 rounded-xl bg-purple-600 hover:bg-purple-700" onClick={searchClientWods} disabled={!wodClientQuery.trim() || wodClientSearching}>
+                  {wodClientSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+                </Button>
+              </div>
+              {wodClientListening && <p className="text-xs text-purple-600 animate-pulse">{wodClientInterim ? `"${wodClientInterim}"` : "Listening…"}</p>}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Target date</label>
+                <input type="date" value={wodClientTargetDate} onChange={e => setWodClientTargetDate(e.target.value)}
+                  className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+              </div>
+              {wodClientResults.length > 0 && (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {wodClientResults.map((wod: any) => (
+                    <div key={wod.id} className="flex items-start justify-between gap-3 rounded-xl border p-3 bg-purple-50/40">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{wod.name}</p>
+                        <p className="text-xs text-muted-foreground">{wod.formatLabel ?? wod.format} · {wod.duration} min · {(wod.tags ?? []).join(", ")}</p>
+                      </div>
+                      <Button size="sm" className="shrink-0 rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
+                        disabled={!wodClientTargetDate || wodClientAdding === wod.id}
+                        onClick={() => addWodToClientCalendar(wod)}
+                        title={!wodClientTargetDate ? "Choose a date first" : `Add to ${wodClientTargetDate}`}>
+                        {wodClientAdding === wod.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Endurance Cycles tab ── */}
+          {wodBrainTab === "cycles" && (
+            <div className="space-y-4 pt-1">
+              <p className="text-xs text-muted-foreground">
+                A cycle is a <strong>multi-week progressive programme</strong> — one session per week, each with a different duration or load. Inserting a cycle adds all sessions at once.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. EMOM ergs engine endurance…"
+                  value={cycleQuery + (cycleInterim ? ` ${cycleInterim}` : "")}
+                  onChange={e => setCycleQuery(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && searchClientCycles()}
+                  className="flex-1 rounded-xl"
+                />
+                <Button size="icon" variant={cycleListening ? "destructive" : "outline"} className="shrink-0 rounded-xl" onClick={toggleCycleListening} title={cycleListening ? "Stop" : "Speak"}>
+                  {cycleListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
+                <Button size="icon" className="shrink-0 rounded-xl bg-purple-600 hover:bg-purple-700" onClick={searchClientCycles} disabled={!cycleQuery.trim() || cycleSearching}>
+                  {cycleSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+                </Button>
+              </div>
+              {cycleListening && <p className="text-xs text-purple-600 animate-pulse">{cycleInterim ? `"${cycleInterim}"` : "Listening…"}</p>}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Start date (Week 1 anchor)</label>
+                <input type="date" value={cycleStartDate} onChange={e => setCycleStartDate(e.target.value)}
+                  className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+              </div>
+              {cycleResults.length > 0 && (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {cycleResults.map((cycle: any) => (
+                    <div key={cycle.id} className="rounded-xl border p-3 bg-purple-50/40 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{cycle.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {cycle.totalWeeks} weeks · {cycle.durationRange?.min}–{cycle.durationRange?.max} min · {(cycle.tags ?? []).join(", ")}
+                          </p>
+                        </div>
+                        <Button size="sm" className="shrink-0 rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
+                          disabled={!cycleStartDate || cycleInserting === cycle.id}
+                          onClick={() => insertCycle(cycle)}
+                          title={!cycleStartDate ? "Choose a start date first" : `Insert ${cycle.totalWeeks} sessions from ${cycleStartDate}`}>
+                          {cycleInserting === cycle.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                        </Button>
+                      </div>
+                      {cycle.description && (
+                        <p className="text-xs text-muted-foreground leading-relaxed">{cycle.description}</p>
+                      )}
+                      <div className="flex gap-1 flex-wrap">
+                        {(cycle.weeks ?? []).map((w: any) => (
+                          <span key={w.week} className="text-[10px] bg-purple-100 text-purple-700 rounded px-1.5 py-0.5 font-medium">
+                            W{w.week}: {w.durationMin}min
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
