@@ -1366,7 +1366,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   if (moved < 8) {
                                     touchDragRef.current = null;
                                     setTouchDragOverDate(null);
-                                    setSelectedTrainingSession(session);
+                                    if (mode === "client" && prog) {
+                                      setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
+                                    } else {
+                                      setSelectedTrainingSession(session);
+                                    }
                                     return;
                                   }
                                   const el = document.elementFromPoint(t.clientX, t.clientY);
@@ -1378,7 +1382,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   setTouchDragOverDate(null);
                                 }}
                                 onClick={() => {
-                                  if (!touchDragRef.current) setSelectedTrainingSession(session);
+                                  if (touchDragRef.current) return;
+                                  if (mode === "client" && prog) {
+                                    setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
+                                  } else {
+                                    setSelectedTrainingSession(session);
+                                  }
                                 }}
                                 className={`w-full text-left px-1.5 py-1 rounded-md transition-colors text-[10px] leading-tight font-medium truncate block cursor-grab active:cursor-grabbing ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
                               >
@@ -1395,42 +1404,60 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </div>
           )}
 
-          {/* Session detail slide-up panel */}
-          {selectedTrainingSession && (
-            <div className="absolute inset-x-0 bottom-0 bg-background border-t rounded-t-2xl shadow-2xl z-20 max-h-[70%] flex flex-col">
-              <div className="flex items-center justify-between px-5 py-4 border-b">
-                <div>
-                  <h2 className="font-semibold text-base">{selectedTrainingSession.name || "Session"}</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {format(parseISO(selectedTrainingSession.date), "EEEE, d MMMM yyyy")}
-                  </p>
+          {/* Session detail slide-up panel (coach mode only) */}
+          {selectedTrainingSession && (() => {
+            const panelProg = (clientProgrammes ?? []).find(p =>
+              (p.sessions as Session[]).some(s => s.id === selectedTrainingSession.id)
+            );
+            return (
+              <div className="absolute inset-x-0 bottom-0 bg-background border-t rounded-t-2xl shadow-2xl z-20 max-h-[75%] flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+                  <div>
+                    <h2 className="font-semibold text-base">{selectedTrainingSession.name || "Session"}</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {format(parseISO(selectedTrainingSession.date), "EEEE, d MMMM yyyy")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {panelProg && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 px-3 rounded-xl gap-1.5"
+                        onClick={() => setLocation(`/programmes/${panelProg.id}/sessions/${selectedTrainingSession.id}`)}
+                      >
+                        <CalendarDays className="w-3.5 h-3.5" />
+                        Edit session
+                      </Button>
+                    )}
+                    <button onClick={() => setSelectedTrainingSession(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <button onClick={() => setSelectedTrainingSession(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="overflow-y-auto px-5 py-4 space-y-3">
-                {(!selectedTrainingSession.exercises || selectedTrainingSession.exercises.length === 0) ? (
-                  <p className="text-sm text-muted-foreground">No exercises in this session.</p>
-                ) : (
-                  selectedTrainingSession.exercises.map((ex, i) => (
-                    <div key={ex.id ?? i} className="flex items-start gap-3 py-2 border-b last:border-b-0">
-                      <span className="text-xs text-muted-foreground font-mono w-5 shrink-0 pt-0.5">{i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{ex.name}</p>
-                        {ex.sets && ex.reps && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {ex.sets} × {ex.reps}{ex.weight ? ` @ ${ex.weight}` : ""}
-                          </p>
-                        )}
-                        {ex.notes && <p className="text-xs text-muted-foreground/70 mt-0.5 italic">{ex.notes}</p>}
+                <div className="overflow-y-auto px-5 py-4 space-y-3">
+                  {(!selectedTrainingSession.exercises || selectedTrainingSession.exercises.length === 0) ? (
+                    <p className="text-sm text-muted-foreground">No exercises in this session.</p>
+                  ) : (
+                    selectedTrainingSession.exercises.map((ex, i) => (
+                      <div key={ex.id ?? i} className="flex items-start gap-3 py-2 border-b last:border-b-0">
+                        <span className="text-xs text-muted-foreground font-mono w-5 shrink-0 pt-0.5">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{ex.name}</p>
+                          {ex.sets && ex.reps && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {ex.sets} × {ex.reps}{ex.weight ? ` @ ${ex.weight}` : ""}
+                            </p>
+                          )}
+                          {ex.notes && <p className="text-xs text-muted-foreground/70 mt-0.5 italic">{ex.notes}</p>}
+                        </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
