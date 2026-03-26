@@ -239,7 +239,19 @@ Return format:
       return;
     }
 
-    res.json({ sessions: parsed.sessions ?? sessions, changes: parsed.changes ?? [] });
+    // Strip client-logged results from any newly created sessions (e.g. from copy commands)
+    // Existing sessions (same IDs as original) are left untouched so logged data is preserved.
+    const originalIds = new Set(sessions.map((s: any) => s.id));
+    const cleanedSessions = (parsed.sessions ?? sessions).map((s: any) => {
+      if (originalIds.has(s.id)) return s;
+      return {
+        ...s,
+        clientComment: undefined,
+        exercises: (s.exercises ?? []).map(({ setReps: _sr, setWeights: _sw, clientComment: _cc, ...rest }: any) => rest),
+      };
+    });
+
+    res.json({ sessions: cleanedSessions, changes: parsed.changes ?? [] });
   } catch (err) {
     req.log.error({ err }, "Error executing calendar command");
     res.status(500).json({ error: "Failed to execute calendar command" });

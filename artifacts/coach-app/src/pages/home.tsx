@@ -425,17 +425,16 @@ export default function Home() {
     if (!copiedSession || !selectedProgramme) return;
     const dateStr = format(date, "yyyy-MM-dd");
 
-    // Build a fresh session: new ID, new date, new exercise IDs, clear logged weights/reps
+    // Build a fresh session: new ID, new date, new exercise IDs, clear all client-logged data
     const newSession: Session = {
+      ...copiedSession,
       id: `session-${Date.now()}`,
       date: dateStr,
-      name: copiedSession.name,
-      exercises: (copiedSession.exercises || []).map(ex => ({
-        ...ex,
-        id: `ex-${Math.random().toString(36).slice(2, 8)}`,
-        setWeights: undefined,
-        setReps: undefined,
-      })),
+      clientComment: undefined,
+      exercises: (copiedSession.exercises || []).map(ex => {
+        const { setReps: _sr, setWeights: _sw, clientComment: _cc, ...rest } = ex;
+        return { ...rest, id: `ex-${Math.random().toString(36).slice(2, 8)}` };
+      }),
     };
 
     const updatedSessions = [...(selectedProgramme.sessions || []), newSession];
