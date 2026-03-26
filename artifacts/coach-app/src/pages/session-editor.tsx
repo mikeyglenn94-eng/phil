@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRoute, useLocation, useSearch } from "wouter";
 import { VoiceInput } from "@/components/voice-input";
 import { ExerciseCard } from "@/components/exercise-card";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, ArrowLeft, Plus, Calendar, Brain, Zap, Trash2 } from "lucide-react";
+import { Loader2, Save, ArrowLeft, Plus, Calendar, Brain, Zap, Trash2, CheckCircle2 } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -57,6 +57,8 @@ export default function SessionEditor() {
   const [sessionDate, setSessionDate] = useState(dateFromUrl);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const existingSession = useMemo(() => {
     if (!programme?.sessions || isNew) return null;
@@ -79,11 +81,11 @@ export default function SessionEditor() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      setExercises(items => {
-        const oldIndex = items.findIndex(i => i.id === active.id);
-        const newIndex = items.findIndex(i => i.id === over.id);
-        return arrayMove(items, oldIndex, newIndex);
-      });
+      const oldIndex = exercises.findIndex(i => i.id === active.id);
+      const newIndex = exercises.findIndex(i => i.id === over.id);
+      const next = arrayMove(exercises, oldIndex, newIndex);
+      setExercises(next);
+      scheduleAutosave(next, sessionName, sessionDate);
     }
   };
 
@@ -93,6 +95,7 @@ export default function SessionEditor() {
         data: { transcript, existingExercises: exercises }
       });
       setExercises(response.exercises);
+      scheduleAutosave(response.exercises, sessionName, sessionDate);
 
       // Show a meaningful description of what changed
       const changes = (response as any).changes as string[] | undefined;
@@ -119,11 +122,15 @@ export default function SessionEditor() {
   };
 
   const updateExercise = (exerciseId: string, updates: Partial<Exercise>) => {
-    setExercises(current => current.map(ex => ex.id === exerciseId ? { ...ex, ...updates } : ex));
+    const next = exercises.map(ex => ex.id === exerciseId ? { ...ex, ...updates } : ex);
+    setExercises(next);
+    scheduleAutosave(next, sessionName, sessionDate);
   };
 
   const deleteExercise = (exerciseId: string) => {
-    setExercises(current => current.filter(ex => ex.id !== exerciseId));
+    const next = exercises.filter(ex => ex.id !== exerciseId);
+    setExercises(next);
+    scheduleAutosave(next, sessionName, sessionDate);
   };
 
   const addEmptyExercise = () => {
@@ -132,7 +139,38 @@ export default function SessionEditor() {
       name: "New Exercise",
       sets: null, reps: null, rpe: null, rest: null, tempo: null, notes: null, weekProgression: []
     };
-    setExercises([...exercises, newEx]);
+    const next = [...exercises, newEx];
+    setExercises(next);
+    scheduleAutosave(next, sessionName, sessionDate);
+  };
+
+  const handleSaveQuiet = async (currentExercises: Exercise[], currentName: string, currentDate: string) => {
+    if (!programme || isNew || isSaving) return;
+    setIsSaving(true);
+    setSaveStatus("saving");
+    try {
+      const session: Session = {
+        id: sessionId!,
+        date: currentDate,
+        name: currentName || undefined,
+        exercises: currentExercises,
+      };
+      const updatedSessions = (programme.sessions || []).map((s: Session) => s.id === sessionId ? session : s);
+      await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
+      queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("unsaved");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const scheduleAutosave = (currentExercises: Exercise[], currentName: string, currentDate: string) => {
+    if (isNew) return;
+    setSaveStatus("unsaved");
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => handleSaveQuiet(currentExercises, currentName, currentDate), 1500);
   };
 
   const handleSave = async () => {
@@ -153,12 +191,10 @@ export default function SessionEditor() {
         updatedSessions = (programme.sessions || []).map((s: Session) => s.id === sessionId ? session : s);
       }
 
-      await updateMutation.mutateAsync({
-        id: programmeId,
-        data: { sessions: updatedSessions }
-      });
-
+      await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
       queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      setSaveStatus("saved");
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
       toast({ title: "Session saved!" });
       setLocation(`/`);
     } catch {
@@ -213,13 +249,13 @@ export default function SessionEditor() {
                 <input
                   type="date"
                   value={sessionDate}
-                  onChange={e => setSessionDate(e.target.value)}
+                  onChange={e => { setSessionDate(e.target.value); scheduleAutosave(exercises, sessionName, e.target.value); }}
                   className="text-xs text-muted-foreground bg-transparent border-none outline-none cursor-pointer"
                 />
               </div>
               <Input
                 value={sessionName}
-                onChange={e => setSessionName(e.target.value)}
+                onChange={e => { setSessionName(e.target.value); scheduleAutosave(exercises, e.target.value, sessionDate); }}
                 className="text-xl font-bold border-transparent hover:border-input focus:border-primary shadow-none h-9 px-2 rounded-lg"
                 placeholder="Session name (e.g. Quads, Upper Body...)"
               />
@@ -236,13 +272,20 @@ export default function SessionEditor() {
               <Trash2 className="w-4 h-4" />
             </Button>
           )}
+          {!isNew && saveStatus !== "unsaved" && (
+            <span className={`text-xs shrink-0 flex items-center gap-1 ${saveStatus === "saving" ? "text-muted-foreground" : "text-green-600"}`}>
+              {saveStatus === "saving"
+                ? <><Loader2 className="w-3 h-3 animate-spin" />Saving…</>
+                : <><CheckCircle2 className="w-3 h-3" />Saved</>}
+            </span>
+          )}
           <Button
             onClick={handleSave}
             disabled={isSaving || parseMutation.isPending}
             className="rounded-xl px-6 shrink-0"
           >
             {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            Save
+            {isNew ? "Save" : "Done"}
           </Button>
         </div>
 

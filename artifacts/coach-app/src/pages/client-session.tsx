@@ -64,6 +64,8 @@ export default function ClientSession() {
   const [logs, setLogs] = useState<LogState>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const autosaveTimerRef_cs = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSaveRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
 
   // Swap UI state
   const [swappingExId, setSwappingExId] = useState<string | null>(null);
@@ -260,6 +262,7 @@ export default function ClientSession() {
         return { ...prev, [exId]: current };
       });
       setSaved(false);
+      scheduleClientAutosave();
       toast({ title: "Log parsed!" });
     } catch {
       toast({ title: "Couldn't parse log — try again", variant: "destructive" });
@@ -419,6 +422,7 @@ export default function ClientSession() {
       setAddInput("");
       setAddPanelOpen(false);
       setSaved(false);
+      scheduleClientAutosave();
       toast({
         title: newExercises.length === 1
           ? `Added "${newExercises[0].name}"`
@@ -435,6 +439,7 @@ export default function ClientSession() {
     setAddedExercises(prev => prev.filter(e => e.id !== exId));
     setLogs(prev => { const n = { ...prev }; delete n[exId]; return n; });
     setSaved(false);
+    scheduleClientAutosave();
   };
 
   const confirmSwap = (exId: string) => {
@@ -447,6 +452,7 @@ export default function ClientSession() {
       return { ...prev, [exId]: Array.from({ length: setsCount }, () => ({ weight: null, reps: null })) };
     });
     setSaved(false);
+    scheduleClientAutosave();
     setSwappingExId(null);
     setSwapText("");
     toast({ title: `Exercise swapped to "${name}"` });
@@ -462,9 +468,16 @@ export default function ClientSession() {
       return { ...prev, [exId]: current };
     });
     setSaved(false);
+    scheduleClientAutosave();
   };
 
-  const handleSave = async () => {
+  // Keep ref always pointing to latest handleSave (so debounced timers have fresh state)
+  const scheduleClientAutosave = () => {
+    if (autosaveTimerRef_cs.current) clearTimeout(autosaveTimerRef_cs.current);
+    autosaveTimerRef_cs.current = setTimeout(() => { handleSaveRef.current?.(true); }, 1500);
+  };
+
+  const handleSave = async (silent = false) => {
     if (!programme || !session) return;
     setIsSaving(true);
     try {
@@ -492,11 +505,13 @@ export default function ClientSession() {
       await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
       queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
       setSaved(true);
-      toast({ title: "Session saved!" });
+      if (!silent) toast({ title: "Session saved!" });
     } catch {
-      toast({ title: "Error saving", variant: "destructive" });
+      if (!silent) toast({ title: "Error saving", variant: "destructive" });
     } finally { setIsSaving(false); }
   };
+  // Keep ref current so debounced timers always call the freshest version
+  handleSaveRef.current = handleSave;
 
   if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!session) return (
@@ -627,7 +642,7 @@ export default function ClientSession() {
                 className="w-full bg-transparent text-sm rounded-xl px-3 py-3 pr-10 resize-none outline-none min-h-[80px]"
                 placeholder="How did it feel? Any notes for your coach…"
                 value={sessionCommentListening ? (sessionCommentInterim || sessionComment) : sessionComment}
-                onChange={e => { setSessionComment(e.target.value); setSaved(false); }}
+                onChange={e => { setSessionComment(e.target.value); setSaved(false); scheduleClientAutosave(); }}
                 disabled={sessionCommentListening}
               />
               <button
@@ -828,7 +843,7 @@ export default function ClientSession() {
                 <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-muted bg-muted/20 hover:border-muted-foreground/30"}`}>
                   <textarea
                     value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
-                    onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); }}
+                    onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
                     placeholder="Leave a comment for your coach…"
                     rows={2}
                     disabled={commentListeningFor === ex.id}
@@ -946,7 +961,7 @@ export default function ClientSession() {
                 <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-muted bg-muted/20 hover:border-muted-foreground/30"}`}>
                   <textarea
                     value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
-                    onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); }}
+                    onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
                     placeholder="Leave a comment for your coach…"
                     rows={2}
                     disabled={commentListeningFor === ex.id}
