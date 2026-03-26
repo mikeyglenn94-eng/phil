@@ -227,8 +227,8 @@ export default function SessionEditor() {
     ? `${sessionName} — ${format(parseISO(safeDate), "EEE d MMM")}`
     : format(parseISO(safeDate), "EEEE, d MMMM yyyy");
 
-  const sessionSource = (existingSession as any)?.source as "wod_brain" | "run_brain" | undefined;
-  const isConditioningSession = sessionSource === "wod_brain" || sessionSource === "run_brain";
+  const sessionSource = (existingSession as any)?.source as "wod_brain" | "run_brain" | "endurance_cycle" | undefined;
+  const isConditioningSession = sessionSource === "wod_brain" || sessionSource === "run_brain" || sessionSource === "endurance_cycle";
   const sessionStructure = (existingSession as any)?.structure as string | undefined;
 
   return (
@@ -322,33 +322,47 @@ export default function SessionEditor() {
 
             {isConditioningSession ? (
               <div className="space-y-4">
-              <div className={`rounded-2xl border p-5 space-y-4 ${sessionSource === "run_brain" ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
-                <div className="flex items-center gap-2">
-                  {sessionSource === "run_brain"
-                    ? <Zap className="w-4 h-4 text-green-600 shrink-0" />
-                    : <Brain className="w-4 h-4 text-purple-600 shrink-0" />
-                  }
-                  <span className={`text-xs font-bold uppercase tracking-wide ${sessionSource === "run_brain" ? "text-green-700" : "text-purple-700"}`}>
-                    {sessionSource === "run_brain" ? "Run Brain" : "WOD Brain"}
-                  </span>
+              {(() => {
+                const isGreen = sessionSource === "run_brain" || sessionSource === "endurance_cycle";
+                const srcLabel = sessionSource === "run_brain" ? "Run Brain" : sessionSource === "endurance_cycle" ? "Endurance Cycle" : "WOD Brain";
+                const guidance = (existingSession as any)?.guidance as string | undefined;
+                return (
+                <div className={`rounded-2xl border p-5 space-y-4 ${isGreen ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
+                  <div className="flex items-center gap-2">
+                    {isGreen
+                      ? <Zap className="w-4 h-4 text-green-600 shrink-0" />
+                      : <Brain className="w-4 h-4 text-purple-600 shrink-0" />
+                    }
+                    <span className={`text-xs font-bold uppercase tracking-wide ${isGreen ? "text-green-700" : "text-purple-700"}`}>
+                      {srcLabel}
+                    </span>
+                  </div>
+                  {sessionStructure && (
+                    <p className={`text-sm italic leading-relaxed ${isGreen ? "text-green-900" : "text-purple-900"}`}>
+                      {sessionStructure}
+                    </p>
+                  )}
+                  <ol className="space-y-2">
+                    {exercises.map((ex, i) => (
+                      <li key={ex.id} className="flex items-baseline gap-3">
+                        <span className={`text-sm font-bold shrink-0 w-5 ${isGreen ? "text-green-600" : "text-purple-600"}`}>{i + 1}.</span>
+                        <div>
+                          <span className="text-sm font-semibold text-foreground capitalize">{ex.name}</span>
+                          {ex.notes && <span className="text-sm text-muted-foreground ml-2">{ex.notes}</span>}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                  {guidance && (
+                    <div className={`border-t pt-3 mt-1 space-y-1.5 ${isGreen ? "border-green-200" : "border-purple-200"}`}>
+                      {guidance.split(/\n\n+/).map((para, pi) => (
+                        <p key={pi} className={`text-xs leading-relaxed ${isGreen ? "text-green-900/80" : "text-purple-900/80"}`}>{para.trim()}</p>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {sessionStructure && (
-                  <p className={`text-sm italic leading-relaxed ${sessionSource === "run_brain" ? "text-green-900" : "text-purple-900"}`}>
-                    {sessionStructure}
-                  </p>
-                )}
-                <ol className="space-y-2">
-                  {exercises.map((ex, i) => (
-                    <li key={ex.id} className="flex items-baseline gap-3">
-                      <span className={`text-sm font-bold shrink-0 w-5 ${sessionSource === "run_brain" ? "text-green-600" : "text-purple-600"}`}>{i + 1}.</span>
-                      <div>
-                        <span className="text-sm font-semibold text-foreground capitalize">{ex.name}</span>
-                        {ex.notes && <span className="text-sm text-muted-foreground ml-2">{ex.notes}</span>}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </div>
+                );
+              })()}
               {/* Client feedback (read-only for coach) */}
               {(existingSession as any)?.clientComment && (
                 <div className="rounded-xl border bg-muted/30 p-4 space-y-1">
