@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut } from "lucide-react";
+import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format, startOfWeek, addWeeks, addDays, isSameDay, parseISO, differenceInDays } from "date-fns";
@@ -31,12 +32,18 @@ import {
 
 type Tab = "training" | "nutrition";
 
-export default function ClientArea() {
+interface ClientAreaProps {
+  clientIdOverride?: number;
+  mode?: "coach" | "client";
+}
+
+export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientAreaProps = {}) {
   const [, params] = useRoute("/clients/:clientId");
   const [, setLocation] = useLocation();
-  const clientId = parseInt(params?.clientId || "0", 10);
+  const clientId = clientIdOverride ?? parseInt(params?.clientId || "0", 10);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { clearClient } = useClientContext();
 
   const { data: client, isLoading: clientLoading } = useGetClient(clientId);
   const { data: masterProgrammes } = useListProgrammes(); // master programmes (no clientId)
@@ -867,36 +874,62 @@ export default function ClientArea() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setLocation("/clients")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
+          {mode === "coach" && (
+            <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setLocation("/clients")}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          )}
+          {mode === "client" && (
+            <div className="flex items-center gap-2 mr-1">
+              <div className="bg-primary/15 p-1.5 rounded-lg">
+                <Dumbbell className="w-4 h-4 text-primary" />
+              </div>
+              <span className="font-display font-bold text-sm leading-none text-foreground/70">Cue <span className="text-primary">Coaching</span></span>
+            </div>
+          )}
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
               {client.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
             </div>
             <h1 className="font-display font-bold text-lg truncate">{client.name}</h1>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={openGoalsDialog}
-            className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-            title="Set daily macro & calorie goals"
-          >
-            <Target className="w-3.5 h-3.5" />
-            Goals
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleResetPassword}
-            disabled={resettingPassword}
-            className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-            title="Reset client's portal password"
-          >
-            {resettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
-            Reset PW
-          </Button>
+          {mode === "coach" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openGoalsDialog}
+              className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+              title="Set daily macro & calorie goals"
+            >
+              <Target className="w-3.5 h-3.5" />
+              Goals
+            </Button>
+          )}
+          {mode === "coach" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleResetPassword}
+              disabled={resettingPassword}
+              className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+              title="Reset client's portal password"
+            >
+              {resettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+              Reset PW
+            </Button>
+          )}
+          {mode === "client" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearClient}
+              className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+              title="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sign out
+            </Button>
+          )}
         </div>
 
         {/* Tabs */}
