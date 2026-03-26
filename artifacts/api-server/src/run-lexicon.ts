@@ -126,7 +126,9 @@ function formatVolume(metres?: number, minutes?: number, seconds?: number): stri
 
 function formatEffort(block: RunBlock): string {
   if (block.paceType && PACE_LEXICON[block.paceType]) {
-    return `${PACE_LEXICON[block.paceType].label.toLowerCase()} pace`;
+    const label = PACE_LEXICON[block.paceType].label.toLowerCase();
+    // Avoid "5k pace pace" — if label already ends with "pace", don't append it again
+    return label.endsWith("pace") ? label : `${label} pace`;
   }
   if (block.effortType) {
     // Effort types that also exist in the pace lexicon (e.g. "sprint") are rendered as pace labels

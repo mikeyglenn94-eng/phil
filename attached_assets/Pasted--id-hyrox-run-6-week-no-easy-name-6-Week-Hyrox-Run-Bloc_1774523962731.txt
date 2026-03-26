@@ -1,0 +1,158 @@
+{
+  "id": "hyrox-run-6-week-no-easy",
+  "name": "6 Week Hyrox Run Block (No Easy Runs)",
+  "category": "endurance_block",
+  "focus": "running_hyrox",
+  "duration_weeks": 6,
+  "sessions_per_week": 3,
+  "notes": "All runs are quality-based. No pure easy runs included.",
+  "weeks": [
+
+    {
+      "week": 1,
+      "sessions": [
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 6, "work_distance_metres": 800, "pace_type": "tempo", "rest_seconds": 90}
+          ]
+        },
+        {
+          "session_type": "tempo_intervals",
+          "blocks": [
+            {"reps": 3, "work_duration_minutes": 6, "pace_type": "tempo", "rest_minutes": 2}
+          ]
+        },
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 10, "work_duration_seconds": 60, "pace_type": "interval", "rest_seconds": 60}
+          ]
+        }
+      ]
+    },
+
+    {
+      "week": 2,
+      "sessions": [
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 7, "work_distance_metres": 800, "pace_type": "tempo", "rest_seconds": 90}
+          ]
+        },
+        {
+          "session_type": "tempo_intervals",
+          "blocks": [
+            {"reps": 3, "work_duration_minutes": 8, "pace_type": "tempo", "rest_minutes": 2}
+          ]
+        },
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 12, "work_duration_seconds": 60, "pace_type": "interval", "rest_seconds": 60}
+          ]
+        }
+      ]
+    },
+
+    {
+      "week": 3,
+      "sessions": [
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 5, "work_distance_metres": 1000, "pace_type": "p5k", "rest_seconds": 120}
+          ]
+        },
+        {
+          "session_type": "tempo_run",
+          "blocks": [
+            {"duration_minutes": 20, "pace_type": "tempo"}
+          ]
+        },
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 8, "work_duration_seconds": 90, "pace_type": "interval", "rest_seconds": 90}
+          ]
+        }
+      ]
+    },
+
+    {
+      "week": 4,
+      "sessions": [
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 6, "work_distance_metres": 1000, "pace_type": "p5k", "rest_seconds": 120}
+          ]
+        },
+        {
+          "session_type": "tempo_intervals",
+          "blocks": [
+            {"reps": 2, "work_duration_minutes": 12, "pace_type": "tempo", "rest_minutes": 2}
+          ]
+        },
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 10, "work_duration_seconds": 90, "pace_type": "interval", "rest_seconds": 90}
+          ]
+        }
+      ]
+    },
+
+    {
+      "week": 5,
+      "sessions": [
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 4, "work_distance_metres": 1200, "pace_type": "p5k", "rest_seconds": 120}
+          ]
+        },
+        {
+          "session_type": "tempo_run",
+          "blocks": [
+            {"duration_minutes": 25, "pace_type": "tempo"}
+          ]
+        },
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 6, "work_distance_metres": 1000, "pace_type": "interval", "rest_seconds": 90}
+          ]
+        }
+      ]
+    },
+
+    {
+      "week": 6,
+      "sessions": [
+        {
+          "session_type": "intervals",
+          "blocks": [
+            {"reps": 3, "work_distance_metres": 1000, "pace_type": "p5k", "rest_seconds": 120}
+          ],
+          "notes": "reduced volume, keep sharp"
+        },
+        {
+          "session_type": "tempo_run",
+          "blocks": [
+            {"duration_minutes": 15, "pace_type": "tempo"}
+          ]
+        },
+        {
+          "session_type": "time_trial",
+          "blocks": [
+            {"distance_metres": 8000, "effort_type": "max_effort"}
+          ],
+          "notes": "Hyrox-style run test"
+        }
+      ]
+    }
+
+  ]
+}
