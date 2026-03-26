@@ -492,7 +492,7 @@ export default function Home() {
 
       {/* Top Bar */}
       <div className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b bg-background shrink-0">
-        <div className="flex items-center gap-1 sm:gap-3 min-w-0">
+        <div className="hidden sm:flex items-center gap-1 sm:gap-3 min-w-0">
           {/* Programme Selector */}
           {programmes && programmes.length > 0 ? (
             <DropdownMenu>
@@ -542,7 +542,7 @@ export default function Home() {
           )}
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 flex-1 sm:flex-none justify-between sm:justify-end">
           {/* Week navigation */}
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setWeekOffset(w => w - 1)}>
