@@ -261,6 +261,122 @@ const templates: StrengthBlockTemplate[] = [
       },
     ],
   },
+
+  {
+    id: "russian-progression-template-sbd",
+    name: "Russian Progression Template (SBD)",
+    liftFocus: "squat,bench,deadlift",
+    durationWeeks: 6,
+    sessionsPerWeek: 3,
+    level: "intermediate",
+    tags: ["powerlifting", "SBD", "squat", "bench", "deadlift", "russian", "progression", "percentage", "6_week"],
+    description: "6-week Russian-style percentage-based progression across all three powerlifting lifts. Reps cycle upward across the first 3 weeks, then intensity ramps from 85% to 100% with a 1RM test on deadlift in Week 6.",
+    notes: "Mon = Back Squat · Wed = Bench Press · Fri = Deadlift. All percentages based on current 1RM. Week 6 Fri = 1RM test on deadlift.",
+    weeks: [
+      {
+        week: 1, label: "Volume Foundation — Week 1",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 6×2 @ 80%",
+            exercises: [{ name: "Back Squat", sets: 6, reps: "2", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 6×3 @ 80%",
+            exercises: [{ name: "Bench Press", sets: 6, reps: "3", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 6×2 @ 80%",
+            exercises: [{ name: "Deadlift", sets: 6, reps: "2", percentage: "80%" }],
+          },
+        ],
+      },
+      {
+        week: 2, label: "Volume Build — Week 2",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 6×4 @ 80%",
+            exercises: [{ name: "Back Squat", sets: 6, reps: "4", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 6×2 @ 80%",
+            exercises: [{ name: "Bench Press", sets: 6, reps: "2", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 6×5 @ 80%",
+            exercises: [{ name: "Deadlift", sets: 6, reps: "5", percentage: "80%" }],
+          },
+        ],
+      },
+      {
+        week: 3, label: "Volume Peak — Week 3",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 6×2 @ 80%",
+            exercises: [{ name: "Back Squat", sets: 6, reps: "2", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 6×6 @ 80%",
+            exercises: [{ name: "Bench Press", sets: 6, reps: "6", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 6×2 @ 80%",
+            exercises: [{ name: "Deadlift", sets: 6, reps: "2", percentage: "80%" }],
+          },
+        ],
+      },
+      {
+        week: 4, label: "Intensity Shift — Week 4",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 5×5 @ 85%",
+            exercises: [{ name: "Back Squat", sets: 5, reps: "5", percentage: "85%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 6×2 @ 80%",
+            exercises: [{ name: "Bench Press", sets: 6, reps: "2", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 4×4 @ 90%",
+            exercises: [{ name: "Deadlift", sets: 4, reps: "4", percentage: "90%" }],
+          },
+        ],
+      },
+      {
+        week: 5, label: "Near-Max Intensification — Week 5",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 6×2 @ 80%",
+            exercises: [{ name: "Back Squat", sets: 6, reps: "2", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 3×3 @ 95%",
+            exercises: [{ name: "Bench Press", sets: 3, reps: "3", percentage: "95%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 6×2 @ 80%",
+            exercises: [{ name: "Deadlift", sets: 6, reps: "2", percentage: "80%" }],
+          },
+        ],
+      },
+      {
+        week: 6, label: "Max Test Week — Week 6",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Back Squat — 2×2 @ 100%",
+            exercises: [{ name: "Back Squat", sets: 2, reps: "2", percentage: "100%" }],
+          },
+          {
+            dayOfWeek: 3, name: "Bench Press — 6×2 @ 80%",
+            exercises: [{ name: "Bench Press", sets: 6, reps: "2", percentage: "80%" }],
+          },
+          {
+            dayOfWeek: 5, name: "Deadlift — 1RM Test",
+            exercises: [{ name: "Deadlift", sets: 1, reps: "1", percentage: "", notes: "Test new 1RM" }],
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,6 +391,8 @@ function scoreTemplate(template: StrengthBlockTemplate, query: string): number {
   if (q.includes("smolov jr") && template.id === "smolov_jr") score += 20;
   if ((q.includes("smolov senior") || q.includes("full smolov")) && template.id === "smolov_senior") score += 20;
   if ((q.includes("russian") || q.includes("rsr")) && template.id === "russian_squat") score += 20;
+  if ((q.includes("russian progression") || q.includes("russian sbd") || q.includes("russian template")) && template.id === "russian-progression-template-sbd") score += 25;
+  if ((q.includes("russian") || q.includes("progression template")) && template.id === "russian-progression-template-sbd") score += 12;
   if ((q.includes("beginner") || q.includes("starter") || q.includes("start")) && template.level === "beginner") score += 10;
 
   // Level
