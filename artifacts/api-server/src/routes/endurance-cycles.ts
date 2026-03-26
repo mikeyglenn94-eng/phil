@@ -22,6 +22,7 @@ interface EnduranceCycle {
   equipment: string[];
   tags: string[];
   description: string;
+  intervals: string[];
   weeks: CycleWeek[];
 }
 
@@ -38,6 +39,12 @@ const cycles: EnduranceCycle[] = [
     tags: ["emom", "ergs", "engine", "endurance", "6-week"],
     description:
       "6-week EMOM progression on the ergs. Duration builds from 24 min up to 39 min in week 5 (target session), then a deload week at 30 min. Use any erg combination — rower, ski, bike. Keep output consistent each round.",
+    intervals: [
+      "1 minute Row",
+      "1 minute SkiErg",
+      "1 minute Assault Bike",
+      "1 minute Rest",
+    ],
     weeks: [
       { week: 1, durationMin: 24, note: "6 rounds" },
       { week: 2, durationMin: 28, note: "7 rounds" },
@@ -83,23 +90,35 @@ function generateCycleSessions(cycle: EnduranceCycle, startDate: string) {
       : isTarget
         ? "Target Session"
         : `Week ${w.week}`;
+    const intervals = cycle.intervals ?? [];
+    const exercises = intervals.length > 0
+      ? intervals.map((interval) => ({
+          id: `ex-${randomUUID()}`,
+          name: interval,
+          sets: null,
+          reps: null,
+          rpe: null,
+          notes: null,
+          rawText: interval,
+        }))
+      : [
+          {
+            id: `ex-${randomUUID()}`,
+            name: "EMOM on Ergs",
+            sets: null,
+            reps: null,
+            rpe: null,
+            notes: `${w.durationMin} min · ${w.note}`,
+            rawText: `EMOM ${w.durationMin} min — ${w.note}`,
+          },
+        ];
     return {
       id: `ec-${randomUUID()}`,
       date: dateStr,
       name: `${cycle.name} — ${label} (${w.durationMin} min)`,
       source: "endurance_cycle",
-      structure: `EMOM ${w.durationMin}: ${w.note}`,
-      exercises: [
-        {
-          id: `ex-${randomUUID()}`,
-          name: "EMOM on Ergs",
-          sets: null,
-          reps: null,
-          rpe: null,
-          notes: `${w.durationMin} min · ${w.note}`,
-          rawText: `EMOM ${w.durationMin} min — ${w.note}`,
-        },
-      ],
+      structure: `EMOM ${w.durationMin} min · ${w.note}`,
+      exercises,
     };
   });
 }
