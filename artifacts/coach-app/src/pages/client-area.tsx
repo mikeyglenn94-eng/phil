@@ -1199,7 +1199,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   size="sm"
                   variant="outline"
                   className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
-                  onClick={() => { setWodClientResults([]); setWodClientQuery(""); setWodClientTargetDate(""); setWodClientBrainOpen(true); }}
+                  onClick={() => { setWodClientResults([]); setWodClientQuery(""); setWodClientTargetDate(format(new Date(), "yyyy-MM-dd")); setWodClientBrainOpen(true); }}
                 >
                   <Brain className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">WOD Brain</span>
@@ -1208,7 +1208,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   size="sm"
                   variant="outline"
                   className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-green-200 text-green-700 hover:bg-green-50"
-                  onClick={() => { setRunClientResults([]); setRunClientQuery(""); setRunClientTargetDate(""); setRunClientBrainOpen(true); }}
+                  onClick={() => { setRunClientResults([]); setRunClientQuery(""); setRunClientTargetDate(format(new Date(), "yyyy-MM-dd")); setRunClientBrainOpen(true); }}
                 >
                   <Zap className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Run Brain</span>
@@ -1217,7 +1217,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   size="sm"
                   variant="outline"
                   className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-orange-200 text-orange-700 hover:bg-orange-50"
-                  onClick={() => { setStrengthResults([]); setStrengthQuery(""); setStrengthStartDate(""); setStrengthBrainOpen(true); }}
+                  onClick={() => { setStrengthResults([]); setStrengthQuery(""); setStrengthStartDate(format(new Date(), "yyyy-MM-dd")); setStrengthBrainOpen(true); }}
                 >
                   <Dumbbell className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Strength Brain</span>
