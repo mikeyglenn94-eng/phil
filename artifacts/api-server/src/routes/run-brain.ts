@@ -200,4 +200,15 @@ router.post("/run-brain/search", async (req, res): Promise<void> => {
   res.json({ results, filters });
 });
 
+// ── Exported for unified Brain search ──────────────────────────────────────
+export function searchRunsSync(query: string, limit = 3) {
+  const filters = parseRunInput(query);
+  const scored = runWorkouts
+    .map(w => ({ ...w, score: scoreRunWorkout(w, filters), intensityLabel: INTENSITY_LABELS[w.intensity] ?? w.intensity }))
+    .filter(w => w.score >= 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return (scored.length > 0 ? scored : runWorkouts.slice(0, limit).map(w => ({ ...w, score: 1, intensityLabel: INTENSITY_LABELS[w.intensity] ?? w.intensity })));
+}
+
 export default router;

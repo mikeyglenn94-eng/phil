@@ -194,4 +194,14 @@ router.post("/endurance-cycles/insert", async (req, res): Promise<void> => {
   res.status(201).json({ programme, sessionCount: sessions.length });
 });
 
+// ── Exported for unified Brain search ──────────────────────────────────────
+export function searchCyclesSync(query: string, limit = 3) {
+  const scored = cycles
+    .map(c => ({ ...c, score: scoreCycle(c, query) }))
+    .filter(c => c.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return (scored.length > 0 ? scored : cycles.slice(0, limit).map(c => ({ ...c, score: 1 })));
+}
+
 export default router;

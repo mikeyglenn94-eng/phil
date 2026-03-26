@@ -189,4 +189,15 @@ router.post("/wod-brain/search", async (req, res): Promise<void> => {
   res.json({ results, filters });
 });
 
+// ── Exported for unified Brain search ──────────────────────────────────────
+export function searchWodsSync(query: string, limit = 3) {
+  const filters = parseInput(query);
+  const scored = builtinWorkouts
+    .map(w => ({ ...w, score: scoreWorkout(w, filters), formatLabel: FORMAT_LABELS[w.format] ?? w.format }))
+    .filter(w => w.score >= 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return (scored.length > 0 ? scored : builtinWorkouts.slice(0, limit).map(w => ({ ...w, score: 1, formatLabel: FORMAT_LABELS[w.format] ?? w.format })));
+}
+
 export default router;

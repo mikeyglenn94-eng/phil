@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format, startOfWeek, addWeeks, addDays, isSameDay, parseISO } from "date-fns";
@@ -444,6 +444,123 @@ export default function ClientArea() {
     } finally { setStrengthInserting(null); }
   };
 
+  // ── Universal Brain ──
+  const [brainOpen, setBrainOpen] = useState(false);
+  const [brainQuery, setBrainQuery] = useState("");
+  const [brainListening, setBrainListening] = useState(false);
+  const [brainInterim, setBrainInterim] = useState("");
+  const brainInterimRef = useRef("");
+  const brainRecRef = useRef<any>(null);
+  const [brainSearching, setBrainSearching] = useState(false);
+  const [brainResults, setBrainResults] = useState<any[]>([]);
+  const [brainIntent, setBrainIntent] = useState<string | null>(null);
+  const [brainDates, setBrainDates] = useState<Record<string, string>>({});
+  const [brainAdding, setBrainAdding] = useState<string | null>(null);
+
+  const startBrainVoice = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.continuous = false; rec.interimResults = true; rec.lang = "en-US";
+    brainInterimRef.current = "";
+    rec.onresult = (e: any) => {
+      let interim = ""; let final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t; else interim += t;
+      }
+      brainInterimRef.current = final || interim;
+      setBrainInterim(brainInterimRef.current);
+    };
+    rec.onend = () => { setBrainListening(false); if (brainInterimRef.current) setBrainQuery(brainInterimRef.current); };
+    rec.start();
+    brainRecRef.current = rec;
+    setBrainListening(true);
+  };
+
+  const stopBrainVoice = () => { brainRecRef.current?.stop(); setBrainListening(false); };
+
+  const searchBrain = async (q: string) => {
+    const query = q.trim();
+    if (!query) return;
+    setBrainSearching(true);
+    setBrainResults([]);
+    setBrainIntent(null);
+    try {
+      const res = await fetch("/api/brain/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const data = await res.json();
+      setBrainResults(data.results ?? []);
+      setBrainIntent(data.intent ?? null);
+      // Pre-fill dates to today for each result
+      const today = format(new Date(), "yyyy-MM-dd");
+      const dates: Record<string, string> = {};
+      (data.results ?? []).forEach((r: any) => { dates[r.id] = today; });
+      setBrainDates(dates);
+    } catch { toast({ title: "Brain search failed", variant: "destructive" }); }
+    finally { setBrainSearching(false); }
+  };
+
+  const brainAddItem = async (result: any) => {
+    const date = brainDates[result.id] ?? format(new Date(), "yyyy-MM-dd");
+    if (!clientId) return;
+    setBrainAdding(result.id);
+
+    try {
+      if (result.category === "cycle") {
+        const res = await fetch("/api/endurance-cycles/insert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cycleId: result.id, clientId, startDate: date }),
+        });
+        if (!res.ok) throw new Error();
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        toast({ title: `${result.name} added`, description: `${result.totalWeeks}-week cycle from ${format(parseISO(date), "d MMM yyyy")}` });
+        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
+        return;
+      }
+
+      if (result.category === "strength") {
+        const res = await fetch("/api/strength-blocks/insert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: result.id, clientId, startDate: date }),
+        });
+        if (!res.ok) throw new Error();
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        toast({ title: `${result.name} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
+        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
+        return;
+      }
+
+      // wod or run — single session
+      const raw = result.raw ?? {};
+      const newSession = result.category === "run"
+        ? {
+            id: `sess-${Date.now()}`,
+            name: result.name,
+            type: "Run" as const,
+            order: 0,
+            exercises: [{ id: `ex-${Date.now()}`, name: result.name, sets: null, reps: null, rpe: null, notes: `${raw.duration ? raw.duration + " min" : ""}${raw.distanceKm ? " · " + raw.distanceKm + " km" : ""} ${raw.intensity ?? ""}`.trim(), rawText: raw.structure ?? "" }],
+          }
+        : {
+            id: `sess-${Date.now()}`,
+            name: result.name,
+            type: "Training" as const,
+            order: 0,
+            exercises: [{ id: `ex-${Date.now()}`, name: result.name, sets: raw.sets ?? null, reps: raw.reps ?? null, rpe: null, notes: raw.notes ?? "", rawText: raw.description ?? "" }],
+          };
+      await addSessionToClientCalendar(date, newSession, setBrainAdding as any, result.id, () => { setBrainOpen(false); setBrainResults([]); setBrainQuery(""); }, result.name);
+    } catch {
+      toast({ title: "Failed to add to calendar", variant: "destructive" });
+    } finally {
+      setBrainAdding(null);
+    }
+  };
+
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: entries, isLoading: entriesLoading } = useListNutritionEntries(clientId, { date: selectedDate });
@@ -747,6 +864,14 @@ export default function ClientArea() {
                 Your workout builders
               </p>
               <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0 shadow-sm"
+                  onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Ask Brain</span>
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -1315,6 +1440,149 @@ export default function ClientArea() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Universal Brain Dialog ────────────────────────────────────────── */}
+      <Dialog open={brainOpen} onOpenChange={open => { if (!open) { stopBrainVoice(); } setBrainOpen(open); }}>
+        <DialogContent className="max-w-xl w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-violet-600" />
+              Ask Brain
+            </DialogTitle>
+            <DialogDescription>
+              Search WODs, runs, endurance cycles, and strength blocks in one place
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Search input */}
+            <div className="flex gap-2">
+              <Input
+                placeholder='e.g. "30 min EMOM" or "easy 10k" or "6 week squat cycle"'
+                value={brainListening ? (brainInterim || "Listening…") : brainQuery}
+                onChange={e => setBrainQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") searchBrain(brainQuery); }}
+                className="flex-1"
+                disabled={brainListening}
+              />
+              <Button
+                size="icon"
+                variant={brainListening ? "destructive" : "outline"}
+                className="shrink-0 rounded-xl"
+                onClick={brainListening ? stopBrainVoice : startBrainVoice}
+              >
+                {brainListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
+              <Button
+                className="shrink-0 rounded-xl bg-violet-600 hover:bg-violet-700 gap-1.5"
+                onClick={() => searchBrain(brainQuery)}
+                disabled={brainSearching || !brainQuery.trim()}
+              >
+                {brainSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                Search
+              </Button>
+            </div>
+
+            {/* Quick suggestion chips */}
+            {!brainResults.length && !brainSearching && (
+              <div className="flex flex-wrap gap-2">
+                {["30 min conditioning", "long run", "easy aerobic run", "Mikko's cycle", "squat strength block"].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => { setBrainQuery(s); searchBrain(s); }}
+                    className="text-xs rounded-full border border-violet-200 bg-violet-50 text-violet-700 px-3 py-1 hover:bg-violet-100 transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Intent badge */}
+            {brainIntent && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Searching:</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  brainIntent === "wod" ? "bg-purple-100 text-purple-700" :
+                  brainIntent === "run" ? "bg-green-100 text-green-700" :
+                  brainIntent === "cycle" ? "bg-blue-100 text-blue-700" :
+                  brainIntent === "strength" ? "bg-orange-100 text-orange-700" :
+                  "bg-gray-100 text-gray-700"
+                } capitalize`}>
+                  {brainIntent === "all" ? "All libraries" : brainIntent === "cycle" ? "Endurance Cycles" : brainIntent === "wod" ? "WODs" : brainIntent === "run" ? "Runs" : "Strength Blocks"}
+                </span>
+              </div>
+            )}
+
+            {/* Results */}
+            {brainResults.length > 0 && (
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                {brainResults.map((result) => {
+                  const catColor: Record<string, string> = {
+                    wod: "border-purple-100 bg-purple-50/40",
+                    run: "border-green-100 bg-green-50/40",
+                    cycle: "border-blue-100 bg-blue-50/40",
+                    strength: "border-orange-100 bg-orange-50/40",
+                  };
+                  const badgeColor: Record<string, string> = {
+                    wod: "bg-purple-100 text-purple-700",
+                    run: "bg-green-100 text-green-700",
+                    cycle: "bg-blue-100 text-blue-700",
+                    strength: "bg-orange-100 text-orange-700",
+                  };
+                  const btnColor: Record<string, string> = {
+                    wod: "bg-purple-600 hover:bg-purple-700",
+                    run: "bg-green-600 hover:bg-green-700",
+                    cycle: "bg-blue-600 hover:bg-blue-700",
+                    strength: "bg-orange-600 hover:bg-orange-700",
+                  };
+                  const catLabel: Record<string, string> = { wod: "WOD", run: "Run", cycle: "Endurance Cycle", strength: "Strength Block" };
+
+                  return (
+                    <div key={result.id} className={`rounded-xl border p-4 space-y-2 ${catColor[result.category] ?? ""}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeColor[result.category]}`}>
+                              {catLabel[result.category]}
+                            </span>
+                            <span className="text-xs text-muted-foreground truncate">{result.subtitle}</span>
+                          </div>
+                          <p className="font-semibold text-sm">{result.name}</p>
+                          {result.tags?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {result.tags.slice(0, 5).map((tag: string) => (
+                                <span key={tag} className="text-xs opacity-60 border rounded px-1.5 py-0.5 capitalize">{tag.replace(/_/g, " ")}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={brainDates[result.id] ?? ""}
+                          onChange={e => setBrainDates(prev => ({ ...prev, [result.id]: e.target.value }))}
+                          className="flex-1 text-xs border rounded-lg px-2 py-1.5 bg-white"
+                        />
+                        <Button
+                          size="sm"
+                          className={`shrink-0 gap-1.5 rounded-lg text-white ${btnColor[result.category]}`}
+                          onClick={() => brainAddItem(result)}
+                          disabled={!brainDates[result.id] || brainAdding === result.id}
+                        >
+                          {brainAdding === result.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                          {result.category === "cycle" ? "Insert Cycle" : result.category === "strength" ? "Insert Block" : "Add Session"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

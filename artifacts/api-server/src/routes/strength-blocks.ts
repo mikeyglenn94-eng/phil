@@ -427,6 +427,16 @@ router.post("/strength-blocks/search", (req, res): void => {
   res.json({ results: final });
 });
 
+// ── Exported for unified Brain search ──────────────────────────────────────
+export function searchStrengthSync(query: string, limit = 2) {
+  const scored = templates
+    .map(t => ({ ...t, score: scoreTemplate(t, query), weeks: undefined }))
+    .filter(t => t.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return (scored.length > 0 ? scored : templates.slice(0, limit).map(t => ({ ...t, score: 1, weeks: undefined })));
+}
+
 // NLP endpoint: parse natural language → suggest which template + extract params
 router.post("/strength-blocks/nlp", async (req, res): Promise<void> => {
   const { command, clients } = req.body as { command: string; clients?: { id: number; name: string }[] };

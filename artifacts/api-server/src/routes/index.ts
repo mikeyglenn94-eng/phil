@@ -7,6 +7,7 @@ import wodBrainRouter from "./wod-brain";
 import runBrainRouter from "./run-brain";
 import strengthBlocksRouter from "./strength-blocks";
 import enduranceCyclesRouter from "./endurance-cycles";
+import brainRouter from "./brain";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(wodBrainRouter);
 router.use(runBrainRouter);
 router.use(strengthBlocksRouter);
 router.use(enduranceCyclesRouter);
+router.use(brainRouter);
 
 export default router;
