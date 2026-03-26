@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Brain, Zap, Plus, Trash2, BookOpen, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { useLocation } from "wouter";
+import { Brain, Zap, Plus, Trash2, BookOpen, Loader2, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -114,6 +115,7 @@ function RunCard({ run, expanded, onToggle }: { run: any; expanded: boolean; onT
 
 export default function Library() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<Tab>("wods");
   const [search, setSearch] = useState("");
   const [wods, setWods] = useState<any[]>([]);
@@ -215,6 +217,9 @@ export default function Library() {
       {/* Header */}
       <div className="shrink-0 border-b px-4 sm:px-6 py-4 bg-background flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="h-8 w-8 -ml-1 shrink-0" onClick={() => setLocation("/")}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
           <BookOpen className="w-5 h-5 text-primary" />
           <h1 className="font-bold text-xl">Session Library</h1>
         </div>

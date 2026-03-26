@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, Plus, MoreHorizontal, Trash2, Copy,
-  Dumbbell, ClipboardPaste, X, Mic, Square, Loader2, Send, Undo2, Sparkles, Brain, Zap,
+  Dumbbell, ClipboardPaste, X, Mic, Square, Loader2, Send, Undo2, Sparkles, Brain, Zap, BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addWeeks, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
@@ -582,6 +582,16 @@ export default function Home() {
               <span className="hidden sm:inline">WOD Brain</span>
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-lg gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-50 px-2 sm:px-3"
+            onClick={() => setLocation("/library")}
+            title="Library"
+          >
+            <BookOpen className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Library</span>
+          </Button>
           <Button size="sm" className="rounded-lg gap-1.5 px-2 sm:px-3" onClick={() => setNewProgrammeOpen(true)} title="New Programme">
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">New Programme</span>
