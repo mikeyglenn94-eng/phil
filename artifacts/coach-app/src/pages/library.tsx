@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Brain, Zap, Plus, Trash2, BookOpen, Loader2, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import { Brain, Zap, Plus, Trash2, BookOpen, Loader2, ChevronDown, ChevronUp, ArrowLeft, Dumbbell, Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +20,7 @@ const INTENSITY_LABELS: Record<string, string> = { easy: "Easy", moderate: "Mode
 const UNITS = ["reps", "m", "km", "cal", "seconds", "minutes"];
 const TERRAINS = ["flat", "hill", "rolling", "track"];
 
-type Tab = "wods" | "runs";
+type Tab = "wods" | "runs" | "strength";
 
 function typeLabel(t: string) { return TYPE_LABELS[t] ?? t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
 
@@ -113,6 +113,59 @@ function RunCard({ run, expanded, onToggle }: { run: any; expanded: boolean; onT
   );
 }
 
+const LIFT_ICONS: Record<string, string> = { squat: "🏋️", bench: "💪", deadlift: "⛓️", olympic: "🥇" };
+const LEVEL_COLORS: Record<string, string> = {
+  beginner: "bg-green-100 text-green-700",
+  intermediate: "bg-amber-100 text-amber-700",
+  advanced: "bg-red-100 text-red-700",
+};
+
+function StrengthCard({ template, expanded, onToggle }: { template: any; expanded: boolean; onToggle: () => void }) {
+  const lifts = (template.liftFocus ?? "").split(",").map((l: string) => l.trim());
+  const icons = lifts.map((l: string) => LIFT_ICONS[l] ?? "🏋️").join(" ");
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex items-start gap-2">
+          <span className="text-xl leading-none mt-0.5 shrink-0">{icons}</span>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${LEVEL_COLORS[template.level] ?? "bg-muted text-muted-foreground"}`}>
+                {template.level}
+              </span>
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" />{template.durationWeeks}w
+              </span>
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Calendar className="w-3 h-3" />{template.sessionsPerWeek}×/wk
+              </span>
+            </div>
+            <p className="font-semibold text-sm">{template.name}</p>
+          </div>
+        </div>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground" onClick={onToggle}>
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </div>
+      {expanded && (
+        <div className="space-y-2 pt-1">
+          <p className="text-xs text-muted-foreground italic">{template.description}</p>
+          {template.notes && (
+            <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              <p className="text-xs text-amber-800">⚠️ {template.notes}</p>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1">
+        {(template.tags ?? []).slice(0, 5).map((tag: string) => (
+          <span key={tag} className="text-[10px] text-orange-600 uppercase tracking-wide font-semibold">{tag}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Library() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -120,6 +173,7 @@ export default function Library() {
   const [search, setSearch] = useState("");
   const [wods, setWods] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
+  const [strengthTemplates, setStrengthTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -139,9 +193,11 @@ export default function Library() {
     Promise.all([
       fetch("/api/wod-brain/workouts").then(r => r.json()),
       fetch("/api/run-brain/workouts").then(r => r.json()),
-    ]).then(([wodData, runData]) => {
+      fetch("/api/strength-blocks/templates").then(r => r.json()),
+    ]).then(([wodData, runData, strengthData]) => {
       setWods(wodData.workouts ?? []);
       setRuns(runData.workouts ?? []);
+      setStrengthTemplates(strengthData.templates ?? []);
     }).catch(() => toast({ title: "Failed to load library", variant: "destructive" }))
       .finally(() => setLoading(false));
   }, []);
@@ -223,14 +279,27 @@ export default function Library() {
           <BookOpen className="w-5 h-5 text-primary" />
           <h1 className="font-bold text-xl">Session Library</h1>
         </div>
-        <Button
-          size="sm"
-          className="gap-2 rounded-lg"
-          onClick={() => tab === "wods" ? setAddWodOpen(true) : setAddRunOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          {tab === "wods" ? "Add WOD" : "Add Run"}
-        </Button>
+        {tab !== "strength" && (
+          <Button
+            size="sm"
+            className="gap-2 rounded-lg"
+            onClick={() => tab === "wods" ? setAddWodOpen(true) : setAddRunOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            {tab === "wods" ? "Add WOD" : "Add Run"}
+          </Button>
+        )}
+        {tab === "strength" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2 rounded-lg border-orange-200 text-orange-700 hover:bg-orange-50"
+            onClick={() => setLocation("/strength-blocks")}
+          >
+            <Dumbbell className="w-4 h-4" />
+            View Blocks
+          </Button>
+        )}
       </div>
 
       {/* Tabs + Search */}
@@ -248,13 +317,21 @@ export default function Library() {
           >
             <Zap className="w-4 h-4" /> Runs <span className="text-xs font-normal">({runs.length})</span>
           </button>
+          <button
+            onClick={() => { setTab("strength"); setSearch(""); }}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${tab === "strength" ? "border-orange-600 text-orange-700 bg-orange-50" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <Dumbbell className="w-4 h-4" /> Strength <span className="text-xs font-normal">({strengthTemplates.length})</span>
+          </button>
         </div>
-        <Input
-          placeholder={tab === "wods" ? "Search WODs by name, format, or tag…" : "Search runs by name, type, or tag…"}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="max-w-sm rounded-lg mb-3"
-        />
+        {tab !== "strength" && (
+          <Input
+            placeholder={tab === "wods" ? "Search WODs by name, format, or tag…" : "Search runs by name, type, or tag…"}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="max-w-sm rounded-lg mb-3"
+          />
+        )}
       </div>
 
       {/* Content */}
@@ -273,13 +350,32 @@ export default function Library() {
               ))}
             </div>
           )
-        ) : (
+        ) : tab === "runs" ? (
           filteredRuns.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-10">No runs found.</p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {filteredRuns.map(r => (
                 <RunCard key={r.id} run={r} expanded={expandedId === r.id} onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)} />
+              ))}
+            </div>
+          )
+        ) : (
+          strengthTemplates.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">No strength programmes yet</p>
+              <p className="text-xs mt-1 opacity-60">Programmes you upload will appear here</p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {strengthTemplates.map((t: any) => (
+                <StrengthCard
+                  key={t.id}
+                  template={t}
+                  expanded={expandedId === t.id}
+                  onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                />
               ))}
             </div>
           )

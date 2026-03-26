@@ -99,12 +99,13 @@ function TemplateCard({ template, onSelect, onInsert }: {
   onSelect: () => void;
   onInsert: () => void;
 }) {
-  const icon = LIFT_ICONS[template.liftFocus] ?? "🏋️";
+  const lifts = template.liftFocus.split(",").map(l => l.trim());
+  const icons = lifts.map(l => LIFT_ICONS[l] ?? "🏋️").join(" ");
   return (
     <div className="rounded-2xl border bg-card p-5 flex flex-col gap-3 hover:shadow-md hover:border-primary/30 transition-all">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-3">
-          <span className="text-2xl leading-none mt-0.5">{icon}</span>
+          <span className="text-2xl leading-none mt-0.5">{icons}</span>
           <div>
             <h3 className="font-bold text-sm leading-snug">{template.name}</h3>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -486,8 +487,6 @@ export default function StrengthBlocks() {
   const [detailTemplate, setDetailTemplate] = useState<Template | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [insertDialogOpen, setInsertDialogOpen] = useState(false);
-  const [filterLevel, setFilterLevel] = useState<string>("all");
-  const [filterDays, setFilterDays] = useState<number | null>(null);
 
   const { data: clientsData } = useListClients();
   const clients = (clientsData ?? []).map((c: any) => ({ id: c.id, name: c.name }));
@@ -515,12 +514,6 @@ export default function StrengthBlocks() {
     setSelectedTemplate(template);
     setInsertDialogOpen(true);
   }
-
-  const filtered = templates.filter(t => {
-    if (filterLevel !== "all" && t.level !== filterLevel) return false;
-    if (filterDays !== null && t.sessionsPerWeek !== filterDays) return false;
-    return true;
-  });
 
   // ── Detail view ─────────────────────────────────────────────────────────────
   if (detailTemplate || detailLoading) {
@@ -601,7 +594,7 @@ export default function StrengthBlocks() {
         </Button>
         <div className="flex-1 min-w-0">
           <h1 className="font-bold text-base">Strength Blocks</h1>
-          <p className="text-xs text-muted-foreground">Insert a structured squat cycle into any client's calendar</p>
+          <p className="text-xs text-muted-foreground">Insert a structured strength programme into any client's calendar</p>
         </div>
         <Button
           size="sm"
@@ -613,49 +606,22 @@ export default function StrengthBlocks() {
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b overflow-x-auto">
-        {(["all", "beginner", "intermediate", "advanced"] as const).map(lvl => (
-          <button
-            key={lvl}
-            onClick={() => setFilterLevel(lvl)}
-            className={`shrink-0 px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-              filterLevel === lvl ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
-          >
-            {lvl === "all" ? "All" : lvl.charAt(0).toUpperCase() + lvl.slice(1)}
-          </button>
-        ))}
-        <div className="w-px h-4 bg-border mx-1 shrink-0" />
-        {[3, 4].map(days => (
-          <button
-            key={days}
-            onClick={() => setFilterDays(filterDays === days ? null : days)}
-            className={`shrink-0 px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-              filterDays === days ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
-          >
-            {days}×/wk
-          </button>
-        ))}
-      </div>
-
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-5">
         {loading ? (
           <div className="flex items-center justify-center h-40">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : templates.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
-            <Zap className="w-10 h-10 mx-auto mb-3 opacity-20" />
-            <p className="text-sm font-medium">No blocks match your filter</p>
-            <p className="text-xs mt-1 opacity-60">Try removing a filter</p>
+            <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-20" />
+            <p className="text-sm font-medium">No strength blocks yet</p>
+            <p className="text-xs mt-1 opacity-60">Upload a programme to get started</p>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
-              {filtered.map(t => (
+              {templates.map(t => (
                 <TemplateCard
                   key={t.id}
                   template={t}
@@ -665,10 +631,10 @@ export default function StrengthBlocks() {
               ))}
             </div>
 
-            {/* Coming soon hint */}
+            {/* More programmes note */}
             <div className="max-w-3xl mx-auto mt-6 rounded-2xl border border-dashed p-5 text-center text-muted-foreground">
-              <p className="text-sm font-medium mb-1">More blocks coming soon</p>
-              <p className="text-xs opacity-70">Bench press cycles, deadlift blocks, Olympic lifting programmes, and hybrid prep blocks will be added to the library.</p>
+              <p className="text-sm font-medium mb-1">More programmes coming</p>
+              <p className="text-xs opacity-70">Additional strength blocks will be added to this library as you upload them.</p>
             </div>
           </>
         )}
