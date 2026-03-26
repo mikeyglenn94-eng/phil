@@ -1304,7 +1304,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           </div>
 
           {/* Calendar grid */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-auto">
+            <div className="min-w-[560px]">
               {/* Day headers */}
               <div className="grid grid-cols-7 border-b bg-muted/30 sticky top-0 z-10">
                 {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
@@ -1419,6 +1420,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </div>
               ))}
             </div>
+          </div>
 
           {/* Session detail slide-up panel (coach mode only) */}
           {selectedTrainingSession && (() => {

@@ -37,14 +37,16 @@ router.get("/programmes", async (req, res): Promise<void> => {
 });
 
 router.post("/programmes", async (req, res): Promise<void> => {
-  const { title, sessions } = req.body as { title: string; sessions?: Session[] };
+  const { title, sessions, clientId } = req.body as { title: string; sessions?: Session[]; clientId?: number };
   if (!title) {
     res.status(400).json({ error: "Title is required" });
     return;
   }
+  const values: { title: string; sessions: Session[]; clientId?: number } = { title, sessions: sessions ?? [] };
+  if (clientId !== undefined && !isNaN(Number(clientId))) values.clientId = Number(clientId);
   const [programme] = await db
     .insert(programmesTable)
-    .values({ title, sessions: sessions ?? [] })
+    .values(values)
     .returning();
   res.status(201).json(programme);
 });
