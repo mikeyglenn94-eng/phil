@@ -186,15 +186,22 @@ router.post("/clients/:clientId/assign-programme", async (req, res): Promise<voi
 
   const sessions = (source.sessions as Session[]) ?? [];
 
+  // Strip client-logged result data so each client starts with a blank canvas
+  const stripResults = (s: Session): Session => ({
+    ...s,
+    clientComment: undefined,
+    exercises: s.exercises.map(({ setReps: _sr, setWeights: _sw, clientComment: _cc, ...rest }) => rest),
+  });
+
   // Calculate day offset from the earliest session date to the requested startDate
-  let redatedSessions = sessions;
+  let redatedSessions = sessions.map(stripResults);
   if (sessions.length > 0) {
     const sortedDates = sessions.map(s => new Date(s.date)).sort((a, b) => a.getTime() - b.getTime());
     const earliest = sortedDates[0];
     const newStart = new Date(startDate);
     const offsetDays = Math.round((newStart.getTime() - earliest.getTime()) / 86400000);
 
-    redatedSessions = sessions.map(s => {
+    redatedSessions = redatedSessions.map(s => {
       const orig = new Date(s.date);
       const shifted = new Date(orig.getTime() + offsetDays * 86400000);
       return {
