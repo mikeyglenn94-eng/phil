@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { format, startOfWeek, addWeeks, addDays, isSameDay, parseISO } from "date-fns";
+import { format, startOfWeek, addWeeks, addDays, isSameDay, parseISO, differenceInDays } from "date-fns";
 import {
   useGetClient,
   useListProgrammes,
@@ -124,6 +124,25 @@ export default function ClientArea() {
   const [trainingWeekOffset, setTrainingWeekOffset] = useState(0);
   const [selectedTrainingSession, setSelectedTrainingSession] = useState<Session | null>(null);
 
+  // ── Drag-and-drop ──
+  const draggedItemRef = useRef<{ sessionId: string; programmeId: number } | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  // Touch DnD
+  const touchDragRef = useRef<{ sessionId: string; programmeId: number } | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const [touchDragOverDate, setTouchDragOverDate] = useState<string | null>(null);
+
+  // ── AI reschedule command bar ──
+  const [cmdInput, setCmdInput] = useState("");
+  const [cmdListening, setCmdListening] = useState(false);
+  const [cmdInterim, setCmdInterim] = useState("");
+  const cmdInterimRef = useRef("");
+  const cmdRecRef = useRef<any>(null);
+  const [cmdSaving, setCmdSaving] = useState(false);
+  const [pendingReschedule, setPendingReschedule] = useState<{
+    programmeId: number; programmeName: string; sessions: Session[]; dayLabels: string[];
+  } | null>(null);
+
   const trainingWeeks = useMemo(() => {
     const weekStart = startOfWeek(addWeeks(new Date(), trainingWeekOffset), { weekStartsOn: 1 });
     return Array.from({ length: 4 }, (_, wi) => {
@@ -155,6 +174,131 @@ export default function ClientArea() {
       setIsAssigning(false);
     }
   }
+  // ── Drag-and-drop: move a session to a new date ──
+  const moveSession = async (sessionId: string, programmeId: number, newDate: string) => {
+    const prog = (clientProgrammes ?? []).find(p => p.id === programmeId);
+    if (!prog) return;
+    const updatedSessions = (prog.sessions as Session[]).map(s =>
+      s.id === sessionId ? { ...s, date: newDate } : s
+    );
+    await fetch(`/api/programmes/${programmeId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessions: updatedSessions }),
+    });
+    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+    toast({ title: "Session moved" });
+  };
+
+  // ── AI Reschedule command helpers ──
+  const DAY_WORDS: Record<string, number> = {
+    monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 0,
+    mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 0,
+  };
+  const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  function parseDays(text: string): number[] {
+    const days: number[] = [];
+    const words = text.toLowerCase().split(/[\s/,&+]+/);
+    words.forEach(w => {
+      const clean = w.replace(/s$/, "");
+      if (DAY_WORDS[clean] !== undefined) days.push(DAY_WORDS[clean]);
+      else if (DAY_WORDS[w] !== undefined) days.push(DAY_WORDS[w]);
+    });
+    return [...new Set(days)].sort((a, b) => {
+      const aa = a === 0 ? 7 : a;
+      const bb = b === 0 ? 7 : b;
+      return aa - bb;
+    });
+  }
+
+  function remapSessionDays(sessions: Session[], targetDays: number[]): Session[] {
+    if (!sessions.length || !targetDays.length) return sessions;
+    const sorted = [...sessions].sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
+    const anchor = startOfWeek(parseISO(sorted[0].date), { weekStartsOn: 1 });
+    const weekMap = new Map<number, Session[]>();
+    sorted.forEach(s => {
+      const weekNum = Math.floor(differenceInDays(startOfWeek(parseISO(s.date), { weekStartsOn: 1 }), anchor) / 7);
+      if (!weekMap.has(weekNum)) weekMap.set(weekNum, []);
+      weekMap.get(weekNum)!.push(s);
+    });
+    const result: Session[] = [];
+    Array.from(weekMap.entries()).sort(([a], [b]) => a - b).forEach(([weekNum, wSessions]) => {
+      const weekStart = addWeeks(anchor, weekNum);
+      wSessions.forEach((session, i) => {
+        const targetDay = targetDays[i % targetDays.length];
+        const dayOffset = targetDay === 0 ? 6 : targetDay - 1;
+        result.push({ ...session, date: format(addDays(weekStart, dayOffset), "yyyy-MM-dd") });
+      });
+    });
+    return result;
+  }
+
+  const handleRescheduleCmd = () => {
+    const cmd = cmdInput.trim();
+    if (!cmd || !clientProgrammes?.length) return;
+
+    const patterns = [
+      /^(?:reschedule|move|shift|edit|change|update)\s+(.+?)\s+(?:so\s+(?:it|they)\s+(?:fall|falls|land|lands)\s+)?(?:on\s+|to\s+(?:fall\s+on\s+)?)?(.+)$/i,
+      /^(.+?)\s+(?:to|so it falls on|on)\s+(.+)$/i,
+    ];
+
+    let programmeQuery = "";
+    let dayText = "";
+    for (const p of patterns) {
+      const m = cmd.match(p);
+      if (m) { programmeQuery = m[1].trim(); dayText = m[2].trim(); break; }
+    }
+    if (!programmeQuery || !dayText) {
+      toast({ title: "Couldn't parse command", description: 'Try: "reschedule squat block to tuesdays/thursdays/saturdays"', variant: "destructive" });
+      return;
+    }
+
+    const days = parseDays(dayText);
+    if (!days.length) {
+      toast({ title: "No days found", description: "Include day names like 'tuesdays/thursdays'", variant: "destructive" });
+      return;
+    }
+
+    const q = programmeQuery.toLowerCase();
+    const prog =
+      clientProgrammes.find(p => p.title.toLowerCase().includes(q)) ??
+      clientProgrammes.find(p => q.split(" ").some(w => w.length > 2 && p.title.toLowerCase().includes(w)));
+
+    if (!prog) {
+      toast({ title: `Programme not found: "${programmeQuery}"`, variant: "destructive" });
+      return;
+    }
+
+    const newSessions = remapSessionDays(prog.sessions as Session[], days);
+    setPendingReschedule({
+      programmeId: prog.id,
+      programmeName: prog.title,
+      sessions: newSessions,
+      dayLabels: days.map(d => DAY_NAMES[d]),
+    });
+  };
+
+  const applyReschedule = async () => {
+    if (!pendingReschedule) return;
+    setCmdSaving(true);
+    try {
+      await fetch(`/api/programmes/${pendingReschedule.programmeId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessions: pendingReschedule.sessions }),
+      });
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({ title: "Programme rescheduled", description: `${pendingReschedule.programmeName} → ${pendingReschedule.dayLabels.join(" / ")}` });
+      setPendingReschedule(null);
+      setCmdInput("");
+    } catch {
+      toast({ title: "Failed to reschedule", variant: "destructive" });
+    } finally {
+      setCmdSaving(false);
+    }
+  };
+
   // ── WOD Brain (client view) ──
   const [wodClientBrainOpen, setWodClientBrainOpen] = useState(false);
   const [wodBrainTab, setWodBrainTab] = useState<"workouts" | "cycles">("workouts");
@@ -629,6 +773,48 @@ export default function ClientArea() {
     try { r.start(); } catch {}
   };
 
+  // Command bar voice recognition
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = false; r.interimResults = true; r.lang = "en-US";
+    r.onresult = (e: any) => {
+      let fin = ""; let int = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else int += e.results[i][0].transcript;
+      }
+      cmdInterimRef.current = int;
+      setCmdInterim(int);
+      if (fin) {
+        cmdInterimRef.current = "";
+        setCmdInput(prev => (prev ? prev + " " : "") + fin.trim());
+        setCmdInterim("");
+      }
+    };
+    r.onerror = () => { setCmdListening(false); setCmdInterim(""); cmdInterimRef.current = ""; };
+    r.onend = () => {
+      const leftover = cmdInterimRef.current.trim();
+      if (leftover) setCmdInput(prev => (prev ? prev + " " : "") + leftover);
+      cmdInterimRef.current = "";
+      setCmdListening(false);
+      setCmdInterim("");
+    };
+    cmdRecRef.current = r;
+    return () => { try { r.abort(); } catch {} };
+  }, []);
+
+  const toggleCmdListening = () => {
+    const r = cmdRecRef.current;
+    if (!r) return;
+    if (cmdListening) { r.stop(); return; }
+    setCmdListening(true);
+    setCmdInterim("");
+    cmdInterimRef.current = "";
+    try { r.start(); } catch {}
+  };
+
   const handleAdd = async () => {
     const text = foodInput.trim();
     if (!text) return;
@@ -925,6 +1111,54 @@ export default function ClientArea() {
             </div>
           </div>
 
+          {/* AI Reschedule Command Bar */}
+          <div className="shrink-0 px-4 py-2 border-b bg-muted/30 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={cmdListening ? (cmdInterim || cmdInput) : cmdInput}
+                onChange={e => setCmdInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleRescheduleCmd(); }}
+                placeholder='e.g. "reschedule squat block to tuesdays/thursdays/saturdays"'
+                disabled={cmdListening}
+                className="flex-1 text-xs bg-background border rounded-lg px-3 py-1.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={toggleCmdListening}
+                title={cmdListening ? "Stop" : "Voice command"}
+                className={`p-1.5 rounded-lg transition-colors shrink-0 ${cmdListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+              >
+                {cmdListening ? <Square className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+              </button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 px-3 rounded-lg shrink-0"
+                onClick={handleRescheduleCmd}
+                disabled={!cmdInput.trim()}
+              >
+                Apply
+              </Button>
+            </div>
+            {pendingReschedule && (
+              <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <p className="text-xs text-amber-800 leading-snug flex-1">
+                  Reschedule <strong>{pendingReschedule.programmeName}</strong> ({pendingReschedule.sessions.length} sessions) to{" "}
+                  <strong>{pendingReschedule.dayLabels.join(" / ")}</strong>?
+                </p>
+                <div className="flex gap-1.5 shrink-0">
+                  <Button size="sm" className="h-6 px-2 text-xs bg-amber-600 hover:bg-amber-700 text-white" onClick={applyReschedule} disabled={cmdSaving}>
+                    {cmdSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Confirm"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setPendingReschedule(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Calendar grid */}
           {!clientProgrammes?.length ? (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
@@ -949,21 +1183,89 @@ export default function ClientArea() {
                       try { return isSameDay(parseISO(s.date), day); } catch { return false; }
                     });
                     const isToday = isSameDay(day, new Date());
+                    const dateStr = format(day, "yyyy-MM-dd");
+                    const isDropTarget = dragOverDate === dateStr || touchDragOverDate === dateStr;
                     return (
-                      <div key={di} className={`border-r last:border-r-0 p-1.5 ${di >= 5 ? "bg-muted/20" : ""}`}>
+                      <div
+                        key={di}
+                        data-date={dateStr}
+                        className={`border-r last:border-r-0 p-1.5 transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${isDropTarget ? "bg-primary/10 ring-2 ring-inset ring-primary/30" : ""}`}
+                        onDragOver={e => { e.preventDefault(); setDragOverDate(dateStr); }}
+                        onDragLeave={() => setDragOverDate(null)}
+                        onDrop={e => {
+                          e.preventDefault();
+                          setDragOverDate(null);
+                          const item = draggedItemRef.current;
+                          if (item) { moveSession(item.sessionId, item.programmeId, dateStr); draggedItemRef.current = null; }
+                        }}
+                        onClick={() => {
+                          const touch = touchDragRef.current;
+                          if (touch) {
+                            moveSession(touch.sessionId, touch.programmeId, dateStr);
+                            touchDragRef.current = null;
+                            setTouchDragOverDate(null);
+                          }
+                        }}
+                      >
                         <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
                           {format(day, "d")}
                         </div>
                         <div className="space-y-0.5">
-                          {daySessions.map(session => (
-                            <button
-                              key={session.id}
-                              onClick={() => setSelectedTrainingSession(session)}
-                              className="w-full text-left px-1.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-[10px] leading-tight font-medium text-primary truncate block"
-                            >
-                              {session.name || "Session"}
-                            </button>
-                          ))}
+                          {daySessions.map(session => {
+                            const prog = (clientProgrammes ?? []).find(p =>
+                              (p.sessions as Session[]).some(s => s.id === session.id)
+                            );
+                            const isTouchPicked = touchDragRef.current?.sessionId === session.id;
+                            return (
+                              <button
+                                key={session.id}
+                                draggable
+                                onDragStart={() => {
+                                  if (prog) draggedItemRef.current = { sessionId: session.id, programmeId: prog.id };
+                                }}
+                                onDragEnd={() => { draggedItemRef.current = null; setDragOverDate(null); }}
+                                onTouchStart={e => {
+                                  touchStartPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                                  if (prog) touchDragRef.current = { sessionId: session.id, programmeId: prog.id };
+                                }}
+                                onTouchMove={e => {
+                                  const t = e.touches[0];
+                                  const start = touchStartPosRef.current;
+                                  if (!start) return;
+                                  const moved = Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y);
+                                  if (moved < 8) return;
+                                  e.preventDefault();
+                                  const el = document.elementFromPoint(t.clientX, t.clientY);
+                                  const cell = el?.closest("[data-date]") as HTMLElement | null;
+                                  setTouchDragOverDate(cell?.dataset.date ?? null);
+                                }}
+                                onTouchEnd={e => {
+                                  const t = e.changedTouches[0];
+                                  const start = touchStartPosRef.current;
+                                  const moved = start ? Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y) : 0;
+                                  if (moved < 8) {
+                                    touchDragRef.current = null;
+                                    setTouchDragOverDate(null);
+                                    setSelectedTrainingSession(session);
+                                    return;
+                                  }
+                                  const el = document.elementFromPoint(t.clientX, t.clientY);
+                                  const cell = el?.closest("[data-date]") as HTMLElement | null;
+                                  const dropDate = cell?.dataset.date;
+                                  const item = touchDragRef.current;
+                                  if (dropDate && item) moveSession(item.sessionId, item.programmeId, dropDate);
+                                  touchDragRef.current = null;
+                                  setTouchDragOverDate(null);
+                                }}
+                                onClick={() => {
+                                  if (!touchDragRef.current) setSelectedTrainingSession(session);
+                                }}
+                                className={`w-full text-left px-1.5 py-1 rounded-md transition-colors text-[10px] leading-tight font-medium truncate block cursor-grab active:cursor-grabbing ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
+                              >
+                                {session.name || "Session"}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     );
