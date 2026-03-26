@@ -149,6 +149,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [pendingReschedule, setPendingReschedule] = useState<{
     programmeId: number; programmeName: string; sessions: Session[]; dayLabels: string[];
   } | null>(null);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState<{
+    scope: "all" | "programme";
+    programmeId?: number;
+    programmeName?: string;
+    sessionCount: number;
+  } | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const trainingWeeks = useMemo(() => {
     const weekStart = startOfWeek(addWeeks(new Date(), trainingWeekOffset), { weekStartsOn: 1 });
@@ -241,9 +248,59 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     return result;
   }
 
+  const applyBulkDelete = async () => {
+    if (!pendingBulkDelete || !clientProgrammes) return;
+    setBulkDeleting(true);
+    try {
+      if (pendingBulkDelete.scope === "all") {
+        for (const prog of clientProgrammes) {
+          await deleteProgrammeMutation.mutateAsync({ id: prog.id });
+        }
+      } else if (pendingBulkDelete.scope === "programme" && pendingBulkDelete.programmeId) {
+        await deleteProgrammeMutation.mutateAsync({ id: pendingBulkDelete.programmeId });
+      }
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({ title: "Sessions deleted", description: `${pendingBulkDelete.sessionCount} session${pendingBulkDelete.sessionCount !== 1 ? "s" : ""} removed from the calendar.` });
+      setPendingBulkDelete(null);
+      setCmdInput("");
+    } catch {
+      toast({ title: "Failed to delete sessions", variant: "destructive" });
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const handleRescheduleCmd = () => {
     const cmd = cmdInput.trim();
     if (!cmd || !clientProgrammes?.length) return;
+
+    // ── Delete commands ──
+    const DELETE_ALL_RE = /^(?:delete|remove|wipe|clear|erase|reset)\s+(?:all|every(?:thing)?|my)?\s*(?:sessions?|workouts?|training|calendar|schedule|programme|everything)/i;
+    const DELETE_PROG_RE = /^(?:delete|remove|clear|wipe)\s+(?:the\s+)?(?:all\s+)?(.+?)(?:\s+(?:sessions?|workouts?|programme))?$/i;
+
+    if (DELETE_ALL_RE.test(cmd)) {
+      const totalSessions = clientProgrammes.reduce((acc, p) => acc + (p.sessions?.length ?? 0), 0);
+      setPendingBulkDelete({ scope: "all", sessionCount: totalSessions });
+      return;
+    }
+
+    // Check for specific programme deletion: "delete squat block"
+    const dm = cmd.match(DELETE_PROG_RE);
+    if (dm && /^(?:delete|remove|clear|wipe)/i.test(cmd)) {
+      const q = dm[1].trim().toLowerCase();
+      const prog =
+        clientProgrammes.find(p => p.title.toLowerCase().includes(q)) ??
+        clientProgrammes.find(p => q.split(" ").some(w => w.length > 2 && p.title.toLowerCase().includes(w)));
+      if (prog) {
+        setPendingBulkDelete({
+          scope: "programme",
+          programmeId: prog.id,
+          programmeName: prog.title,
+          sessionCount: prog.sessions?.length ?? 0,
+        });
+        return;
+      }
+    }
 
     const patterns = [
       /^(?:reschedule|move|shift|edit|change|update)\s+(.+?)\s+(?:so\s+(?:it|they)\s+(?:fall|falls|land|lands)\s+)?(?:on\s+|to\s+(?:fall\s+on\s+)?)?(.+)$/i,
@@ -1164,7 +1221,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 value={cmdListening ? (cmdInterim || cmdInput) : cmdInput}
                 onChange={e => setCmdInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") handleRescheduleCmd(); }}
-                placeholder='e.g. "reschedule squat block to tuesdays/thursdays/saturdays"'
+                placeholder='e.g. "reschedule squat block to tue/thu/sat" or "delete all sessions"'
                 disabled={cmdListening}
                 className="flex-1 text-xs bg-background border rounded-lg px-3 py-1.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
               />
@@ -1197,6 +1254,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     {cmdSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Confirm"}
                   </Button>
                   <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setPendingReschedule(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+            {pendingBulkDelete && (
+              <div className="flex items-center justify-between gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <p className="text-xs text-red-800 leading-snug flex-1">
+                  {pendingBulkDelete.scope === "all"
+                    ? <>Delete <strong>all {pendingBulkDelete.sessionCount} sessions</strong> across every programme? This cannot be undone.</>
+                    : <>Delete <strong>{pendingBulkDelete.programmeName}</strong> ({pendingBulkDelete.sessionCount} sessions)? This cannot be undone.</>
+                  }
+                </p>
+                <div className="flex gap-1.5 shrink-0">
+                  <Button size="sm" className="h-6 px-2 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={applyBulkDelete} disabled={bulkDeleting}>
+                    {bulkDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setPendingBulkDelete(null)}>
                     Cancel
                   </Button>
                 </div>
