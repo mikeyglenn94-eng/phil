@@ -1637,7 +1637,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
       {/* Build Programme Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) setGeneratedPreview(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Dumbbell className="w-5 h-5 text-primary" />
@@ -1761,29 +1761,30 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </>
               ) : (
                 <>
-                  <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
-                    <p className="font-semibold text-base">{generatedPreview.title}</p>
-                    <p className="text-sm text-muted-foreground">{generatedPreview.sessions.length} sessions generated</p>
-                    <div className="space-y-1.5 max-h-44 overflow-y-auto">
-                      {generatedPreview.sessions.slice(0, 30).map((s: any) => {
+                  <div className="rounded-xl border bg-muted/30 p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-sm leading-snug">{generatedPreview.title}</p>
+                      <span className="text-xs text-muted-foreground shrink-0">{generatedPreview.sessions.length} sessions</span>
+                    </div>
+                    <div className="space-y-1 max-h-36 overflow-y-auto">
+                      {generatedPreview.sessions.map((s: any) => {
                         const isWod = s.source === "wod_brain";
                         const isRun = s.source === "run_brain";
                         return (
                           <div key={s.id} className="flex items-center gap-2 text-xs">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${isWod ? "bg-violet-500" : isRun ? "bg-green-500" : "bg-primary"}`} />
-                            <span className="text-muted-foreground w-16 shrink-0">{format(parseISO(s.date), "EEE d MMM")}</span>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isWod ? "bg-violet-500" : isRun ? "bg-green-500" : "bg-primary"}`} />
+                            <span className="text-muted-foreground w-14 shrink-0">{format(parseISO(s.date), "EEE d MMM")}</span>
                             <span className="font-medium truncate">{s.name}</span>
-                            {s.structure && <span className="text-muted-foreground truncate hidden sm:inline">{s.structure}</span>}
                           </div>
                         );
                       })}
-                      {generatedPreview.sessions.length > 30 && (
-                        <p className="text-xs text-muted-foreground text-center pt-1">+{generatedPreview.sessions.length - 30} more sessions</p>
-                      )}
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 leading-relaxed">
+                    💡 Once added, use the calendar to fine-tune dates, swap exercises, or adjust sessions — no need to regenerate for small changes.
+                  </p>
                   <DialogFooter className="pt-0">
-                    <Button variant="outline" onClick={() => setGeneratedPreview(null)}>Regenerate</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setGeneratedPreview(null)} className="text-muted-foreground">← Back</Button>
                     <Button onClick={handleConfirmGenerated} disabled={confirmingGenerated} className="gap-2">
                       {confirmingGenerated ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                       Add to {client?.name ?? "Client"}'s Calendar
