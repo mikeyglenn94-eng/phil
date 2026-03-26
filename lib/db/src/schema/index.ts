@@ -20,3 +20,4 @@
 export * from "./programmes";
 export * from "./clients";
 export * from "./library";
+export * from "./run-sessions";

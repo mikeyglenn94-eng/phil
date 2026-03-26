@@ -1,0 +1,213 @@
+Create a fixed storage schema and lexicon for running sessions inside the existing coaching software.
+
+Purpose:
+This is only for storing, displaying, and editing run sessions consistently.
+Do not generate programmes.
+Do not infer progression rules.
+Do not build planning logic.
+Do not create workouts automatically.
+I will provide the specific programmes and sessions manually.
+
+Core principle:
+All run sessions must be stored using a fixed vocabulary and a consistent structure so they can be saved, displayed, edited, and scheduled cleanly.
+
+Reference pace:
+Use 5km pace as the anchor reference for paced running sessions.
+Call this P5K.
+P5K = the athlete’s average pace per kilometre for a current or recent 5km effort.
+
+Create a fixed pace lexicon with these values:
+
+1. easy
+Definition:
+Conversational aerobic running
+Relative pace:
+P5K + 60 to 90 sec per km
+
+2. steady
+Definition:
+Controlled aerobic running
+Relative pace:
+P5K + 30 to 45 sec per km
+
+3. tempo
+Definition:
+Threshold style running
+Relative pace:
+P5K + 10 to 20 sec per km
+
+4. p5k
+Definition:
+Current 5km race pace
+Relative pace:
+P5K exactly
+
+5. interval
+Definition:
+Hard repeatable work faster than 5km pace
+Relative pace:
+P5K - 10 to 25 sec per km
+
+6. sprint
+Definition:
+Very short maximal or near maximal effort
+Relative pace:
+Not tied to exact P5K pace
+
+Create an effort lexicon for non-paced running sessions:
+
+1. easy_effort
+Definition:
+Low effort, conversational
+
+2. steady_effort
+Definition:
+Moderate controlled effort
+
+3. hard_effort
+Definition:
+High but repeatable effort
+
+4. max_effort
+Definition:
+Maximal or near maximal effort
+
+Create allowed run session types:
+
+- easy_run
+- steady_run
+- tempo_run
+- tempo_intervals
+- intervals
+- time_trial
+- strides
+- hill_sprints
+- hill_repeats
+- long_hill_intervals
+- hilly_run
+
+Storage rule:
+Every run session must be stored as structured data, never as free text.
+Do not rely on sentence parsing for storage.
+Free text can be used for display notes only.
+
+Each run session should support these fields where relevant:
+
+Core fields:
+- id
+- name
+- session_type
+- notes
+
+Pace / effort fields:
+- pace_type
+- effort_type
+
+Work structure fields:
+- duration_minutes
+- distance_metres
+- reps
+- sets
+- rest_seconds
+- rest_minutes
+
+Optional fields:
+- terrain
+- incline
+- recovery_type
+- warm_up
+- cool_down
+
+Field usage rules:
+
+1. Continuous runs
+Use:
+- session_type
+- duration_minutes or distance_metres
+- pace_type or effort_type
+
+Examples:
+- easy_run with duration_minutes = 30 and pace_type = easy
+- steady_run with duration_minutes = 40 and pace_type = steady
+- hilly_run with duration_minutes = 45 and effort_type = easy_effort
+
+2. Interval-based sessions
+Use:
+- session_type
+- reps
+- work_duration_minutes or work_duration_seconds or work_distance_metres
+- pace_type or effort_type
+- rest_seconds or rest_minutes
+
+Examples:
+- intervals, reps = 6, work_distance_metres = 400, pace_type = interval, rest_seconds = 90
+- tempo_intervals, reps = 2, work_duration_minutes = 8, pace_type = tempo, rest_minutes = 2
+- hill_repeats, reps = 8, work_duration_seconds = 45, effort_type = hard_effort, recovery_type = walk_down
+
+3. Test sessions
+Use:
+- session_type = time_trial
+- distance_metres
+- effort_type = max_effort
+
+Example:
+- time_trial, distance_metres = 5000, effort_type = max_effort
+
+4. Strides and hill sprints
+Use:
+- session_type
+- reps
+- work_duration_seconds or work_distance_metres
+- effort_type
+- rest_seconds or recovery_type
+
+Examples:
+- strides, reps = 6, work_duration_seconds = 20, effort_type = sprint, rest_seconds = 60
+- hill_sprints, reps = 10, work_duration_seconds = 10, effort_type = max_effort, recovery_type = walk_back
+
+Data model requirements:
+Create reusable structures for:
+- pace_lexicon
+- effort_lexicon
+- run_session_type
+- run_block
+- run_session
+- endurance_template
+
+Definitions:
+
+pace_lexicon:
+Stores the fixed pace labels and their relation to P5K
+
+effort_lexicon:
+Stores fixed effort labels for sessions not tied to pace, especially hills and sprint work
+
+run_block:
+A single structured piece of work inside a session
+Examples:
+- 30 min easy
+- 6 x 400m @ interval with 90s rest
+- 8 x 45s hill repeat with walk down recovery
+
+run_session:
+A full session made up of one or more run blocks plus optional notes, warm-up, and cool-down
+
+endurance_template:
+A stored sequence of run sessions that I will provide manually as named programmes
+
+Important constraints:
+- Do not create programme-generation logic
+- Do not create progression rules
+- Do not auto-build plans from goals
+- Do not infer weekly structure
+- Do not suggest sessions
+- Only create the storage model and fixed vocabulary
+
+Display rules:
+When showing a stored run session to the user, render it clearly from the structured fields.
+Example display:
+6 x 400m @ interval pace, 90s rest
+30 min easy run
+4 x 2 min uphill @ hard effort, jog down recovery
+
+The system should be ready for me to manually add named running programmes using this schema.

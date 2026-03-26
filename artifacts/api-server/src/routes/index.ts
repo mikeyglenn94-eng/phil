@@ -8,6 +8,7 @@ import runBrainRouter from "./run-brain";
 import strengthBlocksRouter from "./strength-blocks";
 import enduranceCyclesRouter from "./endurance-cycles";
 import brainRouter from "./brain";
+import runSessionsRouter from "./run-sessions";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(runBrainRouter);
 router.use(strengthBlocksRouter);
 router.use(enduranceCyclesRouter);
 router.use(brainRouter);
+router.use(runSessionsRouter);
 
 export default router;
