@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2, Rows3, Minus } from "lucide-react";
+import { GripVertical, Trash2, Rows3, Minus, PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,12 +80,24 @@ export function ExerciseCard({ exercise, onChange, onDelete }: ExerciseCardProps
       <div className="pl-6 pr-2">
         {/* Name row */}
         <div className="flex items-start justify-between gap-4 mb-4">
-          <Input
-            value={exercise.name}
-            onChange={(e) => handleUpdate("name", e.target.value)}
-            className="text-lg font-bold border-transparent hover:border-input focus:border-primary px-2 h-10 shadow-none rounded-lg"
-            placeholder="Exercise Name"
-          />
+          <div className="flex-1 min-w-0">
+            <Input
+              value={exercise.name}
+              onChange={(e) => handleUpdate("name", e.target.value)}
+              className="text-lg font-bold border-transparent hover:border-input focus:border-primary px-2 h-10 shadow-none rounded-lg w-full"
+              placeholder="Exercise Name"
+            />
+            {exercise.name && (
+              <a
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + " exercise tutorial")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:text-red-600 font-medium px-2 mt-0.5 transition-colors"
+              >
+                <PlayCircle className="w-3 h-3" /> Watch demo
+              </a>
+            )}
+          </div>
           <Button
             variant="ghost"
             size="icon"

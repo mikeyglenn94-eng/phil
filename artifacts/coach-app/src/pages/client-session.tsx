@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
-  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send,
+  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle,
 } from "lucide-react";
 import {
   useGetProgramme,
@@ -699,6 +699,14 @@ export default function ClientSession() {
                     </span>
                     <div className="min-w-0">
                       <h3 className="font-bold text-base leading-tight">{displayName}</h3>
+                      <a
+                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(displayName + " exercise tutorial")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:text-red-600 font-medium mt-0.5 transition-colors"
+                      >
+                        <PlayCircle className="w-3 h-3" /> Watch demo
+                      </a>
                       {wasSwapped && (
                         <p className="text-[10px] text-orange-600 font-medium flex items-center gap-1 mt-0.5">
                           <ArrowLeftRight className="w-2.5 h-2.5" /> swapped from {ex.name}
