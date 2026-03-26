@@ -1672,19 +1672,34 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
               </div>
               {wodClientResults.length > 0 && (
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                   {wodClientResults.map((wod: any) => (
-                    <div key={wod.id} className="flex items-start justify-between gap-3 rounded-xl border p-3 bg-purple-50/40">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate">{wod.name}</p>
-                        <p className="text-xs text-muted-foreground">{wod.formatLabel ?? wod.format} · {wod.duration} min · {(wod.tags ?? []).join(", ")}</p>
+                    <div key={wod.id} className="rounded-xl border bg-purple-50/40 p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{wod.name}</p>
+                          <p className="text-xs text-purple-700 font-medium">{wod.formatLabel ?? wod.format} · {wod.duration} min{(wod.tags ?? []).length > 0 ? ` · ${wod.tags.join(", ")}` : ""}</p>
+                        </div>
+                        <Button size="sm" className="shrink-0 rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
+                          disabled={!wodClientTargetDate || wodClientAdding === wod.id}
+                          onClick={() => addWodToClientCalendar(wod)}
+                          title={!wodClientTargetDate ? "Choose a date first" : `Add to ${wodClientTargetDate}`}>
+                          {wodClientAdding === wod.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                        </Button>
                       </div>
-                      <Button size="sm" className="shrink-0 rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
-                        disabled={!wodClientTargetDate || wodClientAdding === wod.id}
-                        onClick={() => addWodToClientCalendar(wod)}
-                        title={!wodClientTargetDate ? "Choose a date first" : `Add to ${wodClientTargetDate}`}>
-                        {wodClientAdding === wod.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                      </Button>
+                      {wod.structure && (
+                        <p className="text-xs text-muted-foreground italic leading-relaxed">{wod.structure}</p>
+                      )}
+                      {(wod.blocks ?? []).length > 0 && (
+                        <ol className="space-y-0.5">
+                          {wod.blocks.map((b: any, i: number) => (
+                            <li key={i} className="text-xs text-foreground flex items-baseline gap-1.5">
+                              <span className="text-purple-500 font-bold shrink-0">{i + 1}.</span>
+                              <span className="capitalize">{b.amount} {b.unit} {b.movement}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1801,22 +1816,33 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               />
             </div>
             {runClientResults.length > 0 && (
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                 {runClientResults.map((run: any) => (
-                  <div key={run.id} className="flex items-start justify-between gap-3 rounded-xl border p-3 bg-green-50/40">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate">{run.name}</p>
-                      <p className="text-xs text-muted-foreground">{run.type ?? run.runType} · {run.duration ? `${run.duration} min` : ""}{run.distanceKm ? ` · ${run.distanceKm} km` : ""} · {(run.tags ?? []).join(", ")}</p>
+                  <div key={run.id} className="rounded-xl border bg-green-50/40 p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{run.name}</p>
+                        <p className="text-xs text-green-700 font-medium capitalize">
+                          {run.type ?? run.runType}
+                          {run.intensityLabel ? ` · ${run.intensityLabel}` : ""}
+                          {run.duration ? ` · ${run.duration} min` : ""}
+                          {run.distanceKm ? ` · ${run.distanceKm} km` : ""}
+                          {(run.tags ?? []).length > 0 ? ` · ${run.tags.join(", ")}` : ""}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="shrink-0 rounded-lg bg-green-600 hover:bg-green-700 text-white"
+                        disabled={!runClientTargetDate || runClientAdding === run.id}
+                        onClick={() => addRunToClientCalendar(run)}
+                        title={!runClientTargetDate ? "Choose a date first" : `Add to ${runClientTargetDate}`}
+                      >
+                        {runClientAdding === run.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      className="shrink-0 rounded-lg bg-green-600 hover:bg-green-700 text-white"
-                      disabled={!runClientTargetDate || runClientAdding === run.id}
-                      onClick={() => addRunToClientCalendar(run)}
-                      title={!runClientTargetDate ? "Choose a date first" : `Add to ${runClientTargetDate}`}
-                    >
-                      {runClientAdding === run.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                    </Button>
+                    {run.structure && (
+                      <p className="text-xs text-muted-foreground italic leading-relaxed">{run.structure}</p>
+                    )}
                   </div>
                 ))}
               </div>
