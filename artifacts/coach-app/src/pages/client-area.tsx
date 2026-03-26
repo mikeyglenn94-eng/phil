@@ -688,43 +688,48 @@ export default function ClientArea() {
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Button
-                size="sm"
-                variant="outline"
-                className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
-                onClick={() => { setWodClientResults([]); setWodClientQuery(""); setWodClientTargetDate(""); setWodClientBrainOpen(true); }}
-              >
-                <Brain className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">WOD Brain</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-green-200 text-green-700 hover:bg-green-50"
-                onClick={() => { setRunClientResults([]); setRunClientQuery(""); setRunClientTargetDate(""); setRunClientBrainOpen(true); }}
-              >
-                <Zap className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Run Brain</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-orange-200 text-orange-700 hover:bg-orange-50"
-                onClick={() => { setStrengthResults([]); setStrengthQuery(""); setStrengthStartDate(""); setStrengthBrainOpen(true); }}
-              >
-                <Dumbbell className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Strength Brain</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1"
-                onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Assign Programme</span>
-              </Button>
+            <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase sm:hidden">
+                Your workout builders
+              </p>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+                  onClick={() => { setWodClientResults([]); setWodClientQuery(""); setWodClientTargetDate(""); setWodClientBrainOpen(true); }}
+                >
+                  <Brain className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">WOD Brain</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-green-200 text-green-700 hover:bg-green-50"
+                  onClick={() => { setRunClientResults([]); setRunClientQuery(""); setRunClientTargetDate(""); setRunClientBrainOpen(true); }}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Run Brain</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-orange-200 text-orange-700 hover:bg-orange-50"
+                  onClick={() => { setStrengthResults([]); setStrengthQuery(""); setStrengthStartDate(""); setStrengthBrainOpen(true); }}
+                >
+                  <Dumbbell className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Strength Brain</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1"
+                  onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Assign Programme</span>
+                </Button>
+              </div>
             </div>
           </div>
 
