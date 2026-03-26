@@ -59,6 +59,31 @@ export default function ClientSession() {
     return programme.sessions.find((s: Session) => s.id === sessionId) || null;
   }, [programme, sessionId]);
 
+  // Previous logged results for each exercise name — used to show "last time" reminder
+  const prevLogs = useMemo<Record<string, { date: string; sets: SetLog[] }>>(() => {
+    if (!programme?.sessions || !session) return {};
+    const map: Record<string, { date: string; sets: SetLog[] }> = {};
+    const pastSessions = (programme.sessions as Session[])
+      .filter(s => s.id !== sessionId && s.date <= session.date)
+      .sort((a, b) => b.date.localeCompare(a.date)); // most recent first
+    for (const s of pastSessions) {
+      for (const ex of (s.exercises || [])) {
+        const key = ex.name.toLowerCase().trim();
+        if (map[key]) continue; // already captured the most recent
+        const hasWeight = ex.setWeights?.some(w => w !== null) ?? false;
+        const hasReps = ex.setReps?.some(r => r !== null) ?? false;
+        if (!hasWeight && !hasReps) continue;
+        const count = Math.max(ex.setWeights?.length ?? 0, ex.setReps?.length ?? 0);
+        const sets: SetLog[] = Array.from({ length: count }, (_, i) => ({
+          weight: ex.setWeights?.[i] ?? null,
+          reps: ex.setReps?.[i] ?? null,
+        }));
+        if (sets.length > 0) map[key] = { date: s.date, sets };
+      }
+    }
+    return map;
+  }, [programme, sessionId, session]);
+
   // Local name overrides for swapped exercises
   const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
   const [logs, setLogs] = useState<LogState>({});
@@ -753,6 +778,31 @@ export default function ClientSession() {
                   {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
                 </div>
                 {ex.notes && <p className="text-xs text-muted-foreground mt-1.5 ml-8 italic">{ex.notes}</p>}
+
+                {/* Last time reminder */}
+                {(() => {
+                  const prev = prevLogs[ex.name.toLowerCase().trim()];
+                  if (!prev) return null;
+                  const setsText = prev.sets
+                    .map(s => {
+                      if (s.weight !== null && s.reps !== null) return `${s.weight}×${s.reps}`;
+                      if (s.weight !== null) return `${s.weight}kg`;
+                      if (s.reps !== null) return `×${s.reps}`;
+                      return null;
+                    })
+                    .filter(Boolean)
+                    .join(" · ");
+                  if (!setsText) return null;
+                  return (
+                    <div className="flex items-center gap-1.5 mt-2 ml-8">
+                      <Clock className="w-3 h-3 text-blue-400 shrink-0" />
+                      <p className="text-[11px] text-muted-foreground">
+                        <span className="font-semibold text-blue-500">{format(parseISO(prev.date), "d MMM")}:</span>{" "}
+                        {setsText}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Swap input panel */}
