@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, Calendar, KeyRound, Target } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { format } from "date-fns";
+import { format, startOfWeek, addWeeks, addDays, isSameDay, parseISO } from "date-fns";
 import {
   useGetClient,
   useListProgrammes,
@@ -17,7 +17,7 @@ import {
   getListProgrammesQueryKey,
   getGetClientQueryKey,
 } from "@workspace/api-client-react";
-import type { NutritionEntry, Programme } from "@workspace/api-client-react";
+import type { NutritionEntry, Programme, Session } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -29,7 +29,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-type Tab = "programmes" | "nutrition";
+type Tab = "training" | "nutrition";
 
 export default function ClientArea() {
   const [, params] = useRoute("/clients/:clientId");
@@ -119,6 +119,23 @@ export default function ClientArea() {
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [assignStartDate, setAssignStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [isAssigning, setIsAssigning] = useState(false);
+
+  // ── Training calendar state ──
+  const [trainingWeekOffset, setTrainingWeekOffset] = useState(0);
+  const [selectedTrainingSession, setSelectedTrainingSession] = useState<Session | null>(null);
+
+  const trainingWeeks = useMemo(() => {
+    const weekStart = startOfWeek(addWeeks(new Date(), trainingWeekOffset), { weekStartsOn: 1 });
+    return Array.from({ length: 4 }, (_, wi) => {
+      const ws = addWeeks(weekStart, wi);
+      return Array.from({ length: 7 }, (_, di) => addDays(ws, di));
+    });
+  }, [trainingWeekOffset]);
+
+  const allClientSessions = useMemo<Session[]>(() => {
+    if (!clientProgrammes) return [];
+    return clientProgrammes.flatMap(p => p.sessions || []);
+  }, [clientProgrammes]);
 
   async function handleAssign() {
     if (!selectedSourceId || !assignStartDate) return;
@@ -279,7 +296,7 @@ export default function ClientArea() {
 
         {/* Tabs */}
         <div className="flex gap-1 mt-4 bg-muted/50 rounded-xl p-1 w-fit">
-          {(["nutrition", "programmes"] as Tab[]).map(tab => (
+          {(["nutrition", "training"] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -290,7 +307,7 @@ export default function ClientArea() {
               }`}
             >
               {tab === "nutrition" ? <Utensils className="w-3.5 h-3.5" /> : <Dumbbell className="w-3.5 h-3.5" />}
-              {tab === "nutrition" ? "Nutrition" : "Programmes"}
+              {tab === "nutrition" ? "Nutrition" : "Training"}
             </button>
           ))}
         </div>
@@ -419,103 +436,117 @@ export default function ClientArea() {
         </div>
       )}
 
-      {/* Programmes Tab */}
-      {activeTab === "programmes" && (
-        <div className="px-6 py-6 max-w-2xl mx-auto space-y-6">
+      {/* Training Tab */}
+      {activeTab === "training" && (
+        <div className="relative flex flex-col h-full overflow-hidden">
 
-          {/* Assigned programmes for this client */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Assigned Programmes</h3>
-              <Button size="sm" variant="default" onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}>
-                <Plus className="w-3.5 h-3.5 mr-1" /> Assign Programme
+          {/* Calendar toolbar */}
+          <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w - 1)}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 px-3 text-xs rounded-md" onClick={() => setTrainingWeekOffset(0)}>
+                Today
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w + 1)}>
+                <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
-            {!clientProgrammes?.length ? (
-              <div className="text-center py-10 text-muted-foreground border border-dashed rounded-2xl">
-                <Calendar className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm">No programmes assigned yet.</p>
-                <p className="text-xs mt-1 opacity-60">Click "Assign Programme" to add one to their calendar.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {clientProgrammes.map(prog => (
-                  <div key={prog.id} className="w-full bg-card border rounded-2xl px-5 py-4 flex items-center justify-between group">
-                    <div className="flex items-center gap-3">
-                      <Dumbbell className="w-4 h-4 text-primary" />
-                      <div>
-                        <span className="font-semibold text-sm">{prog.title || "Untitled"}</span>
-                        <p className="text-xs text-muted-foreground">
-                          {prog.sessions?.length ?? 0} session{prog.sessions?.length !== 1 ? "s" : ""}
-                          {prog.sessions?.length
-                            ? ` · starts ${format(new Date(prog.sessions.sort((a, b) => a.date < b.date ? -1 : 1)[0].date + "T12:00:00"), "d MMM yyyy")}`
-                            : ""}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteClientProgramme(prog.id, prog.title)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground"
-                      title="Remove from calendar"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <Button
+              size="sm"
+              variant="default"
+              className="rounded-xl text-xs h-8 px-3 gap-1"
+              onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
+            >
+              <Plus className="w-3.5 h-3.5" /> Assign Programme
+            </Button>
           </div>
 
-          {/* Master programmes available to view / assign */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Programmes</h3>
-                <p className="text-[11px] text-muted-foreground/60 mt-0.5">Client results are tracked here</p>
-              </div>
+          {/* Calendar grid */}
+          {!clientProgrammes?.length ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
+              <Calendar className="w-10 h-10 opacity-20" />
+              <p className="text-sm font-medium">No programmes assigned yet</p>
+              <p className="text-xs opacity-60">Use "Assign Programme" to populate the calendar</p>
             </div>
-            {!masterProgrammes?.length ? (
-              <p className="text-sm text-muted-foreground">No programmes yet. Create one on the Coach Calendar.</p>
-            ) : (
-              <div className="space-y-2">
-                {masterProgrammes.map(prog => (
-                  <div
-                    key={prog.id}
-                    className="w-full bg-muted/40 border rounded-2xl px-4 py-3.5 flex items-center justify-between hover:border-primary/40 hover:bg-card hover:shadow-sm transition-all group"
-                  >
-                    <button
-                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                      onClick={() => setLocation(`/clients/${clientId}/programmes/${prog.id}`)}
-                    >
-                      <Dumbbell className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                      <div className="min-w-0">
-                        <span className="font-semibold text-sm truncate block">{prog.title || "Untitled Programme"}</span>
-                        <p className="text-xs text-muted-foreground">{prog.sessions?.length ?? 0} sessions</p>
-                      </div>
-                    </button>
-                    <div className="flex items-center gap-1 shrink-0 ml-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl text-xs h-7 px-2.5 gap-1"
-                        onClick={() => setLocation(`/clients/${clientId}/programmes/${prog.id}`)}
-                      >
-                        <CalendarDays className="w-3 h-3" /> View
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="rounded-xl text-xs h-7 px-2.5 text-muted-foreground"
-                        onClick={() => { setSelectedSourceId(prog.id); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
-                      >
-                        Assign
-                      </Button>
-                    </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              {/* Day headers */}
+              <div className="grid grid-cols-7 border-b bg-muted/30 sticky top-0 z-10">
+                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+                  <div key={d} className="py-2 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    {d}
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+              {trainingWeeks.map((week, wi) => (
+                <div key={wi} className="grid grid-cols-7 border-b min-h-[80px]">
+                  {week.map((day, di) => {
+                    const daySessions = allClientSessions.filter(s => {
+                      try { return isSameDay(parseISO(s.date), day); } catch { return false; }
+                    });
+                    const isToday = isSameDay(day, new Date());
+                    return (
+                      <div key={di} className={`border-r last:border-r-0 p-1.5 ${di >= 5 ? "bg-muted/20" : ""}`}>
+                        <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+                          {format(day, "d")}
+                        </div>
+                        <div className="space-y-0.5">
+                          {daySessions.map(session => (
+                            <button
+                              key={session.id}
+                              onClick={() => setSelectedTrainingSession(session)}
+                              className="w-full text-left px-1.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-[10px] leading-tight font-medium text-primary truncate block"
+                            >
+                              {session.name || "Session"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Session detail slide-up panel */}
+          {selectedTrainingSession && (
+            <div className="absolute inset-x-0 bottom-0 bg-background border-t rounded-t-2xl shadow-2xl z-20 max-h-[70%] flex flex-col">
+              <div className="flex items-center justify-between px-5 py-4 border-b">
+                <div>
+                  <h2 className="font-semibold text-base">{selectedTrainingSession.name || "Session"}</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {format(parseISO(selectedTrainingSession.date), "EEEE, d MMMM yyyy")}
+                  </p>
+                </div>
+                <button onClick={() => setSelectedTrainingSession(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="overflow-y-auto px-5 py-4 space-y-3">
+                {(!selectedTrainingSession.exercises || selectedTrainingSession.exercises.length === 0) ? (
+                  <p className="text-sm text-muted-foreground">No exercises in this session.</p>
+                ) : (
+                  selectedTrainingSession.exercises.map((ex, i) => (
+                    <div key={ex.id ?? i} className="flex items-start gap-3 py-2 border-b last:border-b-0">
+                      <span className="text-xs text-muted-foreground font-mono w-5 shrink-0 pt-0.5">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{ex.name}</p>
+                        {ex.sets && ex.reps && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {ex.sets} × {ex.reps}{ex.weight ? ` @ ${ex.weight}` : ""}
+                          </p>
+                        )}
+                        {ex.notes && <p className="text-xs text-muted-foreground/70 mt-0.5 italic">{ex.notes}</p>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
