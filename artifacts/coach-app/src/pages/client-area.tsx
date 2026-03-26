@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -155,6 +155,154 @@ export default function ClientArea() {
       setIsAssigning(false);
     }
   }
+  // ── WOD Brain (client view) ──
+  const [wodClientBrainOpen, setWodClientBrainOpen] = useState(false);
+  const [wodClientQuery, setWodClientQuery] = useState("");
+  const [wodClientListening, setWodClientListening] = useState(false);
+  const [wodClientInterim, setWodClientInterim] = useState("");
+  const wodClientInterimRef = useRef("");
+  const wodClientRecRef = useRef<any>(null);
+  const [wodClientSearching, setWodClientSearching] = useState(false);
+  const [wodClientResults, setWodClientResults] = useState<any[]>([]);
+  const [wodClientTargetDate, setWodClientTargetDate] = useState("");
+  const [wodClientAdding, setWodClientAdding] = useState<string | null>(null);
+
+  // ── Run Brain (client view) ──
+  const [runClientBrainOpen, setRunClientBrainOpen] = useState(false);
+  const [runClientQuery, setRunClientQuery] = useState("");
+  const [runClientListening, setRunClientListening] = useState(false);
+  const [runClientInterim, setRunClientInterim] = useState("");
+  const runClientInterimRef = useRef("");
+  const runClientRecRef = useRef<any>(null);
+  const [runClientSearching, setRunClientSearching] = useState(false);
+  const [runClientResults, setRunClientResults] = useState<any[]>([]);
+  const [runClientTargetDate, setRunClientTargetDate] = useState("");
+  const [runClientAdding, setRunClientAdding] = useState<string | null>(null);
+
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    function makeRec(
+      setInterim: (v: string) => void,
+      interimRef: React.MutableRefObject<string>,
+      setQuery: React.Dispatch<React.SetStateAction<string>>,
+      setListening: (v: boolean) => void,
+    ) {
+      const r = new SR();
+      r.continuous = true; r.interimResults = true; r.lang = "en-US";
+      r.onresult = (e: any) => {
+        let fin = ""; let int = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+          else int += e.results[i][0].transcript;
+        }
+        interimRef.current = int; setInterim(int);
+        if (fin) { interimRef.current = ""; setQuery(p => (p ? p + " " : "") + fin.trim()); setInterim(""); }
+      };
+      r.onerror = () => { setListening(false); setInterim(""); interimRef.current = ""; };
+      r.onend = () => {
+        const left = interimRef.current.trim();
+        if (left) setQuery(p => (p ? p + " " : "") + left);
+        interimRef.current = ""; setListening(false); setInterim("");
+      };
+      return r;
+    }
+    wodClientRecRef.current = makeRec(setWodClientInterim, wodClientInterimRef, setWodClientQuery, setWodClientListening);
+    runClientRecRef.current = makeRec(setRunClientInterim, runClientInterimRef, setRunClientQuery, setRunClientListening);
+    return () => { try { wodClientRecRef.current?.abort(); } catch {} try { runClientRecRef.current?.abort(); } catch {} };
+  }, []);
+
+  const toggleWodClientListening = () => {
+    if (wodClientListening) { wodClientRecRef.current?.stop(); return; }
+    setWodClientListening(true); setWodClientInterim(""); wodClientInterimRef.current = "";
+    try { wodClientRecRef.current?.start(); } catch {}
+  };
+  const toggleRunClientListening = () => {
+    if (runClientListening) { runClientRecRef.current?.stop(); return; }
+    setRunClientListening(true); setRunClientInterim(""); runClientInterimRef.current = "";
+    try { runClientRecRef.current?.start(); } catch {}
+  };
+
+  const searchClientWods = async () => {
+    const q = wodClientQuery.trim(); if (!q) return;
+    if (wodClientListening) { wodClientRecRef.current?.stop(); setWodClientListening(false); }
+    setWodClientSearching(true);
+    try {
+      const res = await fetch("/api/wod-brain/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) });
+      const data = await res.json();
+      setWodClientResults(data.results ?? []);
+      if (!(data.results?.length)) toast({ title: "No matching WODs found", description: "Try different keywords." });
+    } catch { toast({ title: "WOD Brain error", variant: "destructive" }); }
+    finally { setWodClientSearching(false); }
+  };
+
+  const searchClientRuns = async () => {
+    const q = runClientQuery.trim(); if (!q) return;
+    if (runClientListening) { runClientRecRef.current?.stop(); setRunClientListening(false); }
+    setRunClientSearching(true);
+    try {
+      const res = await fetch("/api/run-brain/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) });
+      const data = await res.json();
+      setRunClientResults(data.results ?? []);
+      if (!(data.results?.length)) toast({ title: "No matching runs found", description: "Try different keywords." });
+    } catch { toast({ title: "Run Brain error", variant: "destructive" }); }
+    finally { setRunClientSearching(false); }
+  };
+
+  async function addSessionToClientCalendar(date: string, newSession: any, setAdding: (id: string | null) => void, sessionId: string, closeDialog: () => void, label: string) {
+    setAdding(sessionId);
+    try {
+      const targetProgramme = clientProgrammes?.[0];
+      if (targetProgramme) {
+        const existingOnDay = (targetProgramme.sessions || []).find((s: any) => s.date === date);
+        if (existingOnDay && !confirm(`${format(parseISO(date), "EEE d MMM")} already has a session. Replace it?`)) { setAdding(null); return; }
+        const updatedSessions = [...(targetProgramme.sessions || []).filter((s: any) => s.date !== date), newSession];
+        await fetch(`/api/programmes/${targetProgramme.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions: updatedSessions }) });
+      } else {
+        await fetch("/api/programmes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Sessions", clientId, sessions: [newSession] }) });
+      }
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({ title: `${label} added to ${format(parseISO(date), "EEE d MMM")}` });
+      closeDialog();
+    } catch { toast({ title: "Failed to add session", variant: "destructive" }); }
+    finally { setAdding(null); }
+  }
+
+  const addWodToClientCalendar = async (wod: any) => {
+    if (!wodClientTargetDate) return;
+    const formatLabel = wod.formatLabel ?? wod.format;
+    const sessionName = `${formatLabel} ${wod.duration}: ${wod.name}`;
+    const newSession = {
+      id: `session-${Date.now()}`,
+      date: wodClientTargetDate,
+      name: sessionName,
+      source: "wod_brain",
+      structure: wod.structure ?? "",
+      exercises: (wod.blocks ?? []).map((block: any, idx: number) => ({
+        id: `ex-${Date.now()}-${idx}`,
+        name: `${block.movement.charAt(0).toUpperCase()}${block.movement.slice(1)}`,
+        sets: null, reps: null, rpe: null,
+        notes: `${block.amount} ${block.unit}`,
+        rawText: `${block.amount} ${block.unit} ${block.movement}`,
+      })),
+    };
+    await addSessionToClientCalendar(wodClientTargetDate, newSession, setWodClientAdding, wod.id, () => { setWodClientBrainOpen(false); setWodClientResults([]); setWodClientQuery(""); setWodClientTargetDate(""); }, sessionName);
+  };
+
+  const addRunToClientCalendar = async (run: any) => {
+    if (!runClientTargetDate) return;
+    const sessionName = run.name;
+    const newSession = {
+      id: `session-${Date.now()}`,
+      date: runClientTargetDate,
+      name: sessionName,
+      source: "run_brain",
+      structure: run.structure ?? "",
+      exercises: [{ id: `ex-${Date.now()}`, name: run.name, sets: null, reps: null, rpe: null, notes: `${run.duration ? run.duration + " min" : ""}${run.distanceKm ? " · " + run.distanceKm + " km" : ""} ${run.intensity ?? ""}`.trim(), rawText: run.structure ?? "" }],
+    };
+    await addSessionToClientCalendar(runClientTargetDate, newSession, setRunClientAdding, run.id, () => { setRunClientBrainOpen(false); setRunClientResults([]); setRunClientQuery(""); setRunClientTargetDate(""); }, sessionName);
+  };
+
   // ── Strength Brain ──
   const [strengthBrainOpen, setStrengthBrainOpen] = useState(false);
   const [strengthQuery, setStrengthQuery] = useState("");
@@ -540,22 +688,42 @@ export default function ClientArea() {
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Button
                 size="sm"
                 variant="outline"
-                className="rounded-xl text-xs h-8 px-3 gap-1 border-orange-200 text-orange-700 hover:bg-orange-50"
+                className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+                onClick={() => { setWodClientResults([]); setWodClientQuery(""); setWodClientTargetDate(""); setWodClientBrainOpen(true); }}
+              >
+                <Brain className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">WOD Brain</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-green-200 text-green-700 hover:bg-green-50"
+                onClick={() => { setRunClientResults([]); setRunClientQuery(""); setRunClientTargetDate(""); setRunClientBrainOpen(true); }}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Run Brain</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 border-orange-200 text-orange-700 hover:bg-orange-50"
                 onClick={() => { setStrengthResults([]); setStrengthQuery(""); setStrengthStartDate(""); setStrengthBrainOpen(true); }}
               >
-                <Brain className="w-3.5 h-3.5" /> Strength Brain
+                <Dumbbell className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Strength Brain</span>
               </Button>
               <Button
                 size="sm"
                 variant="default"
-                className="rounded-xl text-xs h-8 px-3 gap-1"
+                className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1"
                 onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
               >
-                <Plus className="w-3.5 h-3.5" /> Assign Programme
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Assign Programme</span>
               </Button>
             </div>
           </div>
@@ -765,6 +933,144 @@ export default function ClientArea() {
               Save Goals
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WOD Brain Dialog */}
+      <Dialog
+        open={wodClientBrainOpen}
+        onOpenChange={open => {
+          if (!open) { try { wodClientRecRef.current?.stop(); } catch {} setWodClientListening(false); setWodClientInterim(""); }
+          setWodClientBrainOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-purple-600" />
+              WOD Brain
+            </DialogTitle>
+            <DialogDescription>Search 20 WODs and add one to this client's calendar.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="flex gap-2">
+              <Input
+                placeholder="e.g. AMRAP dumbbell engine 15 min…"
+                value={wodClientQuery + (wodClientInterim ? ` ${wodClientInterim}` : "")}
+                onChange={e => setWodClientQuery(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && searchClientWods()}
+                className="flex-1 rounded-xl"
+              />
+              <Button size="icon" variant={wodClientListening ? "destructive" : "outline"} className="shrink-0 rounded-xl" onClick={toggleWodClientListening} title={wodClientListening ? "Stop listening" : "Speak your search"}>
+                {wodClientListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
+              <Button size="icon" variant="default" className="shrink-0 rounded-xl bg-purple-600 hover:bg-purple-700" onClick={searchClientWods} disabled={!wodClientQuery.trim() || wodClientSearching}>
+                {wodClientSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+              </Button>
+            </div>
+            {wodClientListening && (
+              <p className="text-xs text-purple-600 animate-pulse">{wodClientInterim ? `"${wodClientInterim}"` : "Listening…"}</p>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Target date</label>
+              <input
+                type="date"
+                value={wodClientTargetDate}
+                onChange={e => setWodClientTargetDate(e.target.value)}
+                className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+              />
+            </div>
+            {wodClientResults.length > 0 && (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {wodClientResults.map((wod: any) => (
+                  <div key={wod.id} className="flex items-start justify-between gap-3 rounded-xl border p-3 bg-purple-50/40">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{wod.name}</p>
+                      <p className="text-xs text-muted-foreground">{wod.formatLabel ?? wod.format} · {wod.duration} · {(wod.tags ?? []).join(", ")}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="shrink-0 rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
+                      disabled={!wodClientTargetDate || wodClientAdding === wod.id}
+                      onClick={() => addWodToClientCalendar(wod)}
+                      title={!wodClientTargetDate ? "Choose a date first" : `Add to ${wodClientTargetDate}`}
+                    >
+                      {wodClientAdding === wod.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run Brain Dialog */}
+      <Dialog
+        open={runClientBrainOpen}
+        onOpenChange={open => {
+          if (!open) { try { runClientRecRef.current?.stop(); } catch {} setRunClientListening(false); setRunClientInterim(""); }
+          setRunClientBrainOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-green-600" />
+              Run Brain
+            </DialogTitle>
+            <DialogDescription>Search 50 runs and add one to this client's calendar.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="flex gap-2">
+              <Input
+                placeholder="e.g. 5km tempo easy aerobic…"
+                value={runClientQuery + (runClientInterim ? ` ${runClientInterim}` : "")}
+                onChange={e => setRunClientQuery(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && searchClientRuns()}
+                className="flex-1 rounded-xl"
+              />
+              <Button size="icon" variant={runClientListening ? "destructive" : "outline"} className="shrink-0 rounded-xl" onClick={toggleRunClientListening} title={runClientListening ? "Stop listening" : "Speak your search"}>
+                {runClientListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
+              <Button size="icon" variant="default" className="shrink-0 rounded-xl bg-green-600 hover:bg-green-700" onClick={searchClientRuns} disabled={!runClientQuery.trim() || runClientSearching}>
+                {runClientSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              </Button>
+            </div>
+            {runClientListening && (
+              <p className="text-xs text-green-600 animate-pulse">{runClientInterim ? `"${runClientInterim}"` : "Listening…"}</p>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Target date</label>
+              <input
+                type="date"
+                value={runClientTargetDate}
+                onChange={e => setRunClientTargetDate(e.target.value)}
+                className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            {runClientResults.length > 0 && (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {runClientResults.map((run: any) => (
+                  <div key={run.id} className="flex items-start justify-between gap-3 rounded-xl border p-3 bg-green-50/40">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{run.name}</p>
+                      <p className="text-xs text-muted-foreground">{run.type ?? run.runType} · {run.duration ? `${run.duration} min` : ""}{run.distanceKm ? ` · ${run.distanceKm} km` : ""} · {(run.tags ?? []).join(", ")}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="shrink-0 rounded-lg bg-green-600 hover:bg-green-700 text-white"
+                      disabled={!runClientTargetDate || runClientAdding === run.id}
+                      onClick={() => addRunToClientCalendar(run)}
+                      title={!runClientTargetDate ? "Choose a date first" : `Add to ${runClientTargetDate}`}
+                    >
+                      {runClientAdding === run.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
