@@ -32,7 +32,7 @@ interface EnduranceCycle {
 const cycles: EnduranceCycle[] = [
   {
     id: "engine-emom-ergs-6-week",
-    name: "Engine EMOM on Ergs",
+    name: "Mikko's Triangle Cycle",
     progressionType: "density_duration",
     equipment: ["rower", "ski erg", "bike"],
     tags: ["emom", "ergs", "engine", "endurance", "6-week"],
