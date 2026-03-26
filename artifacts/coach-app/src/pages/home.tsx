@@ -497,7 +497,7 @@ export default function Home() {
           {programmes && programmes.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="font-bold text-base sm:text-xl gap-2 px-2 hover:bg-muted rounded-lg max-w-[140px] sm:max-w-none">
+                <Button variant="ghost" className="font-bold text-base sm:text-xl gap-2 px-2 hover:bg-muted rounded-lg max-w-[180px] sm:max-w-none">
                   <span className="truncate">{selectedProgramme?.title || "Select Programme"}</span>
                   <ChevronRight className="w-4 h-4 rotate-90 opacity-50" />
                 </Button>
@@ -565,7 +565,6 @@ export default function Home() {
               title="Run Brain"
             >
               <Zap className="w-4 h-4 shrink-0" />
-              <span className="sm:hidden">Find Runs</span>
               <span className="hidden sm:inline">Run Brain</span>
             </Button>
           )}
@@ -578,7 +577,6 @@ export default function Home() {
               title="WOD Brain"
             >
               <Brain className="w-4 h-4 shrink-0" />
-              <span className="sm:hidden">Find WODs</span>
               <span className="hidden sm:inline">WOD Brain</span>
             </Button>
           )}
