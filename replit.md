@@ -1,4 +1,4 @@
-# Coach - Voice Training Programme Builder
+# Cue Coaching - Voice Training Programme Builder
 
 ## Overview
 
@@ -56,6 +56,14 @@ artifacts-monorepo/
 - `programmes` table: `id`, `title`, `sessions` (JSONB), `createdAt`, `updatedAt`
 - Sessions stored as JSONB: `[{ id, date, name?, color?, exercises[] }]`
 - Each exercise: `{ id, name, sets, reps, rpe, rest, tempo, notes, weekProgression[] }`
+
+## Strength Blocks Module
+
+Built-in strength programme engine stored in `artifacts/api-server/src/routes/strength-blocks.ts`.
+- Templates: Smolov Jr, Russian Squat Routine, Full Smolov (Smolov Senior), Beginner Squat Builder
+- Routes: `GET /api/strength-blocks/templates`, `GET /api/strength-blocks/templates/:id`, `POST /api/strength-blocks/preview`, `POST /api/strength-blocks/insert`, `POST /api/strength-blocks/nlp`
+- Insertion creates a `programmesTable` row with `clientId` set, so sessions appear directly in the client's training calendar
+- UI: `artifacts/coach-app/src/pages/strength-blocks.tsx` — library cards, week accordion detail, insert dialog with NLP + client picker + start date + session preview
 
 ## API Endpoints
 

@@ -1,0 +1,174 @@
+Add a new feature to the existing coaching software called Strength Blocks.
+
+This is not a separate app. It is a module inside the current product and must follow the same design system, navigation, data structure, and user flow as the rest of the software.
+
+Purpose:
+Strength Blocks is a structured programme engine for full strength cycles. It should allow coaches and clients to insert proven multi-week strength programmes into a calendar, adjust them, and then treat them like editable training blocks inside the wider coaching product.
+
+The first use case is squat cycles, but the architecture should support future strength blocks for bench, deadlift, Olympic lifting, running, hybrid prep, and general strength phases.
+
+Important simplification for this version:
+Do not build automatic percentage calculations yet.
+For now, the programme templates should store prescriptions as percentages only, and the coach or user will calculate the actual working weights themselves.
+Example: 4x9 @ 70%, not 4x9 @ 98kg.
+The goal right now is correct programme structure, scheduling, and editing, not load maths.
+
+What this module needs to do:
+
+1. Store full programme templates
+The system must support complete named strength cycles, not just single workouts.
+
+Examples:
+- Smolov Jr
+- full Smolov / Smolov Senior
+- Russian Squat Routine
+- custom coach-built squat blocks
+
+Each programme template should include:
+- programme name
+- lift focus
+- duration in weeks
+- sessions per week
+- session-by-session prescription
+- progression rules
+- optional notes
+- percentage-based prescriptions only for now
+- optional accessories, recovery sessions, or test days
+- programme tags such as beginner, intermediate, advanced, squat, peaking, volume, intensity
+
+2. Support calendar insertion
+The system should allow a coach or user to insert a full block into a calendar from a natural language command.
+
+Example coach command:
+“Insert Smolov Senior into Keeley’s calendar starting March 30”
+
+Example client command:
+“I want a squat programme with 3 days a week starting on 30 March”
+“I want a 6 week squat block focused on strength starting next Monday”
+“Give me an intermediate squat cycle starting April 8”
+
+The system should:
+- interpret the request
+- identify the right block or suggest options
+- resolve the athlete
+- resolve the start date
+- map all sessions into the calendar on the correct days
+- preserve the original programme logic
+- allow coach review before final insertion if needed
+
+3. Work for both coach-side and client-side use
+Coach-side:
+A coach can choose a named programme and apply it to a client calendar, with options to customise before confirming.
+
+Client-side / B2C:
+A user can describe what they want in plain language and the system should match them to a suitable strength block based on:
+- primary goal
+- experience level
+- days per week available
+- preferred start date
+
+If the user is too vague, the system should ask a small number of focused follow-up questions.
+
+4. Use a “Strength Blocks brain”
+Create a new structured knowledge layer called Strength Blocks.
+This brain stores all programme templates and the rules for how they behave.
+
+The brain should:
+- contain the canonical version of each programme
+- break each programme into weeks, days, and sessions
+- store percentage-based prescriptions exactly as written in the template
+- support coach edits without breaking the original template
+- support cloning a template into a live client calendar object
+- support future additions of other strength cycles beyond squat
+
+5. Programme logic
+For this version, the module should not calculate or convert percentages into loads.
+It should only store and display prescriptions like:
+- 4x9 @ 70%
+- 5x7 @ 75%
+- 7x5 @ 80%
+
+The coach or client will interpret the percentages themselves.
+
+Do not build:
+- 1RM calculators
+- training max calculators
+- plate rounding rules
+- kg/lb conversion logic
+- auto-generated working weights
+
+Those can come later.
+
+6. Calendar behaviour
+When a block is inserted into a client plan, each session should become a normal editable workout entry inside the existing calendar and training system.
+
+That means:
+- the programme remains structured as a block
+- each session can still be edited manually
+- coaches can swap, move, or delete sessions
+- if a session is moved, the system should preserve programme order where sensible
+- completed sessions should remain logged historically even if the future block is edited
+
+7. UI requirements
+Add this as a clean module within the existing software.
+
+Needed UI:
+- Strength Blocks library page
+- programme detail view
+- insert-into-calendar flow
+- athlete selection
+- start date selection
+- review screen before insertion
+- live block view inside the client calendar
+
+The UI should feel like part of the existing software, not a bolted-on tool.
+
+8. Natural language support
+Add support for programme insertion and recommendation by natural language input.
+
+Examples the system should understand:
+- insert smolov senior into Keeley’s calendar starting March 30
+- put a 3 day squat cycle into my calendar starting next Monday
+- I want a beginner squat programme for 6 weeks
+- give me a peaking squat block
+- add Russian Squat Routine for Sam starting April 1
+- build me a squat block with 2 sessions per week starting in May
+
+The system should convert these requests into structured actions.
+
+9. Data model
+Create data structures for:
+- programme_template
+- programme_week
+- programme_session
+- live_block
+- calendar_insert_mapping
+
+A programme template should remain untouched as the source version.
+A live block is the scheduled, editable version attached to a user or client.
+
+10. Seed data
+Start by loading several real squat blocks into the Strength Blocks brain, including:
+- Smolov Jr
+- full Smolov / Smolov Senior
+- Russian Squat Routine
+
+Store them in a way that makes it easy to add more later.
+
+11. Important product logic
+The system must distinguish between:
+- a reusable template
+- a recommended template
+- a live scheduled block
+- an edited version of a live block
+
+Do not treat a strength block as one workout.
+It is a full multi-session progression with ordering, logic, and calendar behaviour.
+
+12. Output standard
+When a block is inserted, the output should be:
+- a correctly scheduled sequence of workouts in the athlete calendar
+- each workout populated with the right exercises, sets, reps, percentages, and notes
+- tied back to the parent strength block for tracking and future edits
+
+Build this so it works first for squat cycles, but architect it as a reusable engine for all future strength blocks inside the existing coaching software.

@@ -5,6 +5,7 @@ import parseRouter from "./parse";
 import clientsRouter from "./clients";
 import wodBrainRouter from "./wod-brain";
 import runBrainRouter from "./run-brain";
+import strengthBlocksRouter from "./strength-blocks";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(parseRouter);
 router.use(clientsRouter);
 router.use(wodBrainRouter);
 router.use(runBrainRouter);
+router.use(strengthBlocksRouter);
 
 export default router;

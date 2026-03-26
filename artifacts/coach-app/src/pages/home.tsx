@@ -584,6 +584,16 @@ export default function Home() {
             size="sm"
             variant="outline"
             className="rounded-lg gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-50 px-2 sm:px-3"
+            onClick={() => setLocation("/strength-blocks")}
+            title="Strength Blocks"
+          >
+            <Dumbbell className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Strength</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-lg gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-50 px-2 sm:px-3"
             onClick={() => setLocation("/library")}
             title="Library"
           >

@@ -17,6 +17,7 @@ import ClientsList from "./pages/clients-list";
 import ClientArea from "./pages/client-area";
 import CoachClientCalendar from "./pages/coach-client-calendar";
 import Library from "./pages/library";
+import StrengthBlocks from "./pages/strength-blocks";
 import { AppSidebar } from "./components/app-sidebar";
 import { ClientSidebar } from "./components/client-sidebar";
 import { ClientProvider, useClientContext } from "./contexts/client-context";
@@ -114,6 +115,7 @@ function App() {
                         <Route path="/clients/:clientId/programmes/:programmeId" component={CoachClientCalendar} />
                         <Route path="/clients/:clientId" component={ClientArea} />
                         <Route path="/library" component={Library} />
+                        <Route path="/strength-blocks" component={StrengthBlocks} />
                         <Route component={NotFound} />
                       </Switch>
                     </main>
