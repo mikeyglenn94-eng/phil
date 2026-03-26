@@ -317,6 +317,59 @@ const templates: StrengthBlockTemplate[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helper: score a template against a query string
+// ─────────────────────────────────────────────────────────────────────────────
+
+function scoreTemplate(template: StrengthBlockTemplate, query: string): number {
+  const q = query.toLowerCase();
+  let score = 0;
+
+  // Programme name match
+  if (q.includes("smolov jr") && template.id === "smolov_jr") score += 20;
+  if ((q.includes("smolov senior") || q.includes("full smolov")) && template.id === "smolov_senior") score += 20;
+  if ((q.includes("russian") || q.includes("rsr")) && template.id === "russian_squat") score += 20;
+  if ((q.includes("beginner") || q.includes("starter") || q.includes("start")) && template.level === "beginner") score += 10;
+
+  // Level
+  if (q.includes("beginner") && template.level === "beginner") score += 8;
+  if (q.includes("intermediate") && template.level === "intermediate") score += 8;
+  if (q.includes("advanced") && template.level === "advanced") score += 8;
+
+  // Frequency / days per week
+  if ((q.includes("3 day") || q.includes("3x") || q.includes("3 session") || q.includes("three day")) && template.sessionsPerWeek === 3) score += 8;
+  if ((q.includes("4 day") || q.includes("4x") || q.includes("4 session") || q.includes("four day")) && template.sessionsPerWeek === 4) score += 8;
+
+  // Duration
+  if ((q.includes("short") || q.includes("3 week")) && template.durationWeeks <= 3) score += 5;
+  if ((q.includes("6 week") || q.includes("six week")) && template.durationWeeks === 6) score += 8;
+  if ((q.includes("long") || q.includes("13 week") || q.includes("peaking cycle")) && template.durationWeeks >= 10) score += 5;
+
+  // Rep range — low rep = intensity templates
+  if ((q.includes("low rep") || q.includes("heavy") || q.includes("singles") || q.includes("1rm") || q.includes("max") || q.includes("peaking")) && template.tags.includes("intensity")) score += 8;
+  if ((q.includes("low rep") || q.includes("heavy") || q.includes("peaking")) && template.tags.includes("peaking")) score += 5;
+
+  // Volume
+  if ((q.includes("volume") || q.includes("high rep") || q.includes("lots of") || q.includes("accumulation")) && template.tags.includes("volume")) score += 8;
+
+  // Intensity
+  if ((q.includes("intensity") || q.includes("intense") || q.includes("high intensity")) && template.tags.includes("intensity")) score += 6;
+
+  // Strength keywords
+  if ((q.includes("strength") || q.includes("squat") || q.includes("cycle") || q.includes("programme") || q.includes("program") || q.includes("block")) && template.liftFocus === "squat") score += 3;
+
+  // Classic / Soviet / Russian style
+  if ((q.includes("soviet") || q.includes("russian") || q.includes("classic")) && template.id === "russian_squat") score += 10;
+
+  // Any match at all gets a baseline
+  const nameMatch = template.name.toLowerCase().split(" ").some(w => w.length > 3 && q.includes(w));
+  if (nameMatch) score += 6;
+  const tagMatch = template.tags.some(t => q.includes(t.replace(/-/g, " ")));
+  if (tagMatch) score += 4;
+
+  return score;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper: generate sessions from template + start date
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -407,6 +460,22 @@ router.post("/strength-blocks/insert", async (req, res): Promise<void> => {
     .returning();
 
   res.status(201).json({ programme, sessionCount: sessions.length });
+});
+
+router.post("/strength-blocks/search", (req, res): void => {
+  const { query } = req.body as { query: string };
+  if (!query?.trim()) { res.status(400).json({ error: "Query is required" }); return; }
+
+  const results = templates
+    .map(t => ({ ...t, score: scoreTemplate(t, query), weeks: undefined }))
+    .filter(t => t.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  // If nothing scored above 0, return all sorted by level
+  const final = results.length > 0 ? results : templates.slice(0, 3).map(t => ({ ...t, score: 1, weeks: undefined }));
+
+  res.json({ results: final });
 });
 
 // NLP endpoint: parse natural language → suggest which template + extract params

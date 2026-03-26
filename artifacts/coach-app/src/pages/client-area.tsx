@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format, startOfWeek, addWeeks, addDays, isSameDay, parseISO } from "date-fns";
@@ -155,6 +155,93 @@ export default function ClientArea() {
       setIsAssigning(false);
     }
   }
+  // ── Strength Brain ──
+  const [strengthBrainOpen, setStrengthBrainOpen] = useState(false);
+  const [strengthQuery, setStrengthQuery] = useState("");
+  const [strengthListening, setStrengthListening] = useState(false);
+  const [strengthInterim, setStrengthInterim] = useState("");
+  const strengthInterimRef = useRef("");
+  const strengthRecRef = useRef<any>(null);
+  const [strengthSearching, setStrengthSearching] = useState(false);
+  const [strengthResults, setStrengthResults] = useState<any[]>([]);
+  const [strengthStartDate, setStrengthStartDate] = useState("");
+  const [strengthInserting, setStrengthInserting] = useState<string | null>(null);
+
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = true; r.interimResults = true; r.lang = "en-US";
+    r.onresult = (e: any) => {
+      let fin = ""; let int = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else int += e.results[i][0].transcript;
+      }
+      strengthInterimRef.current = int;
+      setStrengthInterim(int);
+      if (fin) {
+        strengthInterimRef.current = "";
+        setStrengthQuery(prev => (prev ? prev + " " : "") + fin.trim());
+        setStrengthInterim("");
+      }
+    };
+    r.onerror = () => { setStrengthListening(false); setStrengthInterim(""); strengthInterimRef.current = ""; };
+    r.onend = () => {
+      const leftover = strengthInterimRef.current.trim();
+      if (leftover) setStrengthQuery(prev => (prev ? prev + " " : "") + leftover);
+      strengthInterimRef.current = "";
+      setStrengthListening(false);
+      setStrengthInterim("");
+    };
+    strengthRecRef.current = r;
+    return () => { try { r.abort(); } catch {} };
+  }, []);
+
+  const toggleStrengthListening = () => {
+    if (strengthListening) { strengthRecRef.current?.stop(); return; }
+    setStrengthListening(true); setStrengthInterim(""); strengthInterimRef.current = "";
+    try { strengthRecRef.current?.start(); } catch {}
+  };
+
+  const searchStrengthBlocks = async () => {
+    const q = strengthQuery.trim();
+    if (!q) return;
+    if (strengthListening) { strengthRecRef.current?.stop(); setStrengthListening(false); }
+    setStrengthSearching(true);
+    try {
+      const res = await fetch("/api/strength-blocks/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+      const data = await res.json();
+      setStrengthResults(data.results ?? []);
+      if ((data.results?.length ?? 0) === 0) toast({ title: "No matching blocks found", description: "Try different keywords." });
+    } catch {
+      toast({ title: "Strength Brain error", variant: "destructive" });
+    } finally { setStrengthSearching(false); }
+  };
+
+  const insertStrengthBlock = async (templateId: string, templateName: string) => {
+    if (!strengthStartDate) { toast({ title: "Pick a start date first" }); return; }
+    setStrengthInserting(templateId);
+    try {
+      const res = await fetch("/api/strength-blocks/insert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId, clientId, startDate: strengthStartDate }),
+      });
+      if (!res.ok) throw new Error();
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({ title: `${templateName} added to calendar`, description: `Starting ${format(parseISO(strengthStartDate), "d MMM yyyy")}` });
+      setStrengthBrainOpen(false);
+      setStrengthResults([]); setStrengthQuery(""); setStrengthStartDate("");
+    } catch {
+      toast({ title: "Failed to insert block", variant: "destructive" });
+    } finally { setStrengthInserting(null); }
+  };
+
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: entries, isLoading: entriesLoading } = useListNutritionEntries(clientId, { date: selectedDate });
@@ -453,14 +540,24 @@ export default function ClientArea() {
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
-            <Button
-              size="sm"
-              variant="default"
-              className="rounded-xl text-xs h-8 px-3 gap-1"
-              onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
-            >
-              <Plus className="w-3.5 h-3.5" /> Assign Programme
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-xl text-xs h-8 px-3 gap-1 border-orange-200 text-orange-700 hover:bg-orange-50"
+                onClick={() => { setStrengthResults([]); setStrengthQuery(""); setStrengthStartDate(""); setStrengthBrainOpen(true); }}
+              >
+                <Brain className="w-3.5 h-3.5" /> Strength Brain
+              </Button>
+              <Button
+                size="sm"
+                variant="default"
+                className="rounded-xl text-xs h-8 px-3 gap-1"
+                onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAssignDialogOpen(true); }}
+              >
+                <Plus className="w-3.5 h-3.5" /> Assign Programme
+              </Button>
+            </div>
           </div>
 
           {/* Calendar grid */}
@@ -668,6 +765,117 @@ export default function ClientArea() {
               Save Goals
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Strength Brain Dialog */}
+      <Dialog
+        open={strengthBrainOpen}
+        onOpenChange={open => {
+          if (!open) { try { strengthRecRef.current?.stop(); } catch {} setStrengthListening(false); setStrengthInterim(""); }
+          setStrengthBrainOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-orange-600" />
+              Strength Brain
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <p className="text-sm text-muted-foreground">Search for a squat cycle — describe the style, duration, or difficulty.</p>
+
+            {/* Search input */}
+            <div className="relative flex items-center gap-2">
+              <div className="flex-1 relative">
+                <Input
+                  placeholder='e.g. "low rep squat cycle" or "beginner 3 day"'
+                  value={strengthListening ? (strengthQuery + (strengthInterim ? " " + strengthInterim : "")) : strengthQuery}
+                  onChange={e => !strengthListening && setStrengthQuery(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !strengthSearching && searchStrengthBlocks()}
+                  className={strengthListening ? "border-red-300 bg-red-50 pr-2" : ""}
+                  autoFocus
+                />
+                {strengthListening && (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5">
+                    {[0, 1, 2].map(i => (
+                      <span key={i} className="w-0.5 bg-red-500 rounded-full animate-bounce" style={{ height: 12 + i * 4, animationDelay: `${i * 0.1}s` }} />
+                    ))}
+                  </span>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant={strengthListening ? "destructive" : "outline"}
+                size="icon"
+                className="shrink-0 h-10 w-10 rounded-lg"
+                onClick={toggleStrengthListening}
+                title={strengthListening ? "Stop recording" : "Speak your query"}
+              >
+                {strengthListening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
+              <Button
+                size="sm"
+                className="shrink-0 gap-1.5 rounded-lg h-10 px-4 bg-orange-600 hover:bg-orange-700"
+                onClick={searchStrengthBlocks}
+                disabled={!strengthQuery.trim() || strengthSearching}
+              >
+                {strengthSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                Find
+              </Button>
+            </div>
+
+            {/* Start date picker — shown once results are in */}
+            {strengthResults.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-1.5">Start date for this block</p>
+                <Input
+                  type="date"
+                  value={strengthStartDate}
+                  onChange={e => setStrengthStartDate(e.target.value)}
+                  className="rounded-lg"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Sessions snap to Monday of the chosen week.</p>
+              </div>
+            )}
+
+            {/* Results */}
+            {strengthResults.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-muted-foreground">Top matches</p>
+                {strengthResults.map((t, idx) => (
+                  <div key={t.id} className="rounded-xl border border-orange-100 bg-orange-50/40 p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <span className="text-xs font-bold text-orange-700 bg-orange-100 rounded px-2 py-0.5 capitalize">{t.level}</span>
+                          <span className="text-xs text-muted-foreground">{t.durationWeeks}w · {t.sessionsPerWeek}×/wk</span>
+                          <span className="text-xs text-amber-600 font-bold">#{idx + 1}</span>
+                        </div>
+                        <p className="font-semibold text-sm">{t.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="shrink-0 gap-1.5 rounded-lg bg-orange-600 hover:bg-orange-700"
+                        onClick={() => insertStrengthBlock(t.id, t.name)}
+                        disabled={!strengthStartDate || strengthInserting === t.id}
+                      >
+                        {strengthInserting === t.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        Add
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(t.tags ?? []).map((tag: string) => (
+                        <span key={tag} className="text-xs bg-orange-100/60 text-orange-700 rounded px-1.5 py-0.5 capitalize">{tag.replace(/-/g, " ")}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
