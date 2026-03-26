@@ -768,6 +768,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       const newSession = result.category === "run"
         ? {
             id: `sess-${Date.now()}`,
+            date,
             name: result.name,
             type: "Run" as const,
             order: 0,
@@ -775,6 +776,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           }
         : {
             id: `sess-${Date.now()}`,
+            date,
             name: result.name,
             type: "Training" as const,
             order: 0,
