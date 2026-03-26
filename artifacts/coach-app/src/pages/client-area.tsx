@@ -150,6 +150,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   // ── Build-from-description mode ──
   const [buildMode, setBuildMode] = useState<"template" | "describe">("template");
   const [describeText, setDescribeText] = useState("");
+  const [describeListening, setDescribeListening] = useState(false);
+  const [describeInterim, setDescribeInterim] = useState("");
+  const describeInterimRef = useRef("");
+  const describeRecRef = useRef<any>(null);
   const [describeGenerating, setDescribeGenerating] = useState(false);
   const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[] } | null>(null);
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
@@ -975,6 +979,48 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     return () => { try { r.abort(); } catch {} };
   }, []);
 
+  // Describe-It voice recognition
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = true; r.interimResults = true; r.lang = "en-US";
+    r.onresult = (e: any) => {
+      let fin = ""; let int = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else int += e.results[i][0].transcript;
+      }
+      describeInterimRef.current = int;
+      setDescribeInterim(int);
+      if (fin) {
+        describeInterimRef.current = "";
+        setDescribeText(prev => (prev ? prev + " " : "") + fin.trim());
+        setDescribeInterim("");
+      }
+    };
+    r.onerror = () => { setDescribeListening(false); setDescribeInterim(""); describeInterimRef.current = ""; };
+    r.onend = () => {
+      const leftover = describeInterimRef.current.trim();
+      if (leftover) setDescribeText(prev => (prev ? prev + " " : "") + leftover);
+      describeInterimRef.current = "";
+      setDescribeListening(false);
+      setDescribeInterim("");
+    };
+    describeRecRef.current = r;
+    return () => { try { r.abort(); } catch {} };
+  }, []);
+
+  const toggleDescribeListening = () => {
+    const r = describeRecRef.current;
+    if (!r) return;
+    if (describeListening) { r.stop(); return; }
+    setDescribeListening(true);
+    setDescribeInterim("");
+    describeInterimRef.current = "";
+    try { r.start(); } catch {}
+  };
+
   useEffect(() => {
     if (!assignDialogOpen) { setAssignSearch(""); setSelectedSourceId(null); return; }
     fetch("/api/programmes?all=true")
@@ -1670,13 +1716,31 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 <>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Describe the programme</label>
-                    <textarea
-                      className="w-full min-h-[110px] rounded-xl border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
-                      placeholder={"e.g. 3 days strength per week (upper/lower split), 1 run and 1 WOD — 6 week block starting easy and building intensity each week"}
-                      value={describeText}
-                      onChange={e => setDescribeText(e.target.value)}
-                      autoFocus
-                    />
+                    <div className="relative">
+                      <textarea
+                        className={`w-full min-h-[110px] rounded-xl border bg-background px-3 py-2.5 pr-10 text-sm resize-none focus:outline-none focus:ring-2 placeholder:text-muted-foreground transition-all ${describeListening ? "ring-2 ring-red-400/50 border-red-300" : "focus:ring-primary/40"}`}
+                        placeholder="e.g. 3 days strength per week (upper/lower split), 1 run and 1 WOD — 6 week block starting easy and building intensity each week"
+                        value={describeListening ? (describeText + (describeInterim ? " " + describeInterim : "")) : describeText}
+                        onChange={e => { if (!describeListening) setDescribeText(e.target.value); }}
+                        autoFocus={!describeListening}
+                      />
+                      <button
+                        type="button"
+                        onClick={toggleDescribeListening}
+                        className={`absolute right-2.5 bottom-2.5 p-1.5 rounded-lg transition-colors ${describeListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                        title={describeListening ? "Stop recording" : "Speak your description"}
+                      >
+                        {describeListening
+                          ? <><span className="absolute inset-0 rounded-lg bg-red-400/20 animate-ping" /><Square className="w-3.5 h-3.5 fill-current relative z-10" /></>
+                          : <Mic className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {describeListening && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        Listening… speak your programme description, then tap stop
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Start Date</label>
