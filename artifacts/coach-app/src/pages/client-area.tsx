@@ -1245,7 +1245,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Ask Brain</span>
+                  <span className="hidden sm:inline">Ask Daddy</span>
                 </Button>
                 <Button
                   size="sm"
@@ -2032,7 +2032,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-violet-600" />
-              Ask Brain
+              Ask Daddy
             </DialogTitle>
             <DialogDescription>
               Search WODs, runs, endurance cycles, and strength blocks in one place
