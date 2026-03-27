@@ -436,6 +436,43 @@ paths:
                 $ref: "#/components/schemas/NutritionEntry"
 
   /clients/{clientId}/nutrition/{entryId}:
+    patch:
+      operationId: updateNutritionEntry
+      tags: [nutrition]
+      summary: Update macros for a nutrition entry
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                calories:
+                  type: integer
+                protein:
+                  type: number
+                carbs:
+                  type: number
+                fats:
+                  type: number
+      responses:
+        "200":
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NutritionEntry"
     delete:
       operationId: deleteNutritionEntry
       tags: [nutrition]
@@ -842,6 +879,8 @@ components:
         carbs:
           type: ["string", "null"]
         fats:
+          type: ["string", "null"]
+        aiNote:
           type: ["string", "null"]
         createdAt:
           type: string

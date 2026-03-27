@@ -26,6 +26,7 @@ export const nutritionEntriesTable = pgTable("nutrition_entries", {
   protein: numeric("protein", { precision: 6, scale: 1 }),
   carbs: numeric("carbs", { precision: 6, scale: 1 }),
   fats: numeric("fats", { precision: 6, scale: 1 }),
+  aiNote: text("ai_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

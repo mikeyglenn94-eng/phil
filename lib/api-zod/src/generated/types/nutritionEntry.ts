@@ -19,5 +19,7 @@ export interface NutritionEntry {
   carbs?: string | null;
   /** @nullable */
   fats?: string | null;
+  /** @nullable */
+  aiNote?: string | null;
   createdAt: Date;
 }

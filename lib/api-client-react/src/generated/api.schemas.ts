@@ -196,6 +196,8 @@ export interface NutritionEntry {
   carbs?: string | null;
   /** @nullable */
   fats?: string | null;
+  /** @nullable */
+  aiNote?: string | null;
   createdAt: string;
 }
 
@@ -221,4 +223,11 @@ export type ListNutritionEntriesParams = {
 export type AddNutritionEntryBody = {
   description: string;
   date: string;
+};
+
+export type UpdateNutritionEntryBody = {
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fats?: number;
 };

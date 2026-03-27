@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
   useListNutritionEntries,
   useAddNutritionEntry,
   useDeleteNutritionEntry,
+  useUpdateNutritionEntry,
   useSetClientGoals,
   getListNutritionEntriesQueryKey,
   getListProgrammesQueryKey,
@@ -897,9 +898,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const { data: entries, isLoading: entriesLoading } = useListNutritionEntries(clientId, { date: selectedDate });
   const addMutation = useAddNutritionEntry();
   const deleteMutation = useDeleteNutritionEntry();
+  const updateMutation = useUpdateNutritionEntry();
 
   const [foodInput, setFoodInput] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
+  const [editCalories, setEditCalories] = useState("");
+  const [editProtein, setEditProtein] = useState("");
+  const [editCarbs, setEditCarbs] = useState("");
+  const [editFats, setEditFats] = useState("");
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const interimRef = useRef("");
@@ -1070,6 +1078,34 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     }
   };
 
+  const startEditing = (entry: NutritionEntry) => {
+    setEditingEntryId(entry.id);
+    setEditCalories(entry.calories?.toString() ?? "");
+    setEditProtein(entry.protein ? parseFloat(entry.protein).toFixed(1) : "");
+    setEditCarbs(entry.carbs ? parseFloat(entry.carbs).toFixed(1) : "");
+    setEditFats(entry.fats ? parseFloat(entry.fats).toFixed(1) : "");
+  };
+
+  const handleSaveEdit = async (entryId: number) => {
+    try {
+      await updateMutation.mutateAsync({
+        clientId,
+        entryId,
+        data: {
+          calories: editCalories ? parseInt(editCalories, 10) : undefined,
+          protein: editProtein ? parseFloat(editProtein) : undefined,
+          carbs: editCarbs ? parseFloat(editCarbs) : undefined,
+          fats: editFats ? parseFloat(editFats) : undefined,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(clientId, { date: selectedDate }) });
+      setEditingEntryId(null);
+      toast({ title: "Updated" });
+    } catch {
+      toast({ title: "Error updating entry", variant: "destructive" });
+    }
+  };
+
   // Daily totals
   const totals = (entries || []).reduce(
     (acc: { calories: number; protein: number; carbs: number; fats: number }, e: NutritionEntry) => ({
@@ -1233,7 +1269,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 <textarea
                   value={listening ? (interim || foodInput) : foodInput}
                   onChange={e => setFoodInput(e.target.value)}
-                  placeholder={listening ? "Listening…" : 'Describe what you ate, e.g. "2 scrambled eggs with toast and butter"'}
+                  placeholder={listening ? "Listening…" : 'e.g. "200g chicken breast, 100g basmati rice, 1 tbsp olive oil"'}
                   rows={2}
                   disabled={listening}
                   className="w-full resize-none text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 pr-10 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
@@ -1256,7 +1292,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
               </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-2 ml-0.5">AI will estimate calories, protein, carbs & fats</p>
+            <button
+              onClick={() => setShowGuide(g => !g)}
+              className="mt-2.5 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
+            >
+              <Info className="w-3 h-3" />
+              Tips for accurate estimates
+              {showGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+            {showGuide && (
+              <div className="mt-2 p-3 bg-primary/5 border border-primary/15 rounded-xl text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
+                <p className="font-semibold text-foreground/70 mb-1">The more specific you are, the better the estimate:</p>
+                <p>✅ <span className="text-foreground/80">200g chicken breast, 120g cooked white rice, 1 tbsp olive oil</span></p>
+                <p>✅ <span className="text-foreground/80">3 large scrambled eggs, 2 slices wholegrain toast, 10g butter</span></p>
+                <p>✅ <span className="text-foreground/80">McDonald's Big Mac and medium fries</span></p>
+                <p>✅ <span className="text-foreground/80">Protein shake — 1 scoop MyProtein Impact Whey, 300ml whole milk</span></p>
+                <p className="pt-1 border-t border-primary/10">Include: <strong>weight/volume</strong> (g, ml, cups, tbsp), <strong>cooking method</strong> (grilled vs fried), and <strong>brand</strong> for packaged foods. The AI will show you what it assumed so you can spot any errors.</p>
+              </div>
+            )}
           </div>
 
           {/* Entries list */}
@@ -1271,41 +1324,93 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </div>
           ) : (
             <div className="space-y-2">
-              {entries.map((entry: NutritionEntry) => (
-                <div key={entry.id} className="bg-card border rounded-2xl px-4 py-3.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-medium leading-snug flex-1">{entry.description}</p>
-                    <button
-                      onClick={() => handleDelete(entry.id)}
-                      className="text-muted-foreground/40 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  {entry.calories !== null && (
-                    <div className="flex gap-3 mt-2.5 flex-wrap">
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-500 bg-orange-50 rounded-lg px-2 py-0.5">
-                        {entry.calories} kcal
-                      </span>
-                      {entry.protein && (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-500 bg-blue-50 rounded-lg px-2 py-0.5">
-                          P: {parseFloat(entry.protein).toFixed(1)}g
-                        </span>
-                      )}
-                      {entry.carbs && (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-600 bg-yellow-50 rounded-lg px-2 py-0.5">
-                          C: {parseFloat(entry.carbs).toFixed(1)}g
-                        </span>
-                      )}
-                      {entry.fats && (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-pink-500 bg-pink-50 rounded-lg px-2 py-0.5">
-                          F: {parseFloat(entry.fats).toFixed(1)}g
-                        </span>
-                      )}
+              {entries.map((entry: NutritionEntry) => {
+                const isEditing = editingEntryId === entry.id;
+                return (
+                  <div key={entry.id} className="bg-card border rounded-2xl px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-medium leading-snug flex-1">{entry.description}</p>
+                      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                        {isEditing ? (
+                          <button
+                            onClick={() => handleSaveEdit(entry.id)}
+                            className="text-green-500 hover:text-green-600 transition-colors"
+                            title="Save"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => startEditing(entry)}
+                            className="text-muted-foreground/40 hover:text-primary transition-colors"
+                            title="Edit macros"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setEditingEntryId(null); handleDelete(entry.id); }}
+                          className="text-muted-foreground/40 hover:text-red-400 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {isEditing ? (
+                      <div className="mt-2.5 grid grid-cols-4 gap-2">
+                        {[
+                          { label: "kcal", value: editCalories, set: setEditCalories, color: "text-orange-500" },
+                          { label: "P (g)", value: editProtein, set: setEditProtein, color: "text-blue-500" },
+                          { label: "C (g)", value: editCarbs, set: setEditCarbs, color: "text-yellow-600" },
+                          { label: "F (g)", value: editFats, set: setEditFats, color: "text-pink-500" },
+                        ].map(({ label, value, set, color }) => (
+                          <div key={label} className="flex flex-col gap-0.5">
+                            <label className={`text-[10px] font-semibold ${color}`}>{label}</label>
+                            <input
+                              type="number"
+                              value={value}
+                              onChange={e => set(e.target.value)}
+                              className="w-full text-xs bg-muted/50 border border-muted rounded-lg px-2 py-1.5 outline-none focus:border-primary/40 text-center"
+                              onKeyDown={e => { if (e.key === "Enter") handleSaveEdit(entry.id); if (e.key === "Escape") setEditingEntryId(null); }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      entry.calories !== null && (
+                        <div className="flex gap-2 mt-2.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-500 bg-orange-50 rounded-lg px-2 py-0.5">
+                            {entry.calories} kcal
+                          </span>
+                          {entry.protein && (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-500 bg-blue-50 rounded-lg px-2 py-0.5">
+                              P: {parseFloat(entry.protein).toFixed(1)}g
+                            </span>
+                          )}
+                          {entry.carbs && (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-600 bg-yellow-50 rounded-lg px-2 py-0.5">
+                              C: {parseFloat(entry.carbs).toFixed(1)}g
+                            </span>
+                          )}
+                          {entry.fats && (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-pink-500 bg-pink-50 rounded-lg px-2 py-0.5">
+                              F: {parseFloat(entry.fats).toFixed(1)}g
+                            </span>
+                          )}
+                        </div>
+                      )
+                    )}
+
+                    {!isEditing && entry.aiNote && (
+                      <p className="mt-1.5 text-[10px] text-muted-foreground/70 italic leading-snug">
+                        AI assumed: {entry.aiNote}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

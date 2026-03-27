@@ -30,6 +30,7 @@ export * from "./setLog";
 export * from "./setPasswordBody";
 export * from "./transcribeAudioBody";
 export * from "./transcribeResponse";
+export * from "./updateNutritionEntryBody";
 export * from "./updateProgrammeBody";
 export * from "./verifyPasswordBody";
 export * from "./verifyPasswordResult";

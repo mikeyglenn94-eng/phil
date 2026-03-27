@@ -802,6 +802,7 @@ export const ListNutritionEntriesResponseItem = zod.object({
   protein: zod.string().nullish(),
   carbs: zod.string().nullish(),
   fats: zod.string().nullish(),
+  aiNote: zod.string().nullish(),
   createdAt: zod.date(),
 });
 export const ListNutritionEntriesResponse = zod.array(
@@ -818,6 +819,34 @@ export const AddNutritionEntryParams = zod.object({
 export const AddNutritionEntryBody = zod.object({
   description: zod.string(),
   date: zod.string(),
+});
+
+/**
+ * @summary Update macros for a nutrition entry
+ */
+export const UpdateNutritionEntryParams = zod.object({
+  clientId: zod.coerce.number(),
+  entryId: zod.coerce.number(),
+});
+
+export const UpdateNutritionEntryBody = zod.object({
+  calories: zod.number().optional(),
+  protein: zod.number().optional(),
+  carbs: zod.number().optional(),
+  fats: zod.number().optional(),
+});
+
+export const UpdateNutritionEntryResponse = zod.object({
+  id: zod.number(),
+  clientId: zod.number(),
+  date: zod.string(),
+  description: zod.string(),
+  calories: zod.number().nullish(),
+  protein: zod.string().nullish(),
+  carbs: zod.string().nullish(),
+  fats: zod.string().nullish(),
+  aiNote: zod.string().nullish(),
+  createdAt: zod.date(),
 });
 
 /**

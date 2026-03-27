@@ -130,6 +130,7 @@ router.post("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
   let protein: string | null = null;
   let carbs: string | null = null;
   let fats: string | null = null;
+  let aiNote: string | null = null;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -137,10 +138,24 @@ router.post("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
       messages: [
         {
           role: "system",
-          content: `You are a nutrition expert. The user will describe a food or meal they ate. 
-Estimate the macronutrients and respond ONLY with a JSON object like:
-{"calories": 450, "protein": 32.5, "carbs": 45.0, "fats": 12.0}
-All values must be numbers. Be reasonable and accurate. Never include units in the numbers.`,
+          content: `You are a precise sports nutrition expert helping athletes track their macros accurately.
+
+The user will describe food or meals they ate. Your job is to estimate macronutrients as accurately as possible and be transparent about any assumptions you make.
+
+RULES:
+- If the user gives a specific quantity (e.g. "200g chicken", "1 cup oats", "2 tbsp peanut butter"), use that exact amount.
+- If no quantity is given, assume a typical single adult male serving and ALWAYS note your assumption.
+- For branded or restaurant foods, use best available nutritional data.
+- For mixed meals (e.g. "chicken and rice"), estimate each component separately then sum.
+- For whole meals described vaguely (e.g. "bowl of pasta"), assume a moderate restaurant/homemade portion.
+- Protein: lean meats ~25-30g/100g, eggs ~6g each, legumes ~8g/100g cooked
+- Always be realistic — do not under- or over-estimate to look impressive.
+- The "note" field must briefly describe the portion assumptions you made, e.g. "Assumed 150g chicken breast, 100g cooked white rice, 1 tsp oil". If the user was specific enough that no assumptions were needed, set note to null.
+
+Respond ONLY with a JSON object in this exact format:
+{"calories": 450, "protein": 32.5, "carbs": 45.0, "fats": 12.0, "note": "Assumed standard 200g fillet and medium baked potato"}
+
+All macro values must be numbers (never strings or null). note is a string or null.`,
         },
         { role: "user", content: description },
       ],
@@ -151,15 +166,36 @@ All values must be numbers. Be reasonable and accurate. Never include units in t
     protein = typeof parsed.protein === "number" ? parsed.protein.toFixed(1) : null;
     carbs = typeof parsed.carbs === "number" ? parsed.carbs.toFixed(1) : null;
     fats = typeof parsed.fats === "number" ? parsed.fats.toFixed(1) : null;
+    aiNote = typeof parsed.note === "string" && parsed.note.trim() ? parsed.note.trim() : null;
   } catch (err) {
     console.error("Nutrition AI parse error:", err);
   }
 
   const [entry] = await db
     .insert(nutritionEntriesTable)
-    .values({ clientId, date, description: description.trim(), calories, protein, carbs, fats })
+    .values({ clientId, date, description: description.trim(), calories, protein, carbs, fats, aiNote })
     .returning();
   res.status(201).json(entry);
+});
+
+// Update macros for a nutrition entry
+router.patch("/clients/:clientId/nutrition/:entryId", async (req, res): Promise<void> => {
+  const entryId = parseInt(req.params.entryId, 10);
+  if (isNaN(entryId)) { res.status(400).json({ error: "Invalid entryId" }); return; }
+  const { calories, protein, carbs, fats } = req.body as {
+    calories?: number; protein?: number; carbs?: number; fats?: number;
+  };
+  const updates: Record<string, unknown> = {};
+  if (typeof calories === "number") updates.calories = Math.round(calories);
+  if (typeof protein === "number") updates.protein = protein.toFixed(1);
+  if (typeof carbs === "number") updates.carbs = carbs.toFixed(1);
+  if (typeof fats === "number") updates.fats = fats.toFixed(1);
+  const [entry] = await db
+    .update(nutritionEntriesTable)
+    .set(updates)
+    .where(eq(nutritionEntriesTable.id, entryId))
+    .returning();
+  res.json(entry);
 });
 
 // Delete nutrition entry

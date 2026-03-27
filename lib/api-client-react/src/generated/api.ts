@@ -38,6 +38,7 @@ import type {
   SetPasswordBody,
   TranscribeAudioBody,
   TranscribeResponse,
+  UpdateNutritionEntryBody,
   UpdateProgrammeBody,
   VerifyPasswordBody,
   VerifyPasswordResult,
@@ -1708,6 +1709,121 @@ export const useAddNutritionEntry = <
   TContext
 > => {
   return useMutation(getAddNutritionEntryMutationOptions(options));
+};
+
+/**
+ * @summary Update macros for a nutrition entry
+ */
+export const getUpdateNutritionEntryUrl = (
+  clientId: number,
+  entryId: number,
+) => {
+  return `/api/clients/${clientId}/nutrition/${entryId}`;
+};
+
+export const updateNutritionEntry = async (
+  clientId: number,
+  entryId: number,
+  updateNutritionEntryBody: UpdateNutritionEntryBody,
+  options?: RequestInit,
+): Promise<NutritionEntry> => {
+  return customFetch<NutritionEntry>(
+    getUpdateNutritionEntryUrl(clientId, entryId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateNutritionEntryBody),
+    },
+  );
+};
+
+export const getUpdateNutritionEntryMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNutritionEntry>>,
+    TError,
+    {
+      clientId: number;
+      entryId: number;
+      data: BodyType<UpdateNutritionEntryBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateNutritionEntry>>,
+  TError,
+  {
+    clientId: number;
+    entryId: number;
+    data: BodyType<UpdateNutritionEntryBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updateNutritionEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateNutritionEntry>>,
+    {
+      clientId: number;
+      entryId: number;
+      data: BodyType<UpdateNutritionEntryBody>;
+    }
+  > = (props) => {
+    const { clientId, entryId, data } = props ?? {};
+
+    return updateNutritionEntry(clientId, entryId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateNutritionEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateNutritionEntry>>
+>;
+export type UpdateNutritionEntryMutationBody =
+  BodyType<UpdateNutritionEntryBody>;
+export type UpdateNutritionEntryMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update macros for a nutrition entry
+ */
+export const useUpdateNutritionEntry = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNutritionEntry>>,
+    TError,
+    {
+      clientId: number;
+      entryId: number;
+      data: BodyType<UpdateNutritionEntryBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateNutritionEntry>>,
+  TError,
+  {
+    clientId: number;
+    entryId: number;
+    data: BodyType<UpdateNutritionEntryBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdateNutritionEntryMutationOptions(options));
 };
 
 /**
