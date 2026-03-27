@@ -149,7 +149,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [assignSearch, setAssignSearch] = useState("");
 
   // ── Build-from-description mode ──
-  const [buildMode, setBuildMode] = useState<"template" | "describe">("template");
+  const [buildMode, setBuildMode] = useState<"template" | "describe">("describe");
   const [describeText, setDescribeText] = useState("");
   const [describeListening, setDescribeListening] = useState(false);
   const [describeInterim, setDescribeInterim] = useState("");
@@ -1750,75 +1750,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               <Dumbbell className="w-5 h-5 text-primary" />
               Build Your Programme
             </DialogTitle>
-            <DialogDescription className="sr-only">Choose a template or describe a new programme for {client?.name ?? "this client"}</DialogDescription>
+            <DialogDescription className="sr-only">Describe a new programme for {client?.name ?? "this client"}</DialogDescription>
           </DialogHeader>
 
-          {/* Mode tabs */}
-          <div className="flex rounded-xl bg-muted p-1 gap-1">
-            <button
-              className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-all ${buildMode === "template" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => { setBuildMode("template"); setGeneratedPreview(null); }}
-            >
-              From Template
-            </button>
-            <button
-              className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-all ${buildMode === "describe" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => { setBuildMode("describe"); setSelectedSourceId(null); }}
-            >
-              Describe It
-            </button>
-          </div>
-
-          {/* From Template mode */}
-          {buildMode === "template" && (
-            <div className="space-y-4 py-1">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Programme</label>
-                <Input
-                  placeholder="Search programmes…"
-                  value={assignSearch}
-                  onChange={e => setAssignSearch(e.target.value)}
-                  className="rounded-xl"
-                  autoFocus
-                />
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
-                  {(allProgrammes.length ? allProgrammes : (masterProgrammes ?? []).map(p => ({ id: p.id, title: p.title || "Untitled" })))
-                    .filter(p => !assignSearch.trim() || p.title.toLowerCase().includes(assignSearch.toLowerCase()))
-                    .map(prog => (
-                      <button
-                        key={prog.id}
-                        onClick={() => setSelectedSourceId(prog.id)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                          selectedSourceId === prog.id
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:border-primary/40 hover:bg-muted/50"
-                        }`}
-                      >
-                        {prog.title}
-                      </button>
-                    ))}
-                  {allProgrammes.length > 0 && !allProgrammes.some(p => !assignSearch.trim() || p.title.toLowerCase().includes(assignSearch.toLowerCase())) && (
-                    <p className="text-xs text-muted-foreground text-center py-2">No programmes match</p>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Start Date</label>
-                <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
-              </div>
-              <DialogFooter className="pt-0">
-                <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleAssign} disabled={!selectedSourceId || !assignStartDate || isAssigning}>
-                  {isAssigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Assign to {client?.name ?? "Client"}
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-
-          {/* Describe It mode */}
-          {buildMode === "describe" && (
-            <div className="space-y-4 py-1">
+          <div className="space-y-4 py-1">
               {describeGenerating ? (
                 /* Loading panel — shows rationale as it arrives */
                 <div className="space-y-4 py-2">
@@ -1955,7 +1890,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </>
               )}
             </div>
-          )}
         </DialogContent>
       </Dialog>
 
