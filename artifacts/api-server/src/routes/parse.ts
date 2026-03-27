@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import multer from "multer";
-import { db, programmesTable } from "@workspace/db";
+import { db, programmesTable, clientsTable } from "@workspace/db";
 import type { Exercise } from "@workspace/db";
 import { eq, gte, and, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -44,10 +44,17 @@ async function getMonthlyCount(clientId: number): Promise<number> {
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
+
+  // If the coach has reset credits, use the later of startOfMonth or creditResetAt
+  const [clientRow] = await db.select({ creditResetAt: clientsTable.creditResetAt }).from(clientsTable).where(eq(clientsTable.id, clientId));
+  const cutoff = clientRow?.creditResetAt && clientRow.creditResetAt > startOfMonth
+    ? clientRow.creditResetAt
+    : startOfMonth;
+
   const rows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(programmesTable)
-    .where(and(eq(programmesTable.clientId, clientId), gte(programmesTable.createdAt, startOfMonth)));
+    .where(and(eq(programmesTable.clientId, clientId), gte(programmesTable.createdAt, cutoff)));
   return rows[0]?.count ?? 0;
 }
 

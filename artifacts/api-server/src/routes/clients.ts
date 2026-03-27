@@ -81,6 +81,15 @@ router.put("/clients/:clientId/goals", async (req, res): Promise<void> => {
   res.json(toPublicClient(client));
 });
 
+// Reset monthly credit allocation (coach action — stamps now() so the count restarts from this moment)
+router.post("/clients/:clientId/reset-credits", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.clientId, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [client] = await db.update(clientsTable).set({ creditResetAt: new Date() }).where(eq(clientsTable.id, id)).returning();
+  if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+  res.json(toPublicClient(client));
+});
+
 // Reset password (coach action — clears the hash so client can set a new one)
 router.post("/clients/:clientId/reset-password", async (req, res): Promise<void> => {
   const id = parseInt(req.params.clientId, 10);

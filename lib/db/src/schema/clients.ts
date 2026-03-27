@@ -10,6 +10,7 @@ export const clientsTable = pgTable("clients", {
   dailyProteinGoal: integer("daily_protein_goal"),
   dailyCarbGoal: integer("daily_carb_goal"),
   dailyFatGoal: integer("daily_fat_goal"),
+  creditResetAt: timestamp("credit_reset_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

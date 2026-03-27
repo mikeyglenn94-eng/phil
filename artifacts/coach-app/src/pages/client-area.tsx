@@ -113,6 +113,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   }
 
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [resettingCredits, setResettingCredits] = useState(false);
+  async function handleResetCredits() {
+    if (!confirm(`Give ${client?.name ?? "this client"} a fresh set of 2 programme generations? Their existing programmes are kept.`)) return;
+    setResettingCredits(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/reset-credits`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      await queryClient.invalidateQueries({ queryKey: ["clients", clientId] });
+      toast({ title: "Credits refreshed", description: `${client?.name ?? "Client"} can now generate up to 2 more programmes this month.` });
+    } catch {
+      toast({ title: "Failed to reset credits", variant: "destructive" });
+    } finally {
+      setResettingCredits(false);
+    }
+  }
   async function handleResetPassword() {
     if (!confirm(`Reset ${client?.name ?? "this client"}'s password? They will be asked to set a new one next time they log in.`)) return;
     setResettingPassword(true);
@@ -1256,17 +1271,30 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             Goals
           </Button>
           {mode === "coach" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleResetPassword}
-              disabled={resettingPassword}
-              className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-              title="Reset client's portal password"
-            >
-              {resettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
-              Reset PW
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleResetCredits}
+                disabled={resettingCredits}
+                className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+                title="Refresh client's monthly programme generation credits"
+              >
+                {resettingCredits ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                Credits
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleResetPassword}
+                disabled={resettingPassword}
+                className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+                title="Reset client's portal password"
+              >
+                {resettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                Reset PW
+              </Button>
+            </>
           )}
           {mode === "client" && (
             <Button
