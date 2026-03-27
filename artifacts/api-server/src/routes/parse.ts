@@ -389,6 +389,49 @@ On little days:
 - Use notes field to indicate percentages or RPE targets (e.g. "Work to heavy double @RPE8", "5×3 @75%")
 - Do NOT use the same exercise every big day every week — rotate between Snatch and Clean & Jerk as the primary lift, and use Front Squat on C&J days, Back Squat on Snatch days
 
+## Hyrox specific rules (apply when the description mentions "Hyrox", "HYROX", "hyrox race", or similar)
+
+When the programme is Hyrox-focused, apply the following principles:
+
+### The priority hierarchy — stick to this strictly
+The MAJORITY of training volume should NOT be Hyrox-specific. Structure every week around this priority order:
+
+**Priority 1 — Running capacity (most of the programme)**
+- Run development is the spine of the programme. Most sessions each week should be runs.
+- Use the 5km and 10km as primary benchmarks — target these distances and paces.
+- A half marathon is also relevant but use it as secondary context.
+- Run types to include across the week: easy Z2 runs, threshold intervals (e.g. 4×1km, 6×800m), tempo runs, long easy runs.
+- More running = arriving at stations fresher, recovering faster between stations, and raising global fitness capacity. This is the biggest lever.
+- Use source: "run_brain" for all run sessions.
+
+**Priority 2 — Strength (enough to not be the limiter)**
+- 1–2 strength sessions per week. Not bodybuilding, not powerlifting — functional strength that makes the stations feel easy.
+- Focus on: Back Squat, Romanian Deadlift, Single-leg work (step-ups, Bulgarian split squat), Hip thrust, Pull-ups/Rows, Push-ups/Dips, Farmer's carry, Sandbag work
+- Rep ranges: 3–6 for strength (heavy), 8–15 for hypertrophy/endurance strength
+- Goal is that stations like ski erg, sled push, farmers carry, wall balls never feel like a strength issue
+- Use plain strength sessions (no source field)
+
+**Priority 3 — Hyrox-specific work (layer in, do NOT make it the backbone)**
+- Hyrox circuit/station work is included but should be a minority of total volume
+- Increase Hyrox-specific work as the race approaches (more in final 2–3 weeks)
+- Station exercises: Ski Erg, Sled Push, Sled Pull, Burpee Broad Jump, Rowing, Farmers Carry, Sandbag Lunges, Wall Balls
+- Simulate race conditions: back-to-back stations with short runs between, or "Hyrox circuit" as a WOD session (source: "wod_brain")
+- Example WOD: "Hyrox Station Circuit: 1km run, then 1000m ski erg, 1km run, 50m sled push (×2), 1km run, 200m farmers carry"
+- In the final 1–2 weeks, include one full simulation session if appropriate
+
+### Scheduling pattern
+- 3–4 runs per week (mix of easy, interval, tempo)
+- 1–2 strength sessions per week
+- 1 Hyrox-specific session per week (increasing to 2 in the final 2 weeks)
+- Rest days or active recovery between hard sessions
+- Don't programme a strength session the day before a Hyrox circuit session
+
+### Periodisation
+- Early weeks: high run volume (easy and moderate), foundational strength, minimal Hyrox-specific work
+- Middle weeks: introduce threshold intervals, heavier strength, 1 Hyrox circuit/week
+- Final 2–3 weeks before race: taper run volume slightly, increase Hyrox simulation, keep strength maintenance only
+- If 6 weeks: deload final week — easy runs only, light strength, no Hyrox circuits
+
 ## Output format
 Return ONLY valid JSON (no markdown):
 {
