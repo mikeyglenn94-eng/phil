@@ -70,11 +70,11 @@
   --elevate-2: rgba(0,0,0, .08);
 
   /* Deep Professional Palette */
-  --background: 210 20% 98%; /* Off-white grayish */
+  --background: 48 96% 96%; /* Warm amber-yellow */
   --foreground: 222 47% 11%;
   
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
+  --border: 45 60% 86%;
+  --input: 45 60% 86%;
   --ring: 0 0% 9%;
 
   --card: 0 0% 100%;
@@ -97,14 +97,14 @@
   --primary: 0 0% 9%; /* Near-black */
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96%;
+  --secondary: 45 80% 91%;
   --secondary-foreground: 222 47% 11%;
 
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  --muted: 45 80% 91%;
+  --muted-foreground: 35 30% 40%;
 
-  --accent: 45 93% 95%;
-  --accent-foreground: 35 92% 33%;
+  --accent: 45 93% 88%;
+  --accent-foreground: 35 92% 28%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
