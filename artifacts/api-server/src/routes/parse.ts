@@ -304,7 +304,7 @@ router.post("/generate-programme", async (req, res): Promise<void> => {
 
 ### Strength sessions (no source field):
 - "source" field must be OMITTED entirely (do not set it to null or undefined — just leave it out)
-- Must have a "name" (e.g. "Upper Body", "Lower Body", "Full Body", "Push", "Pull", "Legs")
+- Must have a "name" (e.g. "Upper Body", "Lower Body", "Full Body", "Push", "Pull", "Legs") — for Olympic Weightlifting sessions use movement-based names instead (see OWL section below)
 - Must have 4–6 exercises, each with:
   - id: "ex-gen-{unique 6 chars}"
   - name: proper exercise name (e.g. "Back Squat", "Bench Press", "Romanian Deadlift")
@@ -415,6 +415,12 @@ When programming running, reference and develop these specific time domains:
 - Deload: reduce to easy aerobic runs only, no intervals
 
 ## Olympic Weightlifting specific rules (apply when the description mentions "weightlifting", "Olympic lifting", "Oly", "snatch", "clean & jerk", or similar)
+
+**CRITICAL format rules for OWL sessions:**
+- OWL sessions use the STRENGTH session format: NO source field, with individual exercises listed in the exercises array
+- NEVER use source: "wod_brain" or a structure field for OWL sessions — each movement must be its own exercise entry
+- NEVER name OWL sessions with body-part labels ("Full Body", "Upper Body", "Lower Body", "Push", "Pull") — always use movement-based names (see examples below)
+- Must have 4–6 individual exercises per session (Snatch, Clean & Jerk, Back Squat, etc.), each with sets, reps, and notes for load/intensity
 
 When the programme is Olympic Weightlifting-focused, apply the following principles from coach Greg Everett:
 
