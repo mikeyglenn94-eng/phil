@@ -258,14 +258,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     sessionCount: number;
   } | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [calendarView, setCalendarView] = useState<"month" | "week">("month");
 
   const trainingWeeks = useMemo(() => {
     const weekStart = startOfWeek(addWeeks(new Date(), trainingWeekOffset), { weekStartsOn: 1 });
+    if (calendarView === "week") {
+      return [Array.from({ length: 7 }, (_, di) => addDays(weekStart, di))];
+    }
     return Array.from({ length: 4 }, (_, wi) => {
       const ws = addWeeks(weekStart, wi);
       return Array.from({ length: 7 }, (_, di) => addDays(ws, di));
     });
-  }, [trainingWeekOffset]);
+  }, [trainingWeekOffset, calendarView]);
 
   const allClientSessions = useMemo<Session[]>(() => {
     if (!clientProgrammes) return [];
@@ -1439,16 +1443,32 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
           {/* Calendar toolbar */}
           <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w - 4)}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" className="h-7 px-3 text-xs rounded-md" onClick={() => setTrainingWeekOffset(0)}>
-                Today
-              </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w + 4)}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w - (calendarView === "week" ? 1 : 4))}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-3 text-xs rounded-md" onClick={() => setTrainingWeekOffset(0)}>
+                  Today
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setTrainingWeekOffset(w => w + (calendarView === "week" ? 1 : 4))}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
+                <button
+                  onClick={() => setCalendarView("month")}
+                  className={`h-7 px-3 text-xs rounded-md font-medium transition-colors ${calendarView === "month" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Month
+                </button>
+                <button
+                  onClick={() => setCalendarView("week")}
+                  className={`h-7 px-3 text-xs rounded-md font-medium transition-colors ${calendarView === "week" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Week
+                </button>
+              </div>
             </div>
             <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-1.5">
               <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase sm:hidden">
@@ -1544,17 +1564,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
           {/* Calendar grid */}
           <div className="flex-1 overflow-y-auto overflow-x-auto">
-            <div className="min-w-[560px]">
+            <div className={calendarView === "week" ? "min-w-[560px]" : "min-w-[560px]"}>
               {/* Day headers */}
               <div className="grid grid-cols-7 border-b bg-muted/30 sticky top-0 z-10">
-                {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
-                  <div key={d} className="py-2 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    {d}
+                {(calendarView === "week" ? trainingWeeks[0] : ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]).map((d, i) => (
+                  <div key={i} className="py-2 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    {calendarView === "week"
+                      ? <><span className="block">{format(d as Date, "EEE")}</span><span className={`block text-sm font-bold mt-0.5 w-7 h-7 flex items-center justify-center rounded-full mx-auto ${isSameDay(d as Date, new Date()) ? "bg-primary text-primary-foreground" : "text-foreground"}`}>{format(d as Date, "d")}</span></>
+                      : d as string
+                    }
                   </div>
                 ))}
               </div>
               {trainingWeeks.map((week, wi) => (
-                <div key={wi} className="grid grid-cols-7 border-b min-h-[80px]">
+                <div key={wi} className={`grid grid-cols-7 border-b ${calendarView === "week" ? "min-h-[calc(100vh-280px)]" : "min-h-[80px]"}`}>
                   {week.map((day, di) => {
                     const daySessions = allClientSessions.filter(s => {
                       try { return isSameDay(parseISO(s.date), day); } catch { return false; }
@@ -1584,9 +1607,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           }
                         }}
                       >
-                        <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
-                          {format(day, "d")}
-                        </div>
+                        {calendarView === "month" && (
+                          <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+                            {format(day, "d")}
+                          </div>
+                        )}
                         <div className="space-y-0.5">
                           {daySessions.map(session => {
                             const prog = (clientProgrammes ?? []).find(p =>
@@ -1647,11 +1672,38 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     setSelectedTrainingSession(session);
                                   }
                                 }}
-                                className={`relative group w-full text-left px-1.5 py-1 rounded-md transition-colors text-[10px] leading-tight font-medium cursor-grab active:cursor-grabbing ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
+                                className={`relative group w-full text-left rounded-md transition-colors cursor-grab active:cursor-grabbing ${calendarView === "week" ? "px-2.5 py-2 text-[11px]" : "px-1.5 py-1 text-[10px] leading-tight font-medium"} ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
                               >
-                                <span className="block truncate pr-3">{session.name || "Session"}</span>
-                                {highlight && (
-                                  <span className={`block truncate text-[9px] leading-tight mt-0.5 font-normal ${isTouchPicked ? "opacity-80" : "opacity-60"}`}>{highlight}</span>
+                                {calendarView === "month" ? (
+                                  <>
+                                    <span className="block truncate pr-3 font-medium">{session.name || "Session"}</span>
+                                    {highlight && (
+                                      <span className={`block truncate text-[9px] leading-tight mt-0.5 font-normal ${isTouchPicked ? "opacity-80" : "opacity-60"}`}>{highlight}</span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="block font-semibold pr-5 leading-snug mb-1.5">{session.name || "Session"}</span>
+                                    {(session.source === "wod_brain" || session.source === "run_brain") && session.structure && (
+                                      <p className={`text-[10px] leading-relaxed mb-1.5 ${isTouchPicked ? "opacity-90" : "opacity-70"}`}>{session.structure}</p>
+                                    )}
+                                    {(session.exercises ?? []).length > 0 && (
+                                      <ul className="space-y-0.5">
+                                        {(session.exercises ?? []).map(ex => (
+                                          <li key={ex.id} className={`text-[10px] leading-snug flex gap-1 ${isTouchPicked ? "opacity-90" : "opacity-75"}`}>
+                                            <span className="font-medium shrink-0">
+                                              {ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.sets ? `${ex.sets}×` : ex.reps ? ex.reps : ""}
+                                            </span>
+                                            <span className="truncate">{ex.name}</span>
+                                            {ex.notes && <span className={`ml-auto shrink-0 text-[9px] ${isTouchPicked ? "opacity-70" : "opacity-50"}`}>{ex.notes}</span>}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                    {prog && (
+                                      <p className={`mt-2 text-[9px] uppercase tracking-wide ${isTouchPicked ? "opacity-60" : "opacity-40"}`}>{prog.title}</p>
+                                    )}
+                                  </>
                                 )}
                                 <button
                                   onTouchStart={e => e.stopPropagation()}
