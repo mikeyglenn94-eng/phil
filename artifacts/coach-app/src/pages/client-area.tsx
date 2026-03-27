@@ -1921,7 +1921,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     <div className="relative">
                       <textarea
                         className={`w-full min-h-[110px] rounded-xl border bg-background px-3 py-2.5 pr-10 text-sm resize-none focus:outline-none focus:ring-2 placeholder:text-muted-foreground transition-all ${describeListening ? "ring-2 ring-red-400/50 border-red-300" : "focus:ring-primary/40"}`}
-                        placeholder="e.g. 3 days strength per week (upper/lower split), 1 run and 1 WOD — 6 week block building intensity each week. Max 6 weeks."
+                        placeholder="e.g. 3 days strength per week (upper/lower split), 1 run and 1 WOD — 6 week block. Training in a commercial gym. Max 6 weeks. Include the environment (garage gym, CrossFit box, commercial gym) so the AI picks the right kit."
                         value={describeListening ? (describeText + (describeInterim ? " " + describeInterim : "")) : describeText}
                         onChange={e => { if (!describeListening) setDescribeText(e.target.value); }}
                         autoFocus={!describeListening}
