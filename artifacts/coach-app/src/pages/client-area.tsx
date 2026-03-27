@@ -160,6 +160,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [rationaleReady, setRationaleReady] = useState(false);
   const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[] } | null>(null);
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
+  const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety" | null>(null);
+
+  function isStrengthDescription(text: string) {
+    const lower = text.toLowerCase();
+    const hyrox = /hyrox/i.test(lower);
+    const oly = /weightlifting|olympic|snatch|clean.?jerk|oly\b/i.test(lower);
+    const runOnly = /^[\s\w,]+run(ning|s)?\s*(only|focused|block|programme)?$/i.test(lower.trim());
+    return !hyrox && !oly && !runOnly;
+  }
 
   async function handleGenerateProgramme() {
     if (!describeText.trim() || !assignStartDate) return;
@@ -170,10 +179,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     let capturedRationale = "";
     try {
       // Step 1: get rationale quickly (shows during the long wait)
+      const body = { description: describeText.trim(), startDate: assignStartDate, strengthStyle: strengthStyle ?? "straight" };
       const rationaleRes = await fetch("/api/generate-rationale", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: describeText.trim(), startDate: assignStartDate }),
+        body: JSON.stringify(body),
       });
       if (rationaleRes.ok) {
         const { rationale } = await rationaleRes.json();
@@ -185,7 +195,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       const res = await fetch("/api/generate-programme", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: describeText.trim(), startDate: assignStartDate }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
@@ -210,6 +220,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       setAssignDialogOpen(false);
       setGeneratedPreview(null);
       setDescribeText("");
+      setStrengthStyle(null);
       toast({ title: "Programme built!", description: `"${generatedPreview.title}" added to the calendar.` });
     } catch {
       toast({ title: "Failed to save programme", variant: "destructive" });
@@ -1866,6 +1877,29 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                       </p>
                     )}
                   </div>
+                  {describeText.trim() && isStrengthDescription(describeText) && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Session style</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStrengthStyle("straight")}
+                          className={`rounded-xl border px-3 py-3 text-left text-sm transition-all ${strengthStyle === "straight" ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/50"}`}
+                        >
+                          <p className="font-semibold">Straight Sets</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Consistent sets &amp; reps, clean progressive overload</p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStrengthStyle("variety")}
+                          className={`rounded-xl border px-3 py-3 text-left text-sm transition-all ${strengthStyle === "variety" ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/50"}`}
+                        >
+                          <p className="font-semibold">Variety</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Wave loading, pyramids, drop sets, AMRAP finishers</p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Start Date</label>
                     <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
@@ -1874,7 +1908,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
                     <Button
                       onClick={handleGenerateProgramme}
-                      disabled={!describeText.trim() || !assignStartDate}
+                      disabled={!describeText.trim() || !assignStartDate || (isStrengthDescription(describeText) && strengthStyle === null)}
                       className="gap-2"
                     >
                       <Sparkles className="w-4 h-4" /> Generate

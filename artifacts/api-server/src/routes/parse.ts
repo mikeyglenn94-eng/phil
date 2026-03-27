@@ -259,8 +259,14 @@ Return format:
 });
 
 router.post("/generate-rationale", async (req, res): Promise<void> => {
-  const { description, startDate } = req.body as { description: string; startDate: string };
+  const { description, startDate, strengthStyle } = req.body as { description: string; startDate: string; strengthStyle?: "straight" | "variety" };
   if (!description) { res.status(400).json({ error: "description is required" }); return; }
+
+  const styleNote = strengthStyle === "variety"
+    ? " The session style is VARIETY — mention techniques like wave loading, pyramids, drop sets, or AMRAP finishers where appropriate."
+    : strengthStyle === "straight"
+    ? " The session style is STRAIGHT SETS — all sessions use consistent, clean set/rep schemes with progressive overload."
+    : "";
 
   try {
     const completion = await openai.chat.completions.create({
@@ -269,7 +275,7 @@ router.post("/generate-rationale", async (req, res): Promise<void> => {
       messages: [
         {
           role: "system",
-          content: `You are an expert strength and conditioning coach. A coach has described a training plan they want for a client. Write a brief, direct paragraph (3–6 sentences) explaining the programming rationale — what the structure will be, why it suits their goals, how intensity will progress across the weeks, and any specific strategic decisions (e.g. deload week, peaking phase, alternating upper/lower). Write as though you're a coach explaining your thinking to the client. Be specific, not generic. Do not use bullet points. Do not mention that you are an AI.`,
+          content: `You are an expert strength and conditioning coach. A coach has described a training plan they want for a client. Write a brief, direct paragraph (3–6 sentences) explaining the programming rationale — what the structure will be, why it suits their goals, how intensity will progress across the weeks, and any specific strategic decisions (e.g. deload week, peaking phase, alternating upper/lower).${styleNote} Write as though you're a coach explaining your thinking to the client. Be specific, not generic. Do not use bullet points. Do not mention that you are an AI.`,
         },
         {
           role: "user",
@@ -286,7 +292,7 @@ router.post("/generate-rationale", async (req, res): Promise<void> => {
 });
 
 router.post("/generate-programme", async (req, res): Promise<void> => {
-  const { description, startDate } = req.body as { description: string; startDate: string };
+  const { description, startDate, strengthStyle } = req.body as { description: string; startDate: string; strengthStyle?: "straight" | "variety" };
   if (!description || !startDate) {
     res.status(400).json({ error: "description and startDate are required" });
     return;
@@ -533,12 +539,41 @@ Return ONLY valid JSON (no markdown):
   ]
 }`;
 
+  const styleSection = strengthStyle === "variety" ? `
+
+## Session style: VARIETY (the coach has requested this)
+Use varied rep schemes and intensity techniques within strength sessions. Apply these across the programme:
+
+- **Wave loading:** sets where the weight undulates up then resets to a heavier wave (e.g. 3 waves of 6/4/2 — wave 1: 70/75/80%, wave 2: 72/77/82%, wave 3: 74/79/84%)
+- **Pyramid sets:** ascending (add weight, reduce reps each set: 12→10→8→6→4) or descending (reduce weight, add reps)
+- **Drop sets:** final set drops weight immediately and continues for more reps (e.g. "10 reps @RPE9, then strip 20% and go to failure")
+- **AMRAP finishers:** last set of a compound movement done for as many reps as possible with good form
+- **Cluster sets:** e.g. 5 reps, rest 15s, 5 reps, rest 15s, 5 reps (all within one "set")
+- **Back-off sets:** after heavy work, reduce load by 15–20% and do a higher rep set
+
+Mix these intelligently — don't pile every technique into one session. A typical session might use pyramid loading on the primary lift, straight sets on assistance work, and an AMRAP finisher on the last compound movement.
+
+Express these in the exercises using the "reps" field creatively (e.g. "6/4/2 wave × 3", "12-10-8-6", "AMRAP", "cluster: 5+5+5") and use the "notes" field to describe the technique (e.g. "3 waves — wave 1: 70/75/80%, wave 2: 72/77/82%", "drop 20% after last set and go to failure").
+
+Still apply all periodisation principles (overload, phase potentiation, fatigue management) — variety is a tool within the structure, not instead of it.
+` : `
+
+## Session style: STRAIGHT SETS (the coach has requested this)
+Use clean, consistent straight sets throughout. Every exercise should have a defined number of sets and a consistent rep target. No drop sets, no pyramids, no complex schemes.
+
+- Sets and reps are simple and consistent: e.g. 4×5, 3×8, 5×3
+- Progressive overload is expressed through increasing weight each week, not changing rep schemes
+- Intensity is expressed via RPE targets in the notes field (e.g. "@RPE8", "leave 1-2 reps in tank")
+- Deload weeks reduce volume (fewer sets) and intensity (lower RPE)
+- The notes field can include load guidance (e.g. "85% of 1RM", "heavy for reps") but no complex technique instructions
+`;
+
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-5.2",
       max_completion_tokens: 32768,
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: systemPrompt + styleSection },
         { role: "user", content: `Start date: ${startDate}\n\nDescription: "${description}"` },
       ],
     });
