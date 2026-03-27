@@ -335,6 +335,60 @@ router.post("/generate-programme", async (req, res): Promise<void> => {
 - Generate varied sessions week to week — don't repeat identical exercises every week. Rotate movements, vary rep ranges, increase load week to week (periodisation). Use different exercise variations across weeks.
 - Each session must have a unique id: "session-gen-{unique 8 chars}"
 
+## Olympic Weightlifting specific rules (apply when the description mentions "weightlifting", "Olympic lifting", "Oly", "snatch", "clean & jerk", or similar)
+
+When the programme is Olympic Weightlifting-focused, apply the following principles from coach Greg Everett:
+
+### Day selection by frequency
+- 3 days/week: Mon – Wed – Fri (every other day, all days can be similar intensity since each follows a rest day)
+- 4 days/week: Mon – Tue – Thu – Sat (back-to-back early in week when freshest; Tuesday is a lighter day after tough Monday)
+- 5 days/week: Mon – Tue – Wed – Thu – Sat (preferred) or Mon – Tue – Wed – Fri – Sat
+- 6 days/week: Mon – Tue – Wed – Thu – Fri – Sat (Sunday off)
+
+### Big vs Little days (for 4+ days/week)
+Strictly alternate big and little days. Never schedule two big days back-to-back unless separated by a rest day.
+
+**5-day preferred pattern:**
+- Monday: BIG
+- Tuesday: LITTLE
+- Wednesday: BIG
+- Thursday: LITTLE
+- Saturday: BIG
+
+**Big days** are the most systemically taxing. They include:
+- Heavy competition lifts: Snatch, Clean & Jerk (from the floor, full lifts)
+- Pulls: Snatch Pull, Clean Pull, Clean Deadlift
+- Squats: Back Squat, Front Squat
+- Heavy posterior chain accessory at end: SLDL, Good Morning (NOT before a big day)
+Session name examples: "Snatch + Back Squat", "Clean & Jerk + Front Squat", "Heavy Day"
+
+**Little days** are lower intensity, faster to get through. They include:
+- Power or hang variations: Power Snatch, Hang Power Clean, Hang Snatch (inherently lower intensity)
+- Overhead/technique work: Overhead Squat, Snatch Balance, Jerk, Push Press, Jerk Support, Muscle Snatch
+- Bodybuilding or overhead stability accessory: Pull-ups, Dips, Rows, Face Pulls, Shoulder stability
+Session name examples: "Power Snatch + OHS + Jerk", "Technique & Overhead", "Light Day"
+
+### Exercise order within a session
+Always follow this sequence on big days:
+1. Snatch (or snatch variation) — first, when most fresh
+2. Clean & Jerk (or C&J variation) — second
+3. Pulls (snatch pull or clean pull)
+4. Squats (back squat or front squat)
+5. Accessory (posterior chain work at END, not start)
+
+On little days:
+1. Speed/technique work first (power snatch, hang variations, snatch balance)
+2. Overhead work second (OHS, push press, jerk)
+3. Lighter accessory last (pulling, bodybuilding)
+
+### Periodisation for weightlifting
+- Week 1–2: Build volume, moderate intensity (e.g. 75–82%)
+- Week 3–4: Increase intensity, reduce volume slightly (e.g. 80–88%)
+- Week 5: Peak — heavy singles and doubles, low volume (e.g. 85–93%)
+- Week 6 (if included): Deload — 60–70%, technique focus, reduced volume by ~40%
+- Use notes field to indicate percentages or RPE targets (e.g. "Work to heavy double @RPE8", "5×3 @75%")
+- Do NOT use the same exercise every big day every week — rotate between Snatch and Clean & Jerk as the primary lift, and use Front Squat on C&J days, Back Squat on Snatch days
+
 ## Output format
 Return ONLY valid JSON (no markdown):
 {
