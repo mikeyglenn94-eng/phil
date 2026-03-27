@@ -341,6 +341,79 @@ router.post("/generate-programme", async (req, res): Promise<void> => {
 - Generate varied sessions week to week — don't repeat identical exercises every week. Rotate movements, vary rep ranges, increase load week to week (periodisation). Use different exercise variations across weeks.
 - Each session must have a unique id: "session-gen-{unique 8 chars}"
 
+## Endurance / cardio training principles (apply to ALL run sessions and any programme with significant running or cardio content)
+
+These principles come from Chris Hinshaw — former professional triathlete (2nd place Hawaiian Ironman World Championships), endurance coach to CrossFit Games champions including Rich Froning, Mat Fraser, Jason Khalipa, Camille LeBlanc-Bazinet, and Katrin Davidsdóttir.
+
+### The 5 endurance training zones
+Every run programme should draw from these zones in appropriate proportion. Do NOT just generate "easy runs" and "intervals" — use this precise vocabulary and design sessions that genuinely target the zone named.
+
+**1. Aerobic Threshold (the foundation — most volume goes here)**
+- Steady, moderate intensity — develops fuel efficiency (fat burning), musculoskeletal system, aerobic base
+- Think: long easy runs, Z2 runs, conversational pace
+- These are the "rest" component of mixed sessions and the backbone of an aerobic base block
+- Example structure: 20–60 min continuous easy run, or recovery jogs between harder efforts
+- Use source: "run_brain", name: "Easy Run" or "Aerobic Base Run" or "Z2 Run"
+
+**2. Lactate Threshold**
+- Higher volume intervals at threshold intensity — the pace you could hold for ~45–60 min if pushed
+- Longer interval distances (600m–2km), less rest between reps
+- Develops the ability to sustain a fast pace without accumulating lactate
+- Example: 4×1km at threshold (10k race pace), 60s rest. Or 3×1.5km, 90s rest. Or tempo runs (20 min continuous at threshold)
+- Use name: "Lactate Threshold Run" or "Tempo Intervals"
+
+**3. VO2 Max**
+- Lower volume, shorter intervals, higher intensity than threshold, more rest between reps
+- Interval distances: typically 200m–800m
+- More rest than lactate threshold work (2–3 min between reps)
+- Develops maximal aerobic power
+- Example: 6×400m at VO2 max effort (faster than 5k pace), 2 min rest. Or 8×200m, 90s rest.
+- Use name: "VO2 Max Intervals" or "Track Intervals"
+
+**4. Speed Endurance**
+- Very low volume, very short intervals (under 60 seconds — typically 100m–300m), extremely high intensity
+- FULL recovery between reps (3–5 min) — quality over quantity
+- Recruits fast-twitch fibres and forces them to develop endurance
+- Example: 6×100m sprint, full recovery. Or 4×200m at 95% effort, 4 min rest.
+- Use name: "Speed Endurance" or "Sprint Intervals"
+
+**5. Strength Endurance**
+- Low volume, high intensity intervals that include explosive movements
+- Recruits and develops fast-twitch muscle fibres under fatigue
+- Can combine short runs with explosive bodyweight or light loaded movements
+- Example: 5 rounds: 200m sprint + 10 box jumps + 10 burpees (minimal rest between rounds)
+- Use source: "wod_brain" for these (they are WOD-style conditioning, not pure runs)
+
+### Chris Hinshaw's benchmark paces/distances
+When programming running, reference and develop these specific time domains:
+- Recovery jog: ~90 min pace (very easy, used as active recovery between harder work)
+- 10k pace: ~40 min time domain (lactate threshold territory)
+- 5k pace: ~20 min time domain (between threshold and VO2 max)
+- 1 mile pace: ~5–6 min time domain (VO2 max to speed endurance)
+- 400m: Critical for CrossFit athletes — must develop a fast, repeatable 400m
+
+### Key principles
+- **Build an "arsenal of gears":** athletes must know and train at different paces, not just "fast" and "easy". Programme should develop multiple distinct pace points.
+- **Aerobic base is the foundation:** the majority of running volume should be aerobic threshold (easy) work, even if the goal is speed or intervals. This develops fuel efficiency and recovery capacity.
+- **Endurance does not hurt strength — in moderation:** don't be afraid to programme running in strength-focused weeks. Rich Froning's mile improved AND his back squat went up. Mat Fraser ran 5400m at 6-min/mile pace then hit a C&J PR three hours later.
+- **Variety in structure:** use creative, named session formats. Not just "run 5km". Think pyramid runs, hop-scotch style (build distance then descend), Bombolini-style mixed pace sessions.
+- **The recovery interval IS the rest:** in mixed-pace sessions, the easy pace interval is the rest — it should be written as part of the structure, not omitted.
+
+### Example session formats to use
+- **Pyramid run (aerobic threshold):** 200m easy / 100m sprint / 400m easy / 100m sprint / 600m easy / 100m sprint... then descend back down. Continuous, non-stop. Sprints at 97–98% (not max — retain form). Total ~4–6km.
+- **Bombolini (mixed threshold/speed):** 3 sets of [500m fast (between 1-mile and 400m PR pace) + 200m recovery jog + 100m sprint], 5 min rest between sets.
+- **Threshold intervals:** 4×1km at 10k pace, 90s rest between reps.
+- **VO2 Max track session:** 8×400m at faster than 5k pace, 90s rest.
+- **Long easy run:** 40–60 min at aerobic threshold / Z2 pace. Comfortable, continuous.
+- **Speed session:** 6×100m sprint, 3 min full recovery between each.
+
+### Periodisation for endurance blocks
+- Early weeks: predominantly aerobic threshold volume (build the base)
+- Mid weeks: introduce lactate threshold intervals (1–2 per week) alongside easy runs
+- Later weeks: add VO2 max work (1 session/week) — requires the aerobic base to be present first
+- Speed endurance: used sparingly, primarily near events or when sharpening
+- Deload: reduce to easy aerobic runs only, no intervals
+
 ## Olympic Weightlifting specific rules (apply when the description mentions "weightlifting", "Olympic lifting", "Oly", "snatch", "clean & jerk", or similar)
 
 When the programme is Olympic Weightlifting-focused, apply the following principles from coach Greg Everett:
