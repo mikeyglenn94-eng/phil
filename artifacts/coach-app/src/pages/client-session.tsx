@@ -122,6 +122,16 @@ export default function ClientSession() {
   const commentRecRef = useRef<any>(null);
   const commentInterimRef = useRef(""); // sync ref so onend can read latest interim
 
+  // Feedback state
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackListening, setFeedbackListening] = useState(false);
+  const [feedbackInterim, setFeedbackInterim] = useState("");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackDone, setFeedbackDone] = useState(false);
+  const [feedbackConfirmation, setFeedbackConfirmation] = useState("");
+  const feedbackRecRef = useRef<any>(null);
+  const feedbackInterimRef = useRef("");
+
   // Session-level comment state (for WOD/Run Brain sessions)
   const [sessionComment, setSessionComment] = useState("");
   const [sessionCommentListening, setSessionCommentListening] = useState(false);
@@ -238,6 +248,75 @@ export default function ClientSession() {
     setSessionCommentListening(true);
     setSessionCommentInterim("");
     try { r.start(); } catch {}
+  };
+
+  // ── Feedback voice ────────────────────────────────────────────────────────
+  const toggleFeedbackListening = () => {
+    if (feedbackListening) { stopRef(feedbackRecRef); return; }
+    stopRef(feedbackRecRef);
+    const r = makeSR();
+    if (!r) return;
+    feedbackInterimRef.current = "";
+    r.onresult = (e: any) => {
+      let fin = ""; let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      feedbackInterimRef.current = interim;
+      setFeedbackInterim(interim);
+      if (fin) {
+        feedbackInterimRef.current = "";
+        setFeedbackText(prev => (prev ? prev + " " : "") + fin.trim());
+        setFeedbackInterim("");
+      }
+    };
+    r.onerror = () => { feedbackInterimRef.current = ""; setFeedbackListening(false); setFeedbackInterim(""); };
+    r.onend = () => {
+      const leftover = feedbackInterimRef.current.trim();
+      if (leftover) setFeedbackText(prev => (prev ? prev + " " : "") + leftover);
+      feedbackInterimRef.current = "";
+      setFeedbackListening(false);
+      setFeedbackInterim("");
+    };
+    feedbackRecRef.current = r;
+    setFeedbackListening(true);
+    setFeedbackInterim("");
+    try { r.start(); } catch {}
+  };
+
+  const submitFeedback = async () => {
+    if (!feedbackText.trim() || !programme || !session) return;
+    setFeedbackSubmitting(true);
+    try {
+      const res = await fetch(`/api/programmes/${programmeId}/session-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          completedSession: session,
+          feedback: feedbackText.trim(),
+          allSessions: programme.sessions || [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      const { updatedSessions, userConfirmation } = data as { updatedSessions: any[]; userConfirmation: string };
+      if (updatedSessions.length > 0) {
+        const updatedById = new Map(updatedSessions.map((s: any) => [s.id, s]));
+        const merged = (programme.sessions || []).map((s: Session) =>
+          updatedById.has(s.id) ? { ...s, ...updatedById.get(s.id) } : s
+        );
+        await updateMutation.mutateAsync({ id: programmeId, data: { sessions: merged } });
+        queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      }
+      setFeedbackDone(true);
+      setFeedbackConfirmation(userConfirmation);
+      toast({ title: userConfirmation });
+    } catch {
+      toast({ title: "Couldn't apply feedback — try again", variant: "destructive" });
+    } finally {
+      setFeedbackSubmitting(false);
+    }
   };
 
   // ── Log voice (Web Speech for preview + Whisper for accuracy) ────────────
@@ -1113,6 +1192,52 @@ export default function ClientSession() {
             <Plus className="w-4 h-4" /> Add exercise
           </button>
         )}
+
+        {/* Post-session feedback */}
+        <div className="rounded-2xl border bg-muted/20 overflow-hidden">
+          <div className="px-4 pt-4 pb-3">
+            <p className="text-sm font-semibold mb-0.5">Any changes for next time?</p>
+            <p className="text-xs text-muted-foreground mb-3">Your feedback will update future sessions of this type in the programme.</p>
+            {feedbackDone ? (
+              <div className="flex items-start gap-2.5 rounded-xl bg-green-50 border border-green-200 px-3 py-3">
+                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-green-800">{feedbackConfirmation}</p>
+              </div>
+            ) : (
+              <>
+                <div className={`relative rounded-xl border transition-colors ${feedbackListening ? "border-primary/40 bg-primary/5" : "border-border bg-background"}`}>
+                  <textarea
+                    value={feedbackListening ? (feedbackInterim || feedbackText) : feedbackText}
+                    onChange={e => { if (!feedbackListening) setFeedbackText(e.target.value); }}
+                    placeholder={feedbackListening ? "Listening…" : 'e.g. "Too easy", "Swap burpees", "Running felt too hard"'}
+                    rows={2}
+                    disabled={feedbackListening || feedbackSubmitting}
+                    className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
+                  />
+                  <button
+                    type="button"
+                    onClick={toggleFeedbackListening}
+                    disabled={feedbackSubmitting}
+                    className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${feedbackListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                  >
+                    {feedbackListening
+                      ? <Square className="w-3.5 h-3.5 fill-current" />
+                      : <Mic className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <Button
+                  className="w-full mt-2 rounded-xl gap-2"
+                  disabled={!feedbackText.trim() || feedbackSubmitting || feedbackListening}
+                  onClick={submitFeedback}
+                >
+                  {feedbackSubmitting
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Applying…</>
+                    : <><Send className="w-4 h-4" /> Apply to future sessions</>}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* WhatsApp Coach */}
         <div className="pt-4 pb-2 flex justify-center">

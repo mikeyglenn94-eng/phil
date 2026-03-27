@@ -710,6 +710,100 @@ Use clean, consistent straight sets throughout. Every exercise should have a def
   }
 });
 
+router.post("/programmes/:id/session-feedback", async (req, res): Promise<void> => {
+  const { completedSession, feedback, allSessions } = req.body as {
+    completedSession: any;
+    feedback: string;
+    allSessions: any[];
+  };
+
+  if (!completedSession || !feedback?.trim() || !Array.isArray(allSessions)) {
+    res.status(400).json({ error: "completedSession, feedback, and allSessions are required" });
+    return;
+  }
+
+  const futureSessions = allSessions.filter(
+    (s: any) => s.id !== completedSession.id && s.date > completedSession.date
+  );
+
+  if (futureSessions.length === 0) {
+    res.json({ updatedSessions: [], userConfirmation: "There are no future sessions in this programme to adjust." });
+    return;
+  }
+
+  const systemPrompt = `You are an expert fitness programming AI acting as a coach making targeted adjustments to a training programme.
+
+A client has just completed a session and left feedback. Your job is to:
+1. Identify which future sessions correspond to the completed session — meaning sessions with the same name, same type, or same training role (e.g. "Upper Body", "Run", "WOD")
+2. Apply the client's feedback as targeted, minimal changes to ONLY those corresponding future sessions
+3. Preserve the programme's overall structure, progression, and intent
+4. Return ONLY the modified sessions (full objects, original IDs preserved) and a one-sentence user confirmation
+
+Rules:
+- Only modify sessions with the same name or same training role as the completed session
+- Do NOT modify unrelated sessions (different session types or training goals)
+- Preserve ALL session IDs exactly as provided — never generate new IDs
+- Keep the same session intent unless the user explicitly asks to change it
+- Make surgical edits: exercise swaps, slight volume changes, pacing tweaks, structure adjustments
+- Preserve progression logic — sessions should still escalate week to week
+- Do NOT rewrite sessions from scratch
+- If the feedback is positive ("loved it", "perfect") and no changes are needed, return updatedSessions: []
+- userConfirmation must be ONE sentence telling the client what will be different next time
+
+Feedback interpretation examples:
+- "Too easy" → increase sets, reps, or load slightly in future corresponding sessions
+- "Too hard" → reduce volume, load, or intensity slightly
+- "Too much leg fatigue" → reduce lower-body volume or swap exercises
+- "Swap burpees" → replace burpees with a similar movement (box step-overs, jumping lunges)
+- "Loved this format" → return updatedSessions: [] with a positive confirmation
+- "Running felt too hard" → reduce pace demand, interval distance, or density in future run sessions
+- "More variety" → swap some exercises for alternatives with same stimulus
+
+Return ONLY valid JSON (no markdown):
+{
+  "updatedSessions": [
+    { ...full session object with ORIGINAL id and modified fields... }
+  ],
+  "userConfirmation": "One sentence describing what changes next time."
+}`;
+
+  const userContent = `Completed session:
+${JSON.stringify(completedSession, null, 2)}
+
+Client feedback: "${feedback.trim()}"
+
+All future sessions in this programme (only modify the corresponding ones):
+${JSON.stringify(futureSessions, null, 2)}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_completion_tokens: 8000,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    let parsed: { updatedSessions: any[]; userConfirmation: string };
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const match = raw.match(/\{[\s\S]*\}/);
+      parsed = match ? JSON.parse(match[0]) : { updatedSessions: [], userConfirmation: "Your feedback has been noted." };
+    }
+
+    res.json({
+      updatedSessions: Array.isArray(parsed.updatedSessions) ? parsed.updatedSessions : [],
+      userConfirmation: parsed.userConfirmation ?? "Your feedback has been applied to future sessions.",
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error applying session feedback");
+    res.status(500).json({ error: "Failed to apply feedback" });
+  }
+});
+
 router.post("/parse-log", async (req, res): Promise<void> => {
   const { transcript, exerciseName, totalSets } = req.body as {
     transcript: string;

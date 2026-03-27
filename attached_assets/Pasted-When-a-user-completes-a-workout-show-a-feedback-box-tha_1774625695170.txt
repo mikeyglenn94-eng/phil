@@ -1,0 +1,38 @@
+When a user completes a workout, show a feedback box that asks:
+
+“Any changes you want to make to this session next time?”
+
+The user’s answer should be used to modify only the subsequent corresponding sessions in the current training block, not the entire programme and not past sessions.
+
+Rules:
+- “Corresponding sessions” means future sessions with the same role in the programme, for example the same weekly session slot, same session type, or same training objective.
+- Preserve the overall goal of the programme and the progression of the block.
+- Do not rewrite the full programme from scratch.
+- Only adjust the future matching sessions based on the feedback.
+- Changes can include exercise swaps, slight volume changes, pacing changes, structure tweaks, or difficulty adjustments.
+- Keep the same session intent unless the user explicitly asks to change it.
+- Do not apply the feedback to unrelated sessions.
+- Do not create permanent global user preferences from this feedback.
+- Treat the feedback as applying only to the future versions of that session pattern within the current block.
+
+Examples:
+- “Too easy” → make future corresponding sessions slightly harder while preserving progression
+- “Too much leg fatigue” → reduce lower-body fatigue slightly in future corresponding sessions
+- “Swap burpees” → replace burpees in future corresponding sessions with a similar movement that fits the same stimulus
+- “Loved this format” → keep the same structure for future corresponding sessions
+- “Running felt too hard” → slightly reduce pace demand, volume, or density in future corresponding sessions
+
+System behaviour:
+1. Identify the completed session’s role in the programme
+2. Interpret the user’s feedback
+3. Convert the feedback into specific edits for only the future corresponding sessions
+4. Preserve programme logic and progression
+5. Return a short confirmation of what will change
+
+Output format:
+- updated_future_sessions: [only the future matching sessions that changed]
+- rationale: short explanation of why those changes were made
+- user_confirmation: one sentence telling the user what will change next time
+
+Important:
+The AI should behave like a coach making targeted adjustments to the next versions of that session, not like a generator rebuilding the whole plan.
