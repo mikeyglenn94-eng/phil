@@ -389,6 +389,84 @@ On little days:
 - Use notes field to indicate percentages or RPE targets (e.g. "Work to heavy double @RPE8", "5×3 @75%")
 - Do NOT use the same exercise every big day every week — rotate between Snatch and Clean & Jerk as the primary lift, and use Front Squat on C&J days, Back Squat on Snatch days
 
+## Strength training principles (apply when the description mentions "strength", "powerlifting", "hypertrophy", "lifting", "weights", "resistance training", "strength block", or general training that isn't explicitly Hyrox or Oly Weightlifting)
+
+These 7 principles come from Israetel, Hoffmann & Smith's "Scientific Principles of Strength Training." Apply them to every general strength programme:
+
+### 1. Specificity — the most important principle
+- Train the movements that produce the goal. For strength, this means compound barbell movements: Squat, Deadlift, Romanian Deadlift, Bench Press, Overhead Press, Barbell Row.
+- Assistance work must serve the primary movements — build the muscles that actually move the bar. No random exercises. Every exercise choice must have a clear reason.
+- As a goal event or test approaches (e.g. a fitness test, competition, or end of a block), make training more specific — increase the primary lifts, reduce variation.
+- The spectrum: heavy compound lifts (most specific) → accessory compound work → isolation machines (least specific). Use accordingly.
+
+### 2. Overload — progress week to week
+- Each week must present a greater demand than the week before. This can be: more weight, more sets, more reps, or less rest.
+- Use barbell movements first (highest homeostatic disruption), then dumbbell, then cable, then machine. Machines are fine for accessory work but shouldn't be the foundation.
+- Track progression: if week 1 is 3×8 at RPE 7, week 2 should be heavier or have an extra set.
+- Unstable or gimmick equipment reduces overload — avoid BOSU balls, oscillating bars, and novelty tools for strength.
+
+### 3. Fatigue Management — training is only useful if you can recover from it
+- MRV (Maximum Recoverable Volume): there's a ceiling to how much training is productive. Beyond it, fatigue accumulates faster than adaptation. Don't programme more than a client can recover from.
+- MEV (Minimum Effective Volume): there's a floor below which training produces no adaptation. Don't go too light.
+- Deload every 3–4 weeks: reduce volume by ~40% and keep intensity moderate. This dissipates accumulated fatigue and allows adaptations to express themselves.
+- Rest days matter. Do not stack hard sessions back to back without a reason.
+- Practical rule: if a session requires a muscle group to work hard, give it 48–72 hours before working it hard again.
+
+### 4. SRA — Stimulus, Recovery, Adaptation
+- Training creates a stimulus, which causes a temporary performance dip (recovery phase), then a rise above baseline (adaptation). The next session should hit at or near the adaptation peak — not before recovery and not so late that adaptations decay.
+- Practical frequency: train each major muscle group or movement pattern 2× per week minimum for intermediate clients. Once per week is maintenance at best.
+- "Stimulate, don't annihilate" — a session that creates maximum damage requires maximum recovery time and produces no more adaptation than a well-dosed session.
+- If a client is very sore and performance is declining week to week, fatigue has outpaced recovery — add a deload.
+
+### 5. Variation — prevent adaptation stagnation
+- The body adapts to repeated identical stimuli and stops improving. Strategic variation maintains responsiveness.
+- Vary exercise selection, rep ranges, and volume across mesocycles (every 3–6 weeks), not within the same week.
+- Don't rotate exercises too frequently (every week) — adaptations need time to consolidate before switching.
+- Good variation examples: swap Back Squat for Front Squat or Pause Squat; swap Bench Press for Close Grip Bench or Incline Bench; swap Deadlift for Romanian Deadlift or Deficit Deadlift.
+- Always keep variation within the specificity boundary — never add exercises that don't contribute to the training goal.
+
+### 6. Phase Potentiation — sequence training phases logically
+This is the most advanced structural principle. The order of phases within a block matters enormously:
+
+**For strength programmes, the correct phase sequence is:**
+**Hypertrophy → Strength → Peaking (if applicable)**
+
+- **Hypertrophy phase (Accumulation):** Higher volume, moderate intensity (rep ranges 8–15). The goal is to build muscle mass that will then be made strong. This phase creates the base. Weeks 1–2 of a 4–6 week block.
+- **Strength phase (Intensification):** Lower volume, higher intensity (rep ranges 3–6). Neural adaptations, force production improvement. Building on the mass created in the hypertrophy phase. Weeks 3–4 of a block.
+- **Peaking / Expression phase (if the programme has a defined goal/test/event):** Very low volume, very high intensity (1–3 reps). Sharpening the expression of strength. Only appropriate for the final 1–2 weeks before a specific performance goal.
+- **Deload:** After accumulation phases, a deload week (~40% volume reduction, moderate intensity) dissipates fatigue and allows the adaptation to appear.
+
+**Practical application for a 4-week block:**
+- Week 1: Accumulation — e.g. 4×10 @RPE7 (volume-focused)
+- Week 2: Accumulation — e.g. 4×8 @RPE8 (slight intensity increase)
+- Week 3: Intensification — e.g. 5×5 @RPE8-9 (heavier, less volume)
+- Week 4: Deload — e.g. 3×5 @RPE6 (reduce volume ~40%, keep movement)
+
+**Practical application for a 6-week block:**
+- Weeks 1–2: Accumulation (8–15 reps, higher volume, moderate load)
+- Weeks 3–4: Intensification (4–6 reps, moderate volume, heavier load)
+- Week 5: Peaking or final intensification (3–5 reps, heavy, low volume)
+- Week 6: Deload (reduce volume 40%, keep intensity moderate)
+
+### 7. Individual Difference
+- Beginners respond to almost anything; keep it simple, linear, high-frequency.
+- Intermediates need structured periodisation — apply Phases 1–6 above.
+- Advanced athletes need more sophisticated variation and longer phases.
+- If the client description mentions injuries, weaknesses, or specific goals, tailor exercise selection accordingly. A weak posterior chain needs more RDL, Good Morning, or Hip Thrust. A weak upper back needs more Barbell Row, Face Pull, and Rear Delt work.
+
+### Practical exercise selection for strength sessions
+**Lower body compound (choose 1–2 per session):** Back Squat, Front Squat, Goblet Squat, Romanian Deadlift, Deadlift, Sumo Deadlift, Trap Bar Deadlift, Hip Thrust, Bulgarian Split Squat, Step-up, Leg Press
+**Upper body push (choose 1–2):** Bench Press, Incline Bench Press, Close Grip Bench, Overhead Press, Dumbbell Press, Dips
+**Upper body pull (choose 1–2):** Barbell Row, Pendlay Row, Pull-up, Lat Pulldown, Cable Row, Face Pull, Dumbbell Row
+**Accessory (choose 1–2 to address weaknesses):** RDL, Good Morning, Nordic Curl, Leg Curl, Leg Extension, Dumbbell Lateral Raise, Bicep Curl, Tricep Extension, Core work
+
+### Strength session structure
+- Open with 1–2 compound barbell movements (these receive the most volume and intensity)
+- Follow with 1–2 compound assistance movements
+- Close with 1–2 isolation or accessory exercises (lower fatigue cost)
+- Total exercises per session: 4–6
+- Do NOT programme intensity techniques (drop sets, supersets, failure) unless the client description asks for it
+
 ## Hyrox specific rules (apply when the description mentions "Hyrox", "HYROX", "hyrox race", or similar)
 
 When the programme is Hyrox-focused, apply the following principles:
