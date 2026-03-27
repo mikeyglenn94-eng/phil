@@ -88,6 +88,18 @@ Built-in strength programme engine stored in `artifacts/api-server/src/routes/st
 - `artifacts/*` are leaf workspace packages
 - Root `tsconfig.json` lists all lib packages as project references
 
+## Future Roadmap — B2C Self-Serve
+
+The intended next phase is B2C self-serve, with the coach acting as a guide/brand rather than hands-on with each client. Key things needed before launch:
+
+1. **Self-registration** — Signup page where users create their own account (currently clients are created manually by the coach)
+2. **Multi-tenancy** — Each user's data must be fully isolated; currently all clients are visible under one coach view
+3. **Payments** — Stripe subscription to gate access before a user can use the app
+4. **AI onboarding flow** — User answers a few intake questions → AI generates their first programme automatically (the `/api/generate-programme` endpoint is already built, just needs a frontend intake form)
+5. **Coach-as-guide content** — A curated library of WODs, run sessions, and strength programmes in the Brain that all users draw from; plus optional weekly check-in or community touchpoint
+
+The core product (calendar, sessions, nutrition diary, AI parsing, Brain search) is already user-ready. The gap is auth/payments/multi-tenancy — roughly a few weeks of build work.
+
 ## Important Workflow
 
 1. Write OpenAPI spec in `lib/api-spec/openapi.yaml`
