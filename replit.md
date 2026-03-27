@@ -57,6 +57,16 @@ artifacts-monorepo/
 - Sessions stored as JSONB: `[{ id, date, name?, color?, exercises[] }]`
 - Each exercise: `{ id, name, sets, reps, rpe, rest, tempo, notes, weekProgression[] }`
 
+## Engine Builder Module
+
+Multi-session aerobic engine programme in `artifacts/api-server/src/routes/engine-builder.ts`.
+- Templates: Engine Builder 6 Week Block (Hinshaw-style: threshold / VO2 max / aerobic base)
+- 3 sessions/week spread Mon / Wed / Fri per week; 18 sessions total over 6 weeks
+- Session colours: Threshold = amber (#f59e0b), VO2 Max = red (#ef4444), Aerobic Base = green (#16a34a)
+- Modality-agnostic: run / row / ski / assault bike / echo bike / bike erg (athlete chooses each session)
+- Routes: `GET /api/engine-builder/templates`, `POST /api/engine-builder/insert`
+- Brain search category: `"engine"` — triggered by keywords: engine, vo2, aerobic base, threshold, hinshaw
+
 ## Strength Blocks Module
 
 Built-in strength programme engine stored in `artifacts/api-server/src/routes/strength-blocks.ts`.

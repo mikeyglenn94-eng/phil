@@ -4,6 +4,7 @@ import { searchWodsSync } from "./wod-brain";
 import { searchRunsSync } from "./run-brain";
 import { searchCyclesSync } from "./endurance-cycles";
 import { searchStrengthSync } from "./strength-blocks";
+import { searchEngineSync } from "./engine-builder";
 
 const router: IRouter = Router();
 
@@ -14,7 +15,7 @@ const router: IRouter = Router();
 type Intent = "wod" | "run" | "cycle" | "strength" | "all";
 
 const STRENGTH_KW = ["strength", "squat", "bench", "deadlift", "powerlifting", "barbell", "sbd", "smolov", "lift", "1rm", "heavy", "olympic"];
-const CYCLE_KW = ["cycle", "programme", "progressive", "weeks", "endurance cycle", "ergs", "mikko", "triangle", "emom ergs", "6 week"];
+const CYCLE_KW = ["cycle", "programme", "progressive", "weeks", "endurance cycle", "ergs", "mikko", "triangle", "emom ergs", "6 week", "engine", "vo2", "aerobic base", "threshold", "hinshaw"];
 // hyrox appears in both RUN and WOD to trigger "all" intent — catches both WODs and run blocks
 const RUN_KW = ["run", "running", "tempo", "easy run", "jog", "pace", "km", "miles", "aerobic", "threshold", "hills", "fartlek", "long run", "recovery run", "track", "intervals running", "hyrox", "run block", "run programme"];
 const WOD_KW = ["wod", "workout", "amrap", "emom", "for time", "metcon", "conditioning", "circuit", "burpee", "wall ball", "dumbbell", "hyrox", "sled", "ski erg"];
@@ -106,6 +107,21 @@ function normaliseCycle(c: any) {
   };
 }
 
+function normaliseEngine(p: any) {
+  return {
+    id: p.id,
+    name: p.name,
+    category: "engine" as const,
+    subtitle: `${p.durationWeeks} weeks · ${p.sessionsPerWeek}×/wk · threshold / VO2 / aerobic`,
+    tags: p.tags ?? [],
+    durationWeeks: p.durationWeeks,
+    sessionsPerWeek: p.sessionsPerWeek,
+    goal: p.goal,
+    score: p.score ?? 1,
+    raw: p,
+  };
+}
+
 function normaliseStrength(t: any) {
   return {
     id: t.id,
@@ -155,6 +171,7 @@ router.post("/brain/search", async (req, res): Promise<void> => {
   }
   if (intent === "cycle" || intent === "all") {
     searchCyclesSync(query, intent === "all" ? 2 : 3).forEach(c => results.push(normaliseCycle(c)));
+    searchEngineSync(query, intent === "all" ? 1 : 2).forEach(p => results.push(normaliseEngine(p)));
   }
   if (intent === "strength" || intent === "all") {
     searchStrengthSync(query, intent === "all" ? 1 : 2).forEach(t => results.push(normaliseStrength(t)));

@@ -1,0 +1,233 @@
+const program = {
+  name: "Engine Builder 6 Week Block",
+  author: "Custom Hinshaw-Style Framework",
+  durationWeeks: 6,
+  sessionsPerWeek: 3,
+  goal: "Build aerobic base, threshold, and VO2 max using interchangeable cyclical modalities",
+  allowedModalities: [
+    "run",
+    "row",
+    "ski",
+    "assault_bike",
+    "echo_bike",
+    "bike_erg"
+  ],
+  globalRules: [
+    "Prioritise repeatable output across all intervals",
+    "Do not sprint the first rep",
+    "Pacing should allow all reps to be completed at similar output",
+    "If output drops significantly, reduce intensity next round",
+    "Choose one modality per session unless mixed modality is explicitly programmed",
+    "Threshold work should feel controlled hard",
+    "VO2 work should feel very hard but still repeatable",
+    "Aerobic work should feel sustainable and conversational",
+    "Rest is fixed and part of the session design"
+  ],
+  intensityGuide: {
+    aerobic: {
+      effort: "easy to moderate",
+      description: "Conversational pace. You should feel like you could keep going beyond the prescribed duration."
+    },
+    threshold: {
+      effort: "moderately hard to hard",
+      description: "Controlled discomfort. You should be working hard but never blowing up."
+    },
+    vo2: {
+      effort: "hard to very hard",
+      description: "High output with repeatability. You should still be able to match output across rounds."
+    }
+  },
+  progressionRules: [
+    "Weeks 1 to 2 build baseline volume and pacing discipline",
+    "Weeks 3 to 4 increase density or total work",
+    "Week 5 is the hardest week",
+    "Week 6 is a consolidation week with slightly reduced volume but strong execution",
+    "Athlete may swap modality session to session",
+    "Keep the stimulus the same when changing modality",
+    "If recovery is poor, hold the previous week's structure rather than forcing progression"
+  ],
+  weeks: [
+    {
+      week: 1,
+      theme: "Establish pacing and control",
+      sessions: [
+        {
+          day: 1,
+          type: "threshold",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "5 x 5 minutes work / 90 seconds rest",
+          target: "Controlled hard pace, even output across all reps",
+          notes: "First rep should feel conservative. Build confidence in pacing."
+        },
+        {
+          day: 2,
+          type: "vo2",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "10 x 1 minute work / 1 minute rest",
+          target: "Hard but repeatable effort",
+          notes: "Do not chase a huge first rep. Aim for minimal drop-off."
+        },
+        {
+          day: 3,
+          type: "aerobic",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "40 minutes continuous",
+          target: "Steady conversational effort",
+          notes: "Smooth, relaxed rhythm. This should not turn into threshold work."
+        }
+      ]
+    },
+    {
+      week: 2,
+      theme: "Add a little more work",
+      sessions: [
+        {
+          day: 1,
+          type: "threshold",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "6 x 5 minutes work / 90 seconds rest",
+          target: "Controlled hard pace, even output across all reps",
+          notes: "Slight increase in volume. Hold the same discipline."
+        },
+        {
+          day: 2,
+          type: "vo2",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "12 x 1 minute work / 1 minute rest",
+          target: "Hard but repeatable effort",
+          notes: "Stay smooth. The goal is repeatability, not heroics."
+        },
+        {
+          day: 3,
+          type: "aerobic",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "45 minutes continuous",
+          target: "Steady conversational effort",
+          notes: "You should finish feeling like you had more."
+        }
+      ]
+    },
+    {
+      week: 3,
+      theme: "Increase density",
+      sessions: [
+        {
+          day: 1,
+          type: "threshold",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "5 x 6 minutes work / 90 seconds rest",
+          target: "Controlled hard pace, even output across all reps",
+          notes: "Longer reps now. Keep control and avoid surging."
+        },
+        {
+          day: 2,
+          type: "vo2",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "8 x 90 seconds work / 75 seconds rest",
+          target: "Hard but repeatable effort",
+          notes: "This should bite a little more than week 2, but still be sustainable."
+        },
+        {
+          day: 3,
+          type: "aerobic",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "50 minutes continuous",
+          target: "Steady conversational effort",
+          notes: "Stay efficient. No drifting into moderate-hard work."
+        }
+      ]
+    },
+    {
+      week: 4,
+      theme: "Push total quality work",
+      sessions: [
+        {
+          day: 1,
+          type: "threshold",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "4 x 8 minutes work / 2 minutes rest",
+          target: "Controlled hard pace, even output across all reps",
+          notes: "Long threshold intervals. Very honest pacing needed."
+        },
+        {
+          day: 2,
+          type: "vo2",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "10 x 90 seconds work / 75 seconds rest",
+          target: "Hard but repeatable effort",
+          notes: "Output should stay stable from first rep to last."
+        },
+        {
+          day: 3,
+          type: "aerobic",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "55 minutes continuous",
+          target: "Steady conversational effort",
+          notes: "Think smooth mechanics and low emotional effort."
+        }
+      ]
+    },
+    {
+      week: 5,
+      theme: "Peak workload",
+      sessions: [
+        {
+          day: 1,
+          type: "threshold",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "5 x 8 minutes work / 2 minutes rest",
+          target: "Controlled hard pace, even output across all reps",
+          notes: "This is the biggest threshold session of the block."
+        },
+        {
+          day: 2,
+          type: "vo2",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "12 x 90 seconds work / 60 seconds rest",
+          target: "Hard but repeatable effort",
+          notes: "This is the hardest VO2 session. Only keep it if quality remains high."
+        },
+        {
+          day: 3,
+          type: "aerobic",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "60 minutes continuous",
+          target: "Steady conversational effort",
+          notes: "Long and controlled. This supports recovery as much as adaptation."
+        }
+      ]
+    },
+    {
+      week: 6,
+      theme: "Consolidate and express fitness",
+      sessions: [
+        {
+          day: 1,
+          type: "threshold",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "4 x 6 minutes work / 90 seconds rest",
+          target: "Controlled hard pace, slightly stronger than week 3 if fitness has improved",
+          notes: "Less volume. Aim for your best execution of the block."
+        },
+        {
+          day: 2,
+          type: "vo2",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "8 x 1 minute work / 1 minute rest",
+          target: "Hard but crisp effort",
+          notes: "This should feel powerful, not desperate."
+        },
+        {
+          day: 3,
+          type: "aerobic",
+          modalityOptions: ["run", "row", "ski", "assault_bike", "echo_bike", "bike_erg"],
+          structure: "45 minutes continuous",
+          target: "Steady conversational effort",
+          notes: "Finish the block feeling in rhythm, not buried."
+        }
+      ]
+    }
+  ]
+};
+
+export default program;
