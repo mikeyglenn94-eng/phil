@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useRoute, useLocation, Link, useSearch } from "wouter";
+import { useRoute, useLocation, useSearch } from "wouter";
 import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
@@ -1183,18 +1183,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </div>
             <h1 className="font-display font-bold text-lg truncate">{client.name}</h1>
           </div>
-          {mode === "coach" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={openGoalsDialog}
-              className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-              title="Set daily macro & calorie goals"
-            >
-              <Target className="w-3.5 h-3.5" />
-              Goals
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={openGoalsDialog}
+            className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+            title="Set daily macro & calorie goals"
+          >
+            <Target className="w-3.5 h-3.5" />
+            Goals
+          </Button>
           {mode === "coach" && (
             <Button
               variant="ghost"
@@ -1209,28 +1207,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </Button>
           )}
           {mode === "client" && (
-            <>
-              <Link href="/clients">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-                  title="Switch to coach view"
-                >
-                  Coach view
-                </Button>
-              </Link>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearClient}
-                className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-                title="Sign out"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                Sign out
-              </Button>
-            </>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearClient}
+              className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+              title="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sign out
+            </Button>
           )}
         </div>
 
@@ -1479,7 +1465,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   size="sm"
                   variant="default"
                   className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1"
-                  onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setBuildMode("template"); setGeneratedPreview(null); setDescribeText(""); setAssignDialogOpen(true); }}
+                  onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setBuildMode("template"); setGeneratedPreview(null); setDescribeText(""); setStrengthStyle(null); setAssignDialogOpen(true); }}
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Build From Scratch</span>
