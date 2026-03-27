@@ -1,7 +1,9 @@
 import { Router, type IRouter } from "express";
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, gte, and, sql } from "drizzle-orm";
 import { db, programmesTable } from "@workspace/db";
 import type { Session } from "@workspace/db";
+
+const MONTHLY_LIMIT = 2;
 
 const router: IRouter = Router();
 
@@ -42,6 +44,23 @@ router.post("/programmes", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Title is required" });
     return;
   }
+
+  // Safety-net: enforce monthly limit at save time too
+  if (clientId !== undefined && !isNaN(Number(clientId))) {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const rows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(programmesTable)
+      .where(and(eq(programmesTable.clientId, Number(clientId)), gte(programmesTable.createdAt, startOfMonth)));
+    const count = rows[0]?.count ?? 0;
+    if (count >= MONTHLY_LIMIT) {
+      res.status(429).json({ error: "monthly_limit_reached" });
+      return;
+    }
+  }
+
   const values: { title: string; sessions: Session[]; clientId?: number } = { title, sessions: sessions ?? [] };
   if (clientId !== undefined && !isNaN(Number(clientId))) values.clientId = Number(clientId);
   const [programme] = await db

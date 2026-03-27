@@ -1,8 +1,55 @@
 import { Router, type IRouter } from "express";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import multer from "multer";
+import { db, programmesTable } from "@workspace/db";
 import type { Exercise } from "@workspace/db";
+import { eq, gte, and, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
+
+// ── Model routing ──────────────────────────────────────────────────────────
+// Use gpt-5.2 for complex multi-constraint programmes; gpt-4o for simple ones.
+function selectModel(description: string): string {
+  const d = description.toLowerCase();
+  const complexSignals = [
+    // Sport-specific
+    "olympic", "weightlifting", "oly ", "snatch", "clean & jerk", "clean and jerk",
+    "hyrox",
+    // Engine / aerobic complexity
+    "engine", "vo2", "aerobic base", "threshold", "hinshaw",
+    // High frequency
+    "5 day", "5x per week", "6 day", "6x per week", "five day", "six day",
+    "5 session", "6 session",
+    // Multi-modal complexity
+    "triathlon", "crossfit games",
+  ];
+  // Multi-modal: mentions 3+ distinct training types
+  const modalities = [
+    /\bstrength\b/.test(d),
+    /\brun(ning)?\b/.test(d),
+    /\bwod\b|\bcrossFit\b|\bcondition(ing)?\b/.test(d),
+    /\bsw(im|imming)\b/.test(d),
+    /\bcycl(e|ing)\b/.test(d),
+  ].filter(Boolean).length;
+
+  if (complexSignals.some(kw => d.includes(kw)) || modalities >= 3) {
+    return "gpt-5.2";
+  }
+  return "gpt-4o";
+}
+
+// ── Monthly programme limit ────────────────────────────────────────────────
+const MONTHLY_LIMIT = 2;
+
+async function getMonthlyCount(clientId: number): Promise<number> {
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const rows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(programmesTable)
+    .where(and(eq(programmesTable.clientId, clientId), gte(programmesTable.createdAt, startOfMonth)));
+  return rows[0]?.count ?? 0;
+}
 
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -292,11 +339,25 @@ router.post("/generate-rationale", async (req, res): Promise<void> => {
 });
 
 router.post("/generate-programme", async (req, res): Promise<void> => {
-  const { description, startDate, strengthStyle } = req.body as { description: string; startDate: string; strengthStyle?: "straight" | "variety" };
+  const { description, startDate, strengthStyle, clientId } = req.body as {
+    description: string; startDate: string; strengthStyle?: "straight" | "variety"; clientId?: number;
+  };
   if (!description || !startDate) {
     res.status(400).json({ error: "description and startDate are required" });
     return;
   }
+
+  // Check monthly generation limit before spending AI tokens
+  if (clientId && !isNaN(Number(clientId))) {
+    const count = await getMonthlyCount(Number(clientId));
+    if (count >= MONTHLY_LIMIT) {
+      res.status(429).json({ error: "monthly_limit_reached" });
+      return;
+    }
+  }
+
+  const chosenModel = selectModel(description);
+  req.log.info({ model: chosenModel, hasClientId: !!clientId }, "generate-programme model selected");
 
   const systemPrompt = `You are an expert fitness programming AI. A coach is describing the training plan they want for a client. Generate a complete, realistic multi-week training programme as a JSON object.
 
@@ -671,7 +732,7 @@ Use clean, consistent straight sets throughout. Every exercise should have a def
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-5.2",
+      model: chosenModel,
       max_completion_tokens: 32768,
       messages: [
         { role: "system", content: systemPrompt + styleSection },
