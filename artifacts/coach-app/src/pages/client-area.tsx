@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useRoute, useLocation, useSearch } from "wouter";
+import { useRoute, useLocation, Link, useSearch } from "wouter";
 import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
@@ -1170,12 +1170,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </Button>
           )}
           {mode === "client" && (
-            <div className="flex items-center gap-2 mr-1">
-              <div className="bg-primary/15 p-1.5 rounded-lg">
-                <Dumbbell className="w-4 h-4 text-primary" />
+            <Link href="/clients">
+              <div className="flex items-center gap-2 mr-1 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" title="Coach dashboard">
+                <div className="bg-primary/15 p-1.5 rounded-lg">
+                  <Dumbbell className="w-4 h-4 text-primary" />
+                </div>
+                <span className="font-display font-bold text-sm leading-none text-foreground/70">Cue <span className="text-primary">Coaching</span></span>
               </div>
-              <span className="font-display font-bold text-sm leading-none text-foreground/70">Cue <span className="text-primary">Coaching</span></span>
-            </div>
+            </Link>
           )}
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
