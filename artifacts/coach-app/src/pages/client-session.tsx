@@ -10,6 +10,7 @@ import {
   useGetProgramme,
   useUpdateProgramme,
   getListProgrammesQueryKey,
+  getGetProgrammeQueryKey,
   parseLog,
   parseTranscript,
   transcribeAudio,
@@ -287,6 +288,13 @@ export default function ClientSession() {
 
   const submitFeedback = async () => {
     if (!feedbackText.trim() || !programme || !session) return;
+
+    // Cancel any pending autosave so it can't overwrite the AI changes with stale data
+    if (autosaveTimerRef_cs.current) {
+      clearTimeout(autosaveTimerRef_cs.current);
+      autosaveTimerRef_cs.current = null;
+    }
+
     setFeedbackSubmitting(true);
     try {
       const res = await fetch(`/api/programmes/${programmeId}/session-feedback`, {
@@ -307,7 +315,12 @@ export default function ClientSession() {
           updatedById.has(s.id) ? { ...s, ...updatedById.get(s.id) } : s
         );
         await updateMutation.mutateAsync({ id: programmeId, data: { sessions: merged } });
+        // Immediately update the detail cache so any subsequent autosave reads the correct merged data
+        queryClient.setQueryData(getGetProgrammeQueryKey(programmeId), (old: any) =>
+          old ? { ...old, sessions: merged } : old
+        );
         queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetProgrammeQueryKey(programmeId) });
       }
       setFeedbackDone(true);
       setFeedbackConfirmation(userConfirmation);
