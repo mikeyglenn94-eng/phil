@@ -156,6 +156,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const describeInterimRef = useRef("");
   const describeRecRef = useRef<any>(null);
   const [describeGenerating, setDescribeGenerating] = useState(false);
+  const [rationaleText, setRationaleText] = useState("");
+  const [rationaleReady, setRationaleReady] = useState(false);
   const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[] } | null>(null);
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
 
@@ -163,7 +165,23 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (!describeText.trim() || !assignStartDate) return;
     setDescribeGenerating(true);
     setGeneratedPreview(null);
+    setRationaleText("");
+    setRationaleReady(false);
+    let capturedRationale = "";
     try {
+      // Step 1: get rationale quickly (shows during the long wait)
+      const rationaleRes = await fetch("/api/generate-rationale", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: describeText.trim(), startDate: assignStartDate }),
+      });
+      if (rationaleRes.ok) {
+        const { rationale } = await rationaleRes.json();
+        capturedRationale = rationale ?? "";
+        setRationaleText(capturedRationale);
+        setRationaleReady(true);
+      }
+      // Step 2: generate the full programme
       const res = await fetch("/api/generate-programme", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -171,7 +189,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      setGeneratedPreview(data);
+      setGeneratedPreview({ ...data, rationale: capturedRationale });
     } catch (e: any) {
       toast({ title: "Couldn't generate programme", description: e?.message ?? "Try rephrasing your description.", variant: "destructive" });
     } finally {
@@ -1790,7 +1808,35 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           {/* Describe It mode */}
           {buildMode === "describe" && (
             <div className="space-y-4 py-1">
-              {!generatedPreview ? (
+              {describeGenerating ? (
+                /* Loading panel — shows rationale as it arrives */
+                <div className="space-y-4 py-2">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+                    <p className="text-sm font-semibold text-foreground">
+                      {rationaleReady ? "Building sessions…" : "Planning your programme…"}
+                    </p>
+                  </div>
+                  {rationaleReady && rationaleText ? (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3.5 space-y-1">
+                      <p className="text-[11px] font-semibold text-primary/60 uppercase tracking-wider mb-2">Coach's logic</p>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{rationaleText}</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-muted bg-muted/30 px-4 py-3.5 space-y-2">
+                      <div className="h-3 bg-muted rounded animate-pulse w-3/4" />
+                      <div className="h-3 bg-muted rounded animate-pulse w-full" />
+                      <div className="h-3 bg-muted rounded animate-pulse w-5/6" />
+                    </div>
+                  )}
+                  {rationaleReady && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      Generating sessions, exercises & progressions — this usually takes 15–30 seconds
+                    </p>
+                  )}
+                </div>
+              ) : !generatedPreview ? (
                 <>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Describe the programme</label>
@@ -1828,17 +1874,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
                     <Button
                       onClick={handleGenerateProgramme}
-                      disabled={!describeText.trim() || !assignStartDate || describeGenerating}
+                      disabled={!describeText.trim() || !assignStartDate}
                       className="gap-2"
                     >
-                      {describeGenerating
-                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Building…</>
-                        : <><Sparkles className="w-4 h-4" /> Generate</>}
+                      <Sparkles className="w-4 h-4" /> Generate
                     </Button>
                   </DialogFooter>
                 </>
               ) : (
                 <>
+                  {(generatedPreview as any).rationale && (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 space-y-1">
+                      <p className="text-[11px] font-semibold text-primary/60 uppercase tracking-wider mb-1.5">Coach's logic</p>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{(generatedPreview as any).rationale}</p>
+                    </div>
+                  )}
                   <div className="rounded-xl border bg-muted/30 p-3 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-semibold text-sm leading-snug">{generatedPreview.title}</p>

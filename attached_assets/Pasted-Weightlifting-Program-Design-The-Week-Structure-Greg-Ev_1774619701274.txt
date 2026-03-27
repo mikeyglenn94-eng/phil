@@ -1,0 +1,63 @@
+Weightlifting Program Design: The Week Structure
+Greg Everett
+December 5 2019
+
+
+
+Let’s figure out how to put together an Olympic weightlifting microcycle—or as normal people call it, a week. Technically a microcycle doesn’t have to be seven days, but unless you have absolutely nothing else happening in your life, anything else makes no sense… and even full time weightlifters who literally have nothing else happening in their lives still use seven days because it’s a convenient period of time and works well with regard to training anyway.
+ 
+The question is how to structure the week—how many days and what days are we training, where do we put all of the exercises we’ve decided we need, and how do we modulate volume and intensity?
+ 
+Of course, the exact answers depend on who you are and what you’re up to, but we can come up with some rules that will guide the specifics.
+ 
+ 
+Days of the Week
+ 
+What days are we training? The majority of my lifters train 5 days/week, and this is probably the most common schedule for weightlifting as a whole. More advanced lifters will usually train 6 days, as will many not at all advanced lifters who are inappropriately mimicking the training of elite athletes far before they’re ready. Many masters lifters, or simply extremely busy people, will train only 3-4 days/week.
+ 
+In any case, what we need to do is distribute the burdening of training throughout the week in a way that allows us to push as hard as needed on any given day. This means we need some degree of recovery through the week, which means spreading things out as well as possible. If we training 3 days/week, training Monday-Tuesday-Wednesday isn’t going to be a great plan—by Wednesday, we’ll be destroyed and unable to train as hard as we want, and then we’ll sit around getting deconditioned and stiff for four days.
+ 
+For a 3-day schedule, we want to simply train every other day and then end up with 2 days off. For a 4-day schedule, we’ll do the same but have one instance of 2 days back-to-back. I recommend Monday-Tuesday-Thursday-Saturday. This give us the back-to-back days first in the week when we’ll be freshest, and allows us to use Tuesday as an easier day that we can handle after a tough Monday and then a complete rest day to recover from that double-whammy of Monday and Tuesday.
+ 
+For 5 days, I have long preferred training Monday-Thursday and Saturday. That’s the schedule I trained on as a lifter and it allows the week to be structured well. The other option is Monday-Tuesday-Wednesday and Friday-Saturday. I use this with some of my lifters, but only because schedules demand it, not because I find it particularly effective.
+ 
+In one sense, the second schedule is nice because we don’t have to train 4 consecutive days, but it also makes my preferred pattern of exercise scheduling trickier. Because I like using Saturday as a heavy total day, it’s good to have the week packed into the first 4 days, then rest, then go bananas, much like you would for a competition, which is part of the idea behind that Saturday training. Choose the one that fits your schedule best.
+ 
+For 6 days/week… not much to discuss. Basically the only question is which day you want off, and that’s a personal preference, although honestly if it’s anything other than Sunday, you’re likely insane.
+ 
+ 
+Intensity & Volume
+ 
+Next we need to figure out how to distribute all the work among our chosen days. If you’re training 3 days/week, you can skip this section—all the days can be essentially the same in terms of volume and intensity because you a) only have 3 and b) have a rest day before each one.
+ 
+For the rest of you, the rule is simple: alternate “big” and “little” days. That is, days with more volume and higher intensity should be followed by days with less volume and lower intensity.
+ 
+For 4 days/week, simply make the one day that doesn’t come after a rest day a “little” day. For 5 days/week, these are my recommendations:
+ 
+Monday - Big
+Tuesday - Little
+Wednesday - Big
+Thursday - Little
+Saturday - Big
+ 
+or
+ 
+Monday - Big
+Tuesday - Little
+Wednesday - Big
+Friday - Big
+Saturday – Little
+ 
+So what comprises big and little?
+ 
+Your big days are usually going to be the ones with heavy snatches or clean & jerks, pulls and squats. These will be the most systemically taxing lifts you do, and the ones you’re likely doing with higher intensity.
+ 
+Your little days are going to be more speed, technique or overhead lifts that are inherently limited in intensity. If you’re doing power or hang variations, for example, even your maximal lifts are lower intensity than your maximal competition lifts (or should be… some of you violate that rule with hangs… and powers actually.). Doing jerk work, overhead squats, snatch balances, push presses, jerk supports and similar, even if at high intensity, will be less systemically taxing as well, so these are usually good fits for little days.
+ 
+Generally you’re going to have more exercises on big days than little days, but this isn’t a hard and fast rule because exercises vary so widely in terms of difficulty. If you have a snatch, pull, squat and SLDL on Monday, you may still have 4 exercises on Tuesday if some are things like muscle snatches, dip power snatches, push presses, etc.—things that you get through pretty quickly and without a huge energy expenditure—or you’re keeping the weight really light (60-75% or so). In other words, don’t get stuck looking at this stuff purely quantitatively, but also qualitatively.
+ 
+Accessory work should be scheduled appropriately too. Don’t put a bunch of tough lower back work on a little day so that the next day your back is smoked for your heavy cleans, pulls and squats—that kind of work should be done at the end of your big days. Accessory work like bodybuilding or overhead stability work fits well on little days—little days are shorter and easier, so you can manage more accessory exercises in terms of time and energy.
+ 
+Now, everyone’s question is always, How much difference does there need to be in terms of volume and intensity between big and little days? And my answer is the always infuriating, It depends. Sorry, but I can’t change that fact because it’s an inconvenient answer. And keep in mind that I can’t just give you a percent because we have qualitative considerations like exercise selection as I described earlier. Numerically, there may be less than 10% difference in volume, identical number of exercises, and, depending on how you prescribe intensity (e.g. powers as percent of power will be a higher number than as percent of full), similar intensity.
+ 
+And, as always, each lifter handles programming a bit (or extremely) differently. Start with a middle of the road plan and adjust with sensible experimentation (sensible meaning don’t slap the pendulum and swing back and forth 40% each direction making no progress).

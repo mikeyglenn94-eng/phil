@@ -258,6 +258,33 @@ Return format:
   }
 });
 
+router.post("/generate-rationale", async (req, res): Promise<void> => {
+  const { description, startDate } = req.body as { description: string; startDate: string };
+  if (!description) { res.status(400).json({ error: "description is required" }); return; }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 512,
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert strength and conditioning coach. A coach has described a training plan they want for a client. Write a brief, direct paragraph (3–6 sentences) explaining the programming rationale — what the structure will be, why it suits their goals, how intensity will progress across the weeks, and any specific strategic decisions (e.g. deload week, peaking phase, alternating upper/lower). Write as though you're a coach explaining your thinking to the client. Be specific, not generic. Do not use bullet points. Do not mention that you are an AI.`,
+        },
+        {
+          role: "user",
+          content: `Start date: ${startDate ?? "to be confirmed"}\n\nProgramme description: "${description}"`,
+        },
+      ],
+    });
+    const rationale = completion.choices[0]?.message?.content?.trim() ?? "";
+    res.json({ rationale });
+  } catch (err) {
+    req.log.error({ err }, "Error generating rationale");
+    res.status(500).json({ error: "Failed to generate rationale" });
+  }
+});
+
 router.post("/generate-programme", async (req, res): Promise<void> => {
   const { description, startDate } = req.body as { description: string; startDate: string };
   if (!description || !startDate) {
