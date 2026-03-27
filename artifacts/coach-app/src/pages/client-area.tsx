@@ -1484,29 +1484,26 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </button>
               </div>
             </div>
-            <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-1.5">
-              <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase sm:hidden">
-                Your workout builders
-              </p>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  size="sm"
-                  className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0 shadow-sm"
-                  onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Build From Brain</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="default"
-                  className="rounded-xl text-xs h-8 px-2 sm:px-3 gap-1"
-                  onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setBuildMode("template"); setGeneratedPreview(null); setDescribeText(""); setStrengthStyle(null); setAssignDialogOpen(true); }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Build From Scratch</span>
-                </Button>
-              </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button
+                size="sm"
+                className="rounded-xl text-xs h-8 px-2.5 gap-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0 shadow-sm"
+                onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
+                title="Build From Brain"
+              >
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Build From Brain</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="default"
+                className="rounded-xl text-xs h-8 px-2.5 gap-1"
+                onClick={() => { setSelectedSourceId(null); setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setBuildMode("template"); setGeneratedPreview(null); setDescribeText(""); setStrengthStyle(null); setAssignDialogOpen(true); }}
+                title="Build From Scratch"
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Build From Scratch</span>
+              </Button>
             </div>
           </div>
 
