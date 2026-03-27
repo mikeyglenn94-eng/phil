@@ -1804,7 +1804,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             <DialogDescription className="sr-only">Describe a new programme for {client?.name ?? "this client"}</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-1">
+          {/* Scrollable content — footer is pinned below, never clipped */}
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-1">
               {describeGenerating ? (
                 /* Loading panel — shows rationale as it arrives */
                 <div className="space-y-4 py-2">
@@ -1890,16 +1891,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     <label className="text-sm font-medium">Start Date</label>
                     <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
                   </div>
-                  <DialogFooter className="pt-0">
-                    <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
-                    <Button
-                      onClick={handleGenerateProgramme}
-                      disabled={!describeText.trim() || !assignStartDate || (isStrengthDescription(describeText) && strengthStyle === null)}
-                      className="gap-2"
-                    >
-                      <Sparkles className="w-4 h-4" /> Generate
-                    </Button>
-                  </DialogFooter>
                 </>
               ) : (
                 <>
@@ -1931,16 +1922,35 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 leading-relaxed">
                     💡 Once added, use the calendar to fine-tune dates, swap exercises, or adjust sessions — no need to regenerate for small changes.
                   </p>
-                  <DialogFooter className="pt-0">
-                    <Button variant="ghost" size="sm" onClick={() => setGeneratedPreview(null)} className="text-muted-foreground">← Back</Button>
-                    <Button onClick={handleConfirmGenerated} disabled={confirmingGenerated} className="gap-2">
-                      {confirmingGenerated ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                      Add to {client?.name ?? "Client"}'s Calendar
-                    </Button>
-                  </DialogFooter>
                 </>
               )}
             </div>
+
+          {/* Pinned footer — always visible, never clipped */}
+          {!describeGenerating && (
+            <DialogFooter className="shrink-0 pt-3 border-t">
+              {!generatedPreview ? (
+                <>
+                  <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+                  <Button
+                    onClick={handleGenerateProgramme}
+                    disabled={!describeText.trim() || !assignStartDate || (isStrengthDescription(describeText) && strengthStyle === null)}
+                    className="gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" /> Generate
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => setGeneratedPreview(null)} className="text-muted-foreground">← Back</Button>
+                  <Button onClick={handleConfirmGenerated} disabled={confirmingGenerated} className="gap-2">
+                    {confirmingGenerated ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Add to {client?.name ?? "Client"}'s Calendar
+                  </Button>
+                </>
+              )}
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
