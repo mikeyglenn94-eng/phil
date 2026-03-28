@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays } from "lucide-react";
+import { Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, Camera, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import {
   useListNutritionEntries,
-  useAddNutritionEntry,
   useDeleteNutritionEntry,
   useGetClient,
   getListNutritionEntriesQueryKey,
@@ -23,7 +22,6 @@ export default function ClientNutrition() {
 
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const { data: entries, isLoading } = useListNutritionEntries(CLIENT_ID, { date: selectedDate });
-  const addMutation = useAddNutritionEntry();
   const deleteMutation = useDeleteNutritionEntry();
 
   const [foodInput, setFoodInput] = useState("");
@@ -32,6 +30,11 @@ export default function ClientNutrition() {
   const [interim, setInterim] = useState("");
   const interimRef = useRef("");
   const recRef = useRef<any>(null);
+
+  // Photo state
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -74,17 +77,66 @@ export default function ClientNutrition() {
     try { r.start(); } catch {}
   };
 
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    const url = URL.createObjectURL(file);
+    setImagePreview(url);
+    // Reset so same file can be re-selected
+    e.target.value = "";
+  }
+
+  function clearPhoto() {
+    setImageFile(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+  }
+
   const handleAdd = async () => {
     const text = foodInput.trim();
-    if (!text) return;
+    if (!text && !imageFile) return;
     setIsAdding(true);
     try {
-      await addMutation.mutateAsync({ clientId: CLIENT_ID, data: { description: text, date: selectedDate } });
-      queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(CLIENT_ID, { date: selectedDate }) });
+      let body: Record<string, any>;
+
+      if (imageFile) {
+        // Convert to base64
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            // Strip the data URL prefix, keep only the base64 part
+            resolve(result.split(",")[1]);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(imageFile);
+        });
+        body = {
+          date: selectedDate,
+          imageBase64: base64,
+          imageMimeType: imageFile.type || "image/jpeg",
+          ...(text ? { description: text } : { description: "Nutrition label scan" }),
+        };
+      } else {
+        body = { description: text, date: selectedDate };
+      }
+
+      const res = await fetch(`/api/clients/${CLIENT_ID}/nutrition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to add entry");
+      }
+      await queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(CLIENT_ID, { date: selectedDate }) });
       setFoodInput("");
+      clearPhoto();
       toast({ title: "Entry added" });
-    } catch {
-      toast({ title: "Error adding entry", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Error adding entry", description: e?.message, variant: "destructive" });
     } finally { setIsAdding(false); }
   };
 
@@ -106,6 +158,8 @@ export default function ClientNutrition() {
     }),
     { calories: 0, protein: 0, carbs: 0, fats: 0 }
   );
+
+  const canAdd = (!!foodInput.trim() || !!imageFile) && !isAdding && !listening;
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -129,7 +183,7 @@ export default function ClientNutrition() {
       </div>
 
       <div className="px-6 py-5 max-w-2xl space-y-4">
-        {/* Daily goals tracker — always visible when goals are set */}
+        {/* Daily goals tracker */}
         {(() => {
           const goals = {
             calories: clientData?.dailyCalorieGoal ?? null,
@@ -183,7 +237,6 @@ export default function ClientNutrition() {
             );
           }
 
-          // No goals set — show simple totals only when there are entries
           if ((entries?.length ?? 0) > 0) {
             return (
               <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4">
@@ -209,17 +262,55 @@ export default function ClientNutrition() {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <Plus className="w-3 h-3" /> Add Food / Meal
           </p>
+
+          {/* Label photo preview */}
+          {imagePreview && (
+            <div className="relative mb-3 inline-block">
+              <img
+                src={imagePreview}
+                alt="Nutrition label"
+                className="h-28 w-auto rounded-xl border object-cover shadow-sm"
+              />
+              <button
+                onClick={clearPhoto}
+                className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5 shadow-sm text-muted-foreground hover:text-red-500 transition-colors"
+                title="Remove photo"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+              <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] font-medium rounded-md px-1.5 py-0.5">
+                Label scan
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 items-end">
             <div className="relative flex-1">
               <textarea
                 value={listening ? (interim || foodInput) : foodInput}
                 onChange={e => setFoodInput(e.target.value)}
-                placeholder={listening ? "Listening…" : 'e.g. "2 scrambled eggs with toast and butter"'}
+                placeholder={
+                  imageFile
+                    ? "Add a note (optional) — e.g. "2 servings" or "half a pack""
+                    : listening
+                    ? "Listening…"
+                    : 'e.g. "2 scrambled eggs with toast and butter"'
+                }
                 rows={2}
                 disabled={listening}
-                className="w-full resize-none text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 pr-10 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
+                className="w-full resize-none text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 pr-20 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdd(); } }}
               />
+              {/* Camera button */}
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className={`absolute right-9 bottom-2.5 p-1.5 rounded-lg transition-colors ${imageFile ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                title="Photograph a nutrition label"
+              >
+                <Camera className="w-3.5 h-3.5" />
+              </button>
+              {/* Mic button */}
               <button
                 type="button"
                 onClick={toggleListening}
@@ -231,13 +322,28 @@ export default function ClientNutrition() {
             </div>
             <Button
               onClick={handleAdd}
-              disabled={!foodInput.trim() || isAdding || listening}
+              disabled={!canAdd}
               className="rounded-xl self-end h-10 px-4"
             >
               {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
             </Button>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-2">AI will estimate calories, protein, carbs & fats</p>
+
+          <p className="text-[11px] text-muted-foreground mt-2">
+            {imageFile
+              ? "AI will read the label exactly — add a note if it's more than 1 serving"
+              : "AI will estimate calories, protein, carbs & fats · Tap 📷 to scan a nutrition label"}
+          </p>
+
+          {/* Hidden file input */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhotoChange}
+          />
         </div>
 
         {/* Entries */}
@@ -263,6 +369,9 @@ export default function ClientNutrition() {
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+                {entry.aiNote && (
+                  <p className="text-[11px] text-muted-foreground mt-1 italic">{entry.aiNote}</p>
+                )}
                 {entry.calories !== null && (
                   <div className="flex gap-2 mt-2.5 flex-wrap">
                     <span className="text-xs font-semibold text-orange-500 bg-orange-50 rounded-lg px-2 py-0.5">{entry.calories} kcal</span>

@@ -127,13 +127,41 @@ router.get("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
   res.json(entries);
 });
 
-// Add nutrition entry with AI macro parsing
+// Add nutrition entry with AI macro parsing (supports optional nutrition label photo)
 router.post("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
   const clientId = parseInt(req.params.clientId, 10);
   if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
-  const { description, date } = req.body as { description: string; date: string };
-  if (!description?.trim()) { res.status(400).json({ error: "Description is required" }); return; }
+  const { description, date, imageBase64, imageMimeType } = req.body as {
+    description?: string;
+    date: string;
+    imageBase64?: string;
+    imageMimeType?: string;
+  };
+  const hasImage = !!imageBase64;
+  const hasDescription = !!description?.trim();
+  if (!hasImage && !hasDescription) { res.status(400).json({ error: "Either a description or a label photo is required" }); return; }
   if (!date) { res.status(400).json({ error: "Date is required" }); return; }
+
+  const systemPrompt = `You are a precise sports nutrition expert helping athletes track their macros accurately.
+
+${hasImage
+  ? `The user has photographed a nutrition label. Read the label carefully and extract the macronutrient values.
+- Use the values exactly as shown on the label per serving
+- If the user's note specifies a quantity (e.g. "2 servings", "half a pack"), multiply accordingly
+- If no quantity is specified, assume 1 serving
+- Set note to describe the serving assumption (e.g. "1 serving per label (230g)")
+- If you cannot read the label clearly, do your best estimate and mention it in the note`
+  : `The user will describe food or meals they ate. Your job is to estimate macronutrients as accurately as possible and be transparent about any assumptions you make.
+- If the user gives a specific quantity (e.g. "200g chicken", "1 cup oats"), use that exact amount
+- If no quantity is given, assume a typical single adult male serving and ALWAYS note your assumption
+- For branded or restaurant foods, use best available nutritional data
+- Protein: lean meats ~25-30g/100g, eggs ~6g each, legumes ~8g/100g cooked
+- Always be realistic — do not under- or over-estimate`}
+
+Respond ONLY with a JSON object in this exact format:
+{"calories": 450, "protein": 32.5, "carbs": 45.0, "fats": 12.0, "note": "1 serving per label (230g)"}
+
+All macro values must be numbers (never strings or null). note is a string or null.`;
 
   let calories: number | null = null;
   let protein: string | null = null;
@@ -142,31 +170,30 @@ router.post("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
   let aiNote: string | null = null;
 
   try {
+    type ContentPart =
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string; detail: "low" } };
+
+    const userContent: string | ContentPart[] = hasImage
+      ? [
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${imageMimeType ?? "image/jpeg"};base64,${imageBase64}`,
+              detail: "low",
+            },
+          },
+          ...(hasDescription
+            ? [{ type: "text" as const, text: `User note: ${description!.trim()}` }]
+            : []),
+        ]
+      : description!.trim();
+
     const completion = await openai.chat.completions.create({
-      model: "gpt-5.2",
+      model: hasImage ? "gpt-4o-mini" : "gpt-5.2",
       messages: [
-        {
-          role: "system",
-          content: `You are a precise sports nutrition expert helping athletes track their macros accurately.
-
-The user will describe food or meals they ate. Your job is to estimate macronutrients as accurately as possible and be transparent about any assumptions you make.
-
-RULES:
-- If the user gives a specific quantity (e.g. "200g chicken", "1 cup oats", "2 tbsp peanut butter"), use that exact amount.
-- If no quantity is given, assume a typical single adult male serving and ALWAYS note your assumption.
-- For branded or restaurant foods, use best available nutritional data.
-- For mixed meals (e.g. "chicken and rice"), estimate each component separately then sum.
-- For whole meals described vaguely (e.g. "bowl of pasta"), assume a moderate restaurant/homemade portion.
-- Protein: lean meats ~25-30g/100g, eggs ~6g each, legumes ~8g/100g cooked
-- Always be realistic — do not under- or over-estimate to look impressive.
-- The "note" field must briefly describe the portion assumptions you made, e.g. "Assumed 150g chicken breast, 100g cooked white rice, 1 tsp oil". If the user was specific enough that no assumptions were needed, set note to null.
-
-Respond ONLY with a JSON object in this exact format:
-{"calories": 450, "protein": 32.5, "carbs": 45.0, "fats": 12.0, "note": "Assumed standard 200g fillet and medium baked potato"}
-
-All macro values must be numbers (never strings or null). note is a string or null.`,
-        },
-        { role: "user", content: description },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent as any },
       ],
       response_format: { type: "json_object" },
     });
