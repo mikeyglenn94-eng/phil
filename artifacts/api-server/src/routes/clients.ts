@@ -148,12 +148,20 @@ router.post("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
 ${hasImages
   ? `The user has photographed ${imageCount === 1 ? "a nutrition label" : `${imageCount} nutrition labels for the same meal`}. Read ${imageCount === 1 ? "the label" : "all labels"} carefully and extract the macronutrient values.
 
-CRITICAL — many labels have two columns: "per 100g" and "per serving/pack". You MUST use the per-serving or per-pack column (the one with the smaller portion size), NOT the per-100g reference column. The per-100g column is just a reference and will give wildly incorrect results if used directly.
+CRITICAL — many labels have two columns: "per 100g" and "per serving/pack". Choose your calculation method based on how the user specifies their quantity:
 
-- Identify the serving size (e.g. "30g pack", "33g serving") and use those column values
-- If the user's note specifies a quantity (e.g. "4 bags", "2 servings", "120g"), multiply the per-serving values by that quantity. For weight-based quantities (e.g. "120g"), divide by the serving weight first to get number of servings, then multiply
-- ${imageCount > 1 ? "Sum the calculated values across all labels to give the total macros for the meal" : "If no quantity is specified, assume 1 serving"}
-- Set note to describe exactly what you calculated (e.g. "4 × 30g packs (chips) + 120g cheese")
+RULE A — Count-based quantity (e.g. "4 bags", "2 servings", "1 pack"):
+  → Use the per-serving/per-pack column × count
+  → Example: 4 bags × 144 kcal per 30g pack = 576 kcal
+
+RULE B — Weight-based quantity (e.g. "120g", "200g"):
+  → Use the per-100g column × (user_weight ÷ 100)
+  → Example: 120g cheese × (272 kcal ÷ 100) = 326 kcal
+  → This avoids rounding errors from dividing by serving size
+
+- If no quantity is specified, assume 1 serving and use the per-serving column
+- ${imageCount > 1 ? "Apply the appropriate rule for each label, then sum all values" : ""}
+- Set note to describe exactly what you calculated (e.g. "4 × 30g packs chips (576 kcal) + 120g cheese (326 kcal)")
 - If you cannot read a label clearly, do your best estimate and mention it in the note`
   : `The user will describe food or meals they ate. Your job is to estimate macronutrients as accurately as possible and be transparent about any assumptions you make.
 - If the user gives a specific quantity (e.g. "200g chicken", "1 cup oats"), use that exact amount
