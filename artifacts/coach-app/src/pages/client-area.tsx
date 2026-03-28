@@ -1023,6 +1023,32 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (labelPreview) URL.revokeObjectURL(labelPreview);
     setLabelPreview(null);
   }
+
+  // Resize image to max 1024px and JPEG 0.85 quality before sending — keeps payload under ~300KB
+  async function resizeImageToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const MAX = 1024;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height / width) * MAX); width = MAX; }
+          else { width = Math.round((width / height) * MAX); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        resolve({ base64: dataUrl.split(",")[1], mimeType: "image/jpeg" });
+      };
+      img.onerror = reject;
+      img.src = objectUrl;
+    });
+  }
   const [showGuide, setShowGuide] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [editCalories, setEditCalories] = useState("");
@@ -1182,12 +1208,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setIsAdding(true);
     try {
       if (labelImage) {
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(labelImage);
-        });
+        const { base64, mimeType } = await resizeImageToBase64(labelImage);
         const res = await fetch(`/api/clients/${clientId}/nutrition`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1195,7 +1216,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             description: text || "Nutrition label scan",
             date: selectedDate,
             imageBase64: base64,
-            imageMimeType: labelImage.type || "image/jpeg",
+            imageMimeType: mimeType,
           }),
         });
         if (!res.ok) throw new Error();
