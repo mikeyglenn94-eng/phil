@@ -1522,12 +1522,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </button>
             {showGuide && (
               <div className="mt-2 p-3 bg-primary/5 border border-primary/15 rounded-xl text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
-                <p className="font-semibold text-foreground/70 mb-1">The more specific you are, the better the estimate:</p>
+                <p className="font-semibold text-foreground/70 mb-1">Always describe your quantity in <span className="text-primary">servings or grams</span> — even grams gives a better estimate than nothing:</p>
                 <p>✅ <span className="text-foreground/80">200g chicken breast, 120g cooked white rice, 1 tbsp olive oil</span></p>
                 <p>✅ <span className="text-foreground/80">3 large scrambled eggs, 2 slices wholegrain toast, 10g butter</span></p>
                 <p>✅ <span className="text-foreground/80">McDonald's Big Mac and medium fries</span></p>
                 <p>✅ <span className="text-foreground/80">Protein shake — 1 scoop MyProtein Impact Whey, 300ml whole milk</span></p>
-                <p className="pt-1 border-t border-primary/10">Include: <strong>weight/volume</strong> (g, ml, cups, tbsp), <strong>cooking method</strong> (grilled vs fried), and <strong>brand</strong> for packaged foods. The AI will show you what it assumed so you can spot any errors.</p>
+                <p className="pt-1 border-t border-primary/10">📷 <strong>Scanning a label?</strong> Add a note like <em>"4 bags"</em> or <em>"120g"</em> so the AI knows your portion. Without a quantity it assumes 1 serving.</p>
+                <p className="border-t border-primary/10 pt-1">The AI shows what it assumed so you can spot any errors.</p>
               </div>
             )}
           </div>
