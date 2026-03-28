@@ -1410,23 +1410,64 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           </div>
 
           {/* Daily totals */}
-          {(entries?.length ?? 0) > 0 && (
-            <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4">
-              <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-3">Daily Totals</p>
-              <div className="grid grid-cols-4 gap-3 text-center">
-                {[
-                  { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500" },
-                  { label: "Protein", value: totals.protein.toFixed(1), unit: "g", color: "text-blue-500" },
-                  { label: "Carbs", value: totals.carbs.toFixed(1), unit: "g", color: "text-yellow-500" },
-                  { label: "Fats", value: totals.fats.toFixed(1), unit: "g", color: "text-pink-500" },
-                ].map(({ label, value, unit, color }) => (
-                  <div key={label}>
-                    <p className={`text-lg font-bold ${color}`}>{value}</p>
-                    <p className="text-[10px] text-muted-foreground font-medium">{unit}</p>
-                    <p className="text-[10px] text-muted-foreground">{label}</p>
+          {((entries?.length ?? 0) > 0 || (client?.dailyCalorieGoal ?? 0) > 0) && (
+            <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4 space-y-3">
+              {/* Consumed row */}
+              {(entries?.length ?? 0) > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider">Daily Totals</p>
+                  <div className="grid grid-cols-4 gap-3 text-center">
+                    {[
+                      { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500" },
+                      { label: "Protein", value: totals.protein.toFixed(1), unit: "g", color: "text-blue-500" },
+                      { label: "Carbs", value: totals.carbs.toFixed(1), unit: "g", color: "text-yellow-500" },
+                      { label: "Fats", value: totals.fats.toFixed(1), unit: "g", color: "text-pink-500" },
+                    ].map(({ label, value, unit, color }) => (
+                      <div key={label}>
+                        <p className={`text-lg font-bold ${color}`}>{value}</p>
+                        <p className="text-[10px] text-muted-foreground font-medium">{unit}</p>
+                        <p className="text-[10px] text-muted-foreground">{label}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </>
+              )}
+
+              {/* Remaining row */}
+              {(client?.dailyCalorieGoal ?? 0) > 0 && (() => {
+                const remCal = (client!.dailyCalorieGoal ?? 0) - Math.round(totals.calories);
+                const remPro = (client!.dailyProteinGoal ?? 0) - totals.protein;
+                const remCarb = (client!.dailyCarbGoal ?? 0) - totals.carbs;
+                const remFat = (client!.dailyFatGoal ?? 0) - totals.fats;
+                const remainingItems = [
+                  { label: "Calories", value: Math.abs(Math.round(remCal)), unit: "kcal", over: remCal < 0 },
+                  { label: "Protein", value: Math.abs(remPro).toFixed(1), unit: "g", over: remPro < 0 },
+                  { label: "Carbs", value: Math.abs(remCarb).toFixed(1), unit: "g", over: remCarb < 0 },
+                  { label: "Fats", value: Math.abs(remFat).toFixed(1), unit: "g", over: remFat < 0 },
+                ];
+                return (
+                  <>
+                    {(entries?.length ?? 0) > 0 && <div className="border-t border-primary/10" />}
+                    <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider">
+                      {remainingItems.some(r => r.over) ? "Remaining / Over" : "Remaining"}
+                    </p>
+                    <div className="grid grid-cols-4 gap-3 text-center">
+                      {remainingItems.map(({ label, value, unit, over }) => (
+                        <div key={label}>
+                          <p className={`text-lg font-bold ${over ? "text-red-500" : "text-green-500"}`}>
+                            {over ? "-" : ""}{value}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground font-medium">{unit}</p>
+                          <p className="text-[10px] text-muted-foreground">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {(entries?.length ?? 0) === 0 && (
+                      <p className="text-[11px] text-muted-foreground/60 text-center">Nothing logged yet — full allowance remaining</p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
 
