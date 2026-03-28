@@ -131,26 +131,27 @@ router.get("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
 router.post("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
   const clientId = parseInt(req.params.clientId, 10);
   if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
-  const { description, date, imageBase64, imageMimeType } = req.body as {
+  const { description, date, imageBase64Array, imageMimeTypes } = req.body as {
     description?: string;
     date: string;
-    imageBase64?: string;
-    imageMimeType?: string;
+    imageBase64Array?: string[];
+    imageMimeTypes?: string[];
   };
-  const hasImage = !!imageBase64;
+  const hasImages = Array.isArray(imageBase64Array) && imageBase64Array.length > 0;
   const hasDescription = !!description?.trim();
-  if (!hasImage && !hasDescription) { res.status(400).json({ error: "Either a description or a label photo is required" }); return; }
+  if (!hasImages && !hasDescription) { res.status(400).json({ error: "Either a description or a label photo is required" }); return; }
   if (!date) { res.status(400).json({ error: "Date is required" }); return; }
 
+  const imageCount = hasImages ? imageBase64Array!.length : 0;
   const systemPrompt = `You are a precise sports nutrition expert helping athletes track their macros accurately.
 
-${hasImage
-  ? `The user has photographed a nutrition label. Read the label carefully and extract the macronutrient values.
-- Use the values exactly as shown on the label per serving
+${hasImages
+  ? `The user has photographed ${imageCount === 1 ? "a nutrition label" : `${imageCount} nutrition labels for the same meal`}. Read ${imageCount === 1 ? "the label" : "all labels"} carefully and extract the macronutrient values.
+- ${imageCount > 1 ? "Sum the values across all labels to give the total macros for the meal" : "Use the values exactly as shown on the label per serving"}
 - If the user's note specifies a quantity (e.g. "2 servings", "half a pack"), multiply accordingly
-- If no quantity is specified, assume 1 serving
+- If no quantity is specified, assume 1 serving per label
 - Set note to describe the serving assumption (e.g. "1 serving per label (230g)")
-- If you cannot read the label clearly, do your best estimate and mention it in the note`
+- If you cannot read a label clearly, do your best estimate and mention it in the note`
   : `The user will describe food or meals they ate. Your job is to estimate macronutrients as accurately as possible and be transparent about any assumptions you make.
 - If the user gives a specific quantity (e.g. "200g chicken", "1 cup oats"), use that exact amount
 - If no quantity is given, assume a typical single adult male serving and ALWAYS note your assumption
@@ -174,15 +175,15 @@ All macro values must be numbers (never strings or null). note is a string or nu
       | { type: "text"; text: string }
       | { type: "image_url"; image_url: { url: string; detail: "low" } };
 
-    const userContent: string | ContentPart[] = hasImage
+    const userContent: string | ContentPart[] = hasImages
       ? [
-          {
+          ...imageBase64Array!.map((b64, i): ContentPart => ({
             type: "image_url",
             image_url: {
-              url: `data:${imageMimeType ?? "image/jpeg"};base64,${imageBase64}`,
+              url: `data:${(imageMimeTypes ?? [])[i] ?? "image/jpeg"};base64,${b64}`,
               detail: "low",
             },
-          },
+          })),
           ...(hasDescription
             ? [{ type: "text" as const, text: `User note: ${description!.trim()}` }]
             : []),
@@ -190,7 +191,7 @@ All macro values must be numbers (never strings or null). note is a string or nu
       : description!.trim();
 
     const completion = await openai.chat.completions.create({
-      model: hasImage ? "gpt-4o-mini" : "gpt-5.2",
+      model: hasImages ? "gpt-4o-mini" : "gpt-5.2",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent as any },

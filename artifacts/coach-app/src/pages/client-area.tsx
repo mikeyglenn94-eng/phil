@@ -1006,22 +1006,29 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const [foodInput, setFoodInput] = useState("");
   const [isAdding, setIsAdding] = useState(false);
-  const [labelImage, setLabelImage] = useState<File | null>(null);
-  const [labelPreview, setLabelPreview] = useState<string | null>(null);
+  const [labelImages, setLabelImages] = useState<File[]>([]);
+  const [labelPreviews, setLabelPreviews] = useState<string[]>([]);
   const labelInputRef = useRef<HTMLInputElement>(null);
 
   function handleLabelPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setLabelImage(file);
-    const url = URL.createObjectURL(file);
-    setLabelPreview(url);
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    const newPreviews = files.map(f => URL.createObjectURL(f));
+    setLabelImages(prev => [...prev, ...files]);
+    setLabelPreviews(prev => [...prev, ...newPreviews]);
     e.target.value = "";
   }
-  function clearLabelPhoto() {
-    setLabelImage(null);
-    if (labelPreview) URL.revokeObjectURL(labelPreview);
-    setLabelPreview(null);
+  function removeLabelPhoto(index: number) {
+    setLabelImages(prev => prev.filter((_, i) => i !== index));
+    setLabelPreviews(prev => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+  function clearAllLabelPhotos() {
+    labelPreviews.forEach(url => URL.revokeObjectURL(url));
+    setLabelImages([]);
+    setLabelPreviews([]);
   }
 
   // Resize image to max 1024px and JPEG 0.85 quality before sending — keeps payload under ~300KB
@@ -1204,23 +1211,23 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const handleAdd = async () => {
     const text = foodInput.trim();
-    if (!text && !labelImage) return;
+    if (!text && !labelImages.length) return;
     setIsAdding(true);
     try {
-      if (labelImage) {
-        const { base64, mimeType } = await resizeImageToBase64(labelImage);
+      if (labelImages.length > 0) {
+        const resized = await Promise.all(labelImages.map(f => resizeImageToBase64(f)));
         const res = await fetch(`/api/clients/${clientId}/nutrition`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             description: text || "Nutrition label scan",
             date: selectedDate,
-            imageBase64: base64,
-            imageMimeType: mimeType,
+            imageBase64Array: resized.map(r => r.base64),
+            imageMimeTypes: resized.map(r => r.mimeType),
           }),
         });
         if (!res.ok) throw new Error();
-        clearLabelPhoto();
+        clearAllLabelPhotos();
       } else {
         await addMutation.mutateAsync({ clientId, data: { description: text, date: selectedDate } });
       }
@@ -1429,17 +1436,23 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               <Plus className="w-3 h-3" /> Add Food / Meal
             </p>
 
-            {/* Label photo preview */}
-            {labelPreview && (
-              <div className="relative mb-3 inline-block">
-                <img src={labelPreview} alt="Nutrition label" className="h-28 w-auto rounded-xl border object-cover shadow-sm" />
-                <button
-                  onClick={clearLabelPhoto}
-                  className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5 shadow-sm text-muted-foreground hover:text-red-500 transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-                <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] font-medium rounded-md px-1.5 py-0.5">Label scan</div>
+            {/* Label photo thumbnails */}
+            {labelPreviews.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {labelPreviews.map((src, i) => (
+                  <div key={i} className="relative inline-block">
+                    <img src={src} alt={`Label ${i + 1}`} className="h-24 w-auto rounded-xl border object-cover shadow-sm" />
+                    <button
+                      onClick={() => removeLabelPhoto(i)}
+                      className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5 shadow-sm text-muted-foreground hover:text-red-500 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] font-medium rounded-md px-1.5 py-0.5">
+                      {i + 1}/{labelPreviews.length}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1448,7 +1461,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 value={listening ? (interim || foodInput) : foodInput}
                 onChange={e => setFoodInput(e.target.value)}
                 placeholder={
-                  labelImage
+                  labelImages.length > 0
                     ? 'Add a note (optional) — e.g. "2 servings" or "half a pack"'
                     : listening
                     ? "Listening…"
@@ -1474,17 +1487,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 type="button"
                 onClick={() => labelInputRef.current?.click()}
                 className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border transition-colors flex-shrink-0 ${
-                  labelImage
+                  labelImages.length > 0
                     ? "border-primary/40 bg-primary/10 text-primary"
                     : "border-muted bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-primary hover:bg-primary/5"
                 }`}
               >
                 <Camera className="w-3.5 h-3.5" />
-                {labelImage ? "Label attached" : "Scan label"}
+                {labelImages.length > 0 ? `${labelImages.length} label${labelImages.length > 1 ? "s" : ""} added` : "Scan labels"}
               </button>
               <Button
                 onClick={handleAdd}
-                disabled={(!foodInput.trim() && !labelImage) || isAdding || listening}
+                disabled={(!foodInput.trim() && !labelImages.length) || isAdding || listening}
                 className="rounded-xl h-9 px-4 flex-1"
               >
                 {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
@@ -1495,7 +1508,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               ref={labelInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
+              multiple
               className="hidden"
               onChange={handleLabelPhoto}
             />
