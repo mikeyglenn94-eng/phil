@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1006,6 +1006,23 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const [foodInput, setFoodInput] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [labelImage, setLabelImage] = useState<File | null>(null);
+  const [labelPreview, setLabelPreview] = useState<string | null>(null);
+  const labelInputRef = useRef<HTMLInputElement>(null);
+
+  function handleLabelPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLabelImage(file);
+    const url = URL.createObjectURL(file);
+    setLabelPreview(url);
+    e.target.value = "";
+  }
+  function clearLabelPhoto() {
+    setLabelImage(null);
+    if (labelPreview) URL.revokeObjectURL(labelPreview);
+    setLabelPreview(null);
+  }
   const [showGuide, setShowGuide] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [editCalories, setEditCalories] = useState("");
@@ -1161,10 +1178,31 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const handleAdd = async () => {
     const text = foodInput.trim();
-    if (!text) return;
+    if (!text && !labelImage) return;
     setIsAdding(true);
     try {
-      await addMutation.mutateAsync({ clientId, data: { description: text, date: selectedDate } });
+      if (labelImage) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(labelImage);
+        });
+        const res = await fetch(`/api/clients/${clientId}/nutrition`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            description: text || "Nutrition label scan",
+            date: selectedDate,
+            imageBase64: base64,
+            imageMimeType: labelImage.type || "image/jpeg",
+          }),
+        });
+        if (!res.ok) throw new Error();
+        clearLabelPhoto();
+      } else {
+        await addMutation.mutateAsync({ clientId, data: { description: text, date: selectedDate } });
+      }
       queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(clientId, { date: selectedDate }) });
       setFoodInput("");
       toast({ title: "Entry added" });
@@ -1369,34 +1407,77 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <Plus className="w-3 h-3" /> Add Food / Meal
             </p>
-            <div className="flex gap-2 items-end">
-              <div className="relative flex-1">
-                <textarea
-                  value={listening ? (interim || foodInput) : foodInput}
-                  onChange={e => setFoodInput(e.target.value)}
-                  placeholder={listening ? "Listening…" : 'e.g. "200g chicken breast, 100g basmati rice, 1 tbsp olive oil"'}
-                  rows={2}
-                  disabled={listening}
-                  className="w-full resize-none text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 pr-10 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdd(); } }}
-                />
+
+            {/* Label photo preview */}
+            {labelPreview && (
+              <div className="relative mb-3 inline-block">
+                <img src={labelPreview} alt="Nutrition label" className="h-28 w-auto rounded-xl border object-cover shadow-sm" />
                 <button
-                  type="button"
-                  onClick={toggleListening}
-                  className={`absolute right-2 bottom-2.5 p-1.5 rounded-lg transition-colors ${listening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-                  title={listening ? "Stop" : "Dictate"}
+                  onClick={clearLabelPhoto}
+                  className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5 shadow-sm text-muted-foreground hover:text-red-500 transition-colors"
                 >
-                  {listening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-3.5 h-3.5" />}
+                  <X className="w-3.5 h-3.5" />
                 </button>
+                <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] font-medium rounded-md px-1.5 py-0.5">Label scan</div>
               </div>
+            )}
+
+            <div className="relative">
+              <textarea
+                value={listening ? (interim || foodInput) : foodInput}
+                onChange={e => setFoodInput(e.target.value)}
+                placeholder={
+                  labelImage
+                    ? 'Add a note (optional) — e.g. "2 servings" or "half a pack"'
+                    : listening
+                    ? "Listening…"
+                    : 'e.g. "200g chicken breast, 100g basmati rice, 1 tbsp olive oil"'
+                }
+                rows={2}
+                disabled={listening}
+                className="w-full resize-none text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 pr-10 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdd(); } }}
+              />
+              <button
+                type="button"
+                onClick={toggleListening}
+                className={`absolute right-2 bottom-2.5 p-1.5 rounded-lg transition-colors ${listening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                title={listening ? "Stop" : "Dictate"}
+              >
+                {listening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => labelInputRef.current?.click()}
+                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border transition-colors flex-shrink-0 ${
+                  labelImage
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-muted bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-primary hover:bg-primary/5"
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                {labelImage ? "Label attached" : "Scan label"}
+              </button>
               <Button
                 onClick={handleAdd}
-                disabled={!foodInput.trim() || isAdding || listening}
-                className="rounded-xl self-end h-10 px-4"
+                disabled={(!foodInput.trim() && !labelImage) || isAdding || listening}
+                className="rounded-xl h-9 px-4 flex-1"
               >
                 {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
               </Button>
             </div>
+
+            <input
+              ref={labelInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleLabelPhoto}
+            />
             <button
               onClick={() => setShowGuide(g => !g)}
               className="mt-2.5 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
