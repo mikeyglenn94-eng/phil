@@ -147,10 +147,13 @@ router.post("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
 
 ${hasImages
   ? `The user has photographed ${imageCount === 1 ? "a nutrition label" : `${imageCount} nutrition labels for the same meal`}. Read ${imageCount === 1 ? "the label" : "all labels"} carefully and extract the macronutrient values.
-- ${imageCount > 1 ? "Sum the values across all labels to give the total macros for the meal" : "Use the values exactly as shown on the label per serving"}
-- If the user's note specifies a quantity (e.g. "2 servings", "half a pack"), multiply accordingly
-- If no quantity is specified, assume 1 serving per label
-- Set note to describe the serving assumption (e.g. "1 serving per label (230g)")
+
+CRITICAL — many labels have two columns: "per 100g" and "per serving/pack". You MUST use the per-serving or per-pack column (the one with the smaller portion size), NOT the per-100g reference column. The per-100g column is just a reference and will give wildly incorrect results if used directly.
+
+- Identify the serving size (e.g. "30g pack", "33g serving") and use those column values
+- If the user's note specifies a quantity (e.g. "4 bags", "2 servings", "120g"), multiply the per-serving values by that quantity. For weight-based quantities (e.g. "120g"), divide by the serving weight first to get number of servings, then multiply
+- ${imageCount > 1 ? "Sum the calculated values across all labels to give the total macros for the meal" : "If no quantity is specified, assume 1 serving"}
+- Set note to describe exactly what you calculated (e.g. "4 × 30g packs (chips) + 120g cheese")
 - If you cannot read a label clearly, do your best estimate and mention it in the note`
   : `The user will describe food or meals they ate. Your job is to estimate macronutrients as accurately as possible and be transparent about any assumptions you make.
 - If the user gives a specific quantity (e.g. "200g chicken", "1 cup oats"), use that exact amount
