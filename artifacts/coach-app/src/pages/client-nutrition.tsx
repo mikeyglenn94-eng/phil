@@ -284,55 +284,58 @@ export default function ClientNutrition() {
             </div>
           )}
 
-          <div className="flex gap-2 items-end">
-            <div className="relative flex-1">
-              <textarea
-                value={listening ? (interim || foodInput) : foodInput}
-                onChange={e => setFoodInput(e.target.value)}
-                placeholder={
-                  imageFile
-                    ? "Add a note (optional) — e.g. "2 servings" or "half a pack""
-                    : listening
-                    ? "Listening…"
-                    : 'e.g. "2 scrambled eggs with toast and butter"'
-                }
-                rows={2}
-                disabled={listening}
-                className="w-full resize-none text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 pr-20 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdd(); } }}
-              />
-              {/* Camera button */}
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                className={`absolute right-9 bottom-2.5 p-1.5 rounded-lg transition-colors ${imageFile ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-                title="Photograph a nutrition label"
-              >
-                <Camera className="w-3.5 h-3.5" />
-              </button>
-              {/* Mic button */}
-              <button
-                type="button"
-                onClick={toggleListening}
-                className={`absolute right-2 bottom-2.5 p-1.5 rounded-lg transition-colors ${listening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-                title={listening ? "Stop" : "Dictate"}
-              >
-                {listening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-3.5 h-3.5" />}
-              </button>
-            </div>
+          <div className="relative">
+            <textarea
+              value={listening ? (interim || foodInput) : foodInput}
+              onChange={e => setFoodInput(e.target.value)}
+              placeholder={
+                imageFile
+                  ? 'Add a note (optional) — e.g. "2 servings" or "half a pack"'
+                  : listening
+                  ? "Listening…"
+                  : 'e.g. "2 scrambled eggs with toast and butter"'
+              }
+              rows={2}
+              disabled={listening}
+              className="w-full resize-none text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 pr-10 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdd(); } }}
+            />
+            <button
+              type="button"
+              onClick={toggleListening}
+              className={`absolute right-2 bottom-2.5 p-1.5 rounded-lg transition-colors ${listening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+              title={listening ? "Stop" : "Dictate"}
+            >
+              {listening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          <div className="flex gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border transition-colors flex-shrink-0 ${
+                imageFile
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-muted bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-primary hover:bg-primary/5"
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              {imageFile ? "Label attached" : "Scan label"}
+            </button>
             <Button
               onClick={handleAdd}
               disabled={!canAdd}
-              className="rounded-xl self-end h-10 px-4"
+              className="rounded-xl h-9 px-4 flex-1"
             >
               {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
             </Button>
           </div>
 
-          <p className="text-[11px] text-muted-foreground mt-2">
+          <p className="text-[11px] text-muted-foreground mt-1.5">
             {imageFile
               ? "AI will read the label exactly — add a note if it's more than 1 serving"
-              : "AI will estimate calories, protein, carbs & fats · Tap 📷 to scan a nutrition label"}
+              : "AI estimates macros from your description, or scan a nutrition label for exact values"}
           </p>
 
           {/* Hidden file input */}
