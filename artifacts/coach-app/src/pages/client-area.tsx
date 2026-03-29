@@ -386,6 +386,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const cmdInterimRef = useRef("");
   const cmdRecRef = useRef<any>(null);
   const [cmdSaving, setCmdSaving] = useState(false);
+  const [cmdParsing, setCmdParsing] = useState(false);
   const [pendingReschedule, setPendingReschedule] = useState<{
     programmeId: number; programmeName: string; sessions: Session[]; dayLabels: string[];
   } | null>(null);
@@ -396,6 +397,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     sessionCount: number;
   } | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [pendingCommand, setPendingCommand] = useState<{
+    description: string;
+    changes: { programmeId: number; sessions: Session[] }[];
+  } | null>(null);
   const [calendarView, setCalendarView] = useState<"month" | "week">("month");
 
   const trainingWeeks = useMemo(() => {
@@ -506,6 +511,88 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     return result;
   }
 
+  function copyWithProgression(
+    sourceWeekOffset: number,
+    targetWeeks: number,
+    setsIncrement: number,
+    repsMultiplier: number
+  ): { programmeId: number; sessions: Session[] }[] {
+    if (!clientProgrammes) return [];
+    const sourceStart = startOfWeek(addWeeks(new Date(), sourceWeekOffset), { weekStartsOn: 1 });
+    const sourceEnd = addDays(sourceStart, 6);
+    const result: { programmeId: number; sessions: Session[] }[] = [];
+    for (const prog of clientProgrammes) {
+      const allSessions = (prog.sessions ?? []) as Session[];
+      const sourceSessions = allSessions.filter(s => {
+        try { const d = parseISO(s.date); return d >= sourceStart && d <= sourceEnd; }
+        catch { return false; }
+      });
+      if (!sourceSessions.length) continue;
+      const newSessions = [...allSessions];
+      for (let week = 1; week <= targetWeeks; week++) {
+        const weekStart = addWeeks(sourceStart, week);
+        for (const session of sourceSessions) {
+          const dayOfWeek = parseISO(session.date).getDay();
+          const dayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          const newDate = format(addDays(weekStart, dayOffset), "yyyy-MM-dd");
+          const newExercises = ((session as any).exercises ?? []).map((ex: any) => ({
+            ...ex,
+            id: crypto.randomUUID(),
+            sets: Math.max(1, Math.round((ex.sets || 0) + setsIncrement * week)),
+            reps: Math.max(1, Math.round((ex.reps || 0) * Math.pow(repsMultiplier, week))),
+            ...(ex.perSetReps ? { perSetReps: (ex.perSetReps as number[]).map(r => Math.max(1, Math.round(r * Math.pow(repsMultiplier, week)))) } : {}),
+            ...(ex.setReps ? { setReps: (ex.setReps as number[]).map(r => Math.max(1, Math.round(r * Math.pow(repsMultiplier, week)))) } : {}),
+          }));
+          newSessions.push({ ...session, id: crypto.randomUUID(), date: newDate, exercises: newExercises } as Session);
+        }
+      }
+      result.push({ programmeId: prog.id, sessions: newSessions });
+    }
+    return result;
+  }
+
+  function dayRemapAll(fromDays: number[], toDays: number[]): { programmeId: number; sessions: Session[] }[] {
+    if (!clientProgrammes) return [];
+    const result: { programmeId: number; sessions: Session[] }[] = [];
+    for (const prog of clientProgrammes) {
+      let changed = false;
+      const newSessions = ((prog.sessions ?? []) as Session[]).map(session => {
+        const day = parseISO(session.date).getDay();
+        const fromIdx = fromDays.indexOf(day);
+        if (fromIdx === -1) return session;
+        changed = true;
+        const toDay = toDays[fromIdx];
+        const weekStart = startOfWeek(parseISO(session.date), { weekStartsOn: 1 });
+        const dayOffset = toDay === 0 ? 6 : toDay - 1;
+        return { ...session, date: format(addDays(weekStart, dayOffset), "yyyy-MM-dd") };
+      });
+      if (changed) result.push({ programmeId: prog.id, sessions: newSessions });
+    }
+    return result;
+  }
+
+  const applyCommand = async () => {
+    if (!pendingCommand) return;
+    setCmdSaving(true);
+    try {
+      for (const change of pendingCommand.changes) {
+        await fetch(`/api/programmes/${change.programmeId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessions: change.sessions }),
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({ title: "Done!", description: pendingCommand.description });
+      setPendingCommand(null);
+      setCmdInput("");
+    } catch {
+      toast({ title: "Failed to apply command", variant: "destructive" });
+    } finally {
+      setCmdSaving(false);
+    }
+  };
+
   const applyBulkDelete = async () => {
     if (!pendingBulkDelete || !clientProgrammes) return;
     setBulkDeleting(true);
@@ -528,77 +615,114 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     }
   };
 
-  const handleRescheduleCmd = () => {
+  const handleRescheduleCmd = async () => {
     const cmd = cmdInput.trim();
     if (!cmd || !clientProgrammes?.length) return;
 
-    // ── Delete commands ──
-    const DELETE_ALL_RE = /^(?:delete|remove|wipe|clear|erase|reset)\s+(?:all|every(?:thing)?|my)?\s*(?:sessions?|workouts?|training|calendar|schedule|programme|everything)/i;
-    const DELETE_PROG_RE = /^(?:delete|remove|clear|wipe)\s+(?:the\s+)?(?:all\s+)?(.+?)(?:\s+(?:sessions?|workouts?|programme))?$/i;
+    setCmdParsing(true);
+    try {
+      const res = await fetch("/api/parse-calendar-command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: cmd,
+          programmeNames: clientProgrammes.map(p => p.title),
+          currentDate: format(new Date(), "yyyy-MM-dd"),
+        }),
+      });
+      const intent = await res.json();
 
-    if (DELETE_ALL_RE.test(cmd)) {
-      const totalSessions = clientProgrammes.reduce((acc, p) => acc + (p.sessions?.length ?? 0), 0);
-      setPendingBulkDelete({ scope: "all", sessionCount: totalSessions });
-      return;
-    }
+      switch (intent.action) {
+        case "delete": {
+          if (intent.scope === "all") {
+            const totalSessions = clientProgrammes.reduce((acc, p) => acc + (p.sessions?.length ?? 0), 0);
+            setPendingBulkDelete({ scope: "all", sessionCount: totalSessions });
+          } else {
+            const q = (intent.programmeQuery ?? "").toLowerCase();
+            const prog =
+              clientProgrammes.find(p => p.title.toLowerCase().includes(q)) ??
+              clientProgrammes.find(p => q.split(" ").some((w: string) => w.length > 2 && p.title.toLowerCase().includes(w)));
+            if (prog) {
+              setPendingBulkDelete({ scope: "programme", programmeId: prog.id, programmeName: prog.title, sessionCount: prog.sessions?.length ?? 0 });
+            } else {
+              toast({ title: `Programme not found: "${intent.programmeQuery}"`, variant: "destructive" });
+            }
+          }
+          break;
+        }
 
-    // Check for specific programme deletion: "delete squat block"
-    const dm = cmd.match(DELETE_PROG_RE);
-    if (dm && /^(?:delete|remove|clear|wipe)/i.test(cmd)) {
-      const q = dm[1].trim().toLowerCase();
-      const prog =
-        clientProgrammes.find(p => p.title.toLowerCase().includes(q)) ??
-        clientProgrammes.find(p => q.split(" ").some(w => w.length > 2 && p.title.toLowerCase().includes(w)));
-      if (prog) {
-        setPendingBulkDelete({
-          scope: "programme",
-          programmeId: prog.id,
-          programmeName: prog.title,
-          sessionCount: prog.sessions?.length ?? 0,
-        });
-        return;
+        case "reschedule": {
+          const targetDays: number[] = (intent.targetDays ?? [])
+            .map((d: string) => DAY_WORDS[d.toLowerCase()] ?? DAY_WORDS[d.toLowerCase().replace(/s$/, "")])
+            .filter((d: number | undefined) => d !== undefined);
+          if (!targetDays.length) {
+            toast({ title: "Couldn't parse target days", variant: "destructive" }); break;
+          }
+          const q = (intent.programmeQuery ?? "").toLowerCase();
+          const prog =
+            clientProgrammes.find(p => p.title.toLowerCase().includes(q)) ??
+            clientProgrammes.find(p => q.split(" ").some((w: string) => w.length > 2 && p.title.toLowerCase().includes(w)));
+          if (!prog) {
+            toast({ title: `Programme not found: "${intent.programmeQuery}"`, variant: "destructive" }); break;
+          }
+          const newSessions = remapSessionDays(prog.sessions as Session[], targetDays);
+          setPendingReschedule({ programmeId: prog.id, programmeName: prog.title, sessions: newSessions, dayLabels: targetDays.map(d => DAY_NAMES[d]) });
+          break;
+        }
+
+        case "day_remap": {
+          const fromDays: number[] = (intent.fromDays ?? [])
+            .map((d: string) => DAY_WORDS[d.toLowerCase()] ?? DAY_WORDS[d.toLowerCase().replace(/s$/, "")])
+            .filter((d: number | undefined) => d !== undefined);
+          const toDays: number[] = (intent.toDays ?? [])
+            .map((d: string) => DAY_WORDS[d.toLowerCase()] ?? DAY_WORDS[d.toLowerCase().replace(/s$/, "")])
+            .filter((d: number | undefined) => d !== undefined);
+          if (!fromDays.length || fromDays.length !== toDays.length) {
+            toast({ title: "Couldn't match from/to days — lists must be the same length", variant: "destructive" }); break;
+          }
+          const changes = dayRemapAll(fromDays, toDays);
+          if (!changes.length) {
+            toast({ title: "No sessions found on those days", variant: "destructive" }); break;
+          }
+          const fromLabels = fromDays.map(d => DAY_NAMES[d]).join(" / ");
+          const toLabels = toDays.map(d => DAY_NAMES[d]).join(" / ");
+          setPendingCommand({ description: `Move all sessions: ${fromLabels} → ${toLabels}`, changes });
+          break;
+        }
+
+        case "copy_progress": {
+          const { sourceWeekOffset = 0, targetWeeks = 1, setsIncrement = 0, repsMultiplier = 1.0 } = intent;
+          const changes = copyWithProgression(sourceWeekOffset, targetWeeks, setsIncrement, repsMultiplier);
+          if (!changes.length) {
+            toast({ title: "No sessions found in the source week", description: "Make sure there are sessions in the week you want to copy from.", variant: "destructive" }); break;
+          }
+          const parts: string[] = [];
+          if (setsIncrement > 0) parts.push(`+${setsIncrement} set${setsIncrement !== 1 ? "s" : ""}/week`);
+          else if (setsIncrement < 0) parts.push(`${setsIncrement} sets/week`);
+          if (repsMultiplier !== 1.0) parts.push(`reps ×${repsMultiplier.toFixed(2).replace(/\.?0+$/, "")}/week`);
+          const progression = parts.length ? ` (${parts.join(", ")})` : "";
+          const totalNew = changes.reduce((acc, c) => acc + c.sessions.length, 0);
+          setPendingCommand({
+            description: `Copy sessions into ${targetWeeks} week${targetWeeks !== 1 ? "s" : ""} with progressive overload${progression}`,
+            changes,
+          });
+          toast({ title: `Ready to add ${totalNew} sessions`, description: `Confirm below to apply.` });
+          break;
+        }
+
+        default: {
+          toast({
+            title: "Couldn't understand that command",
+            description: intent.message ?? 'Try: "copy this week into 4 weeks +1 set −10% reps" or "move Mon/Wed/Fri to Tue/Thu/Sun"',
+            variant: "destructive",
+          });
+        }
       }
+    } catch {
+      toast({ title: "Failed to parse command", variant: "destructive" });
+    } finally {
+      setCmdParsing(false);
     }
-
-    const patterns = [
-      /^(?:reschedule|move|shift|edit|change|update)\s+(.+?)\s+(?:so\s+(?:it|they)\s+(?:fall|falls|land|lands)\s+)?(?:on\s+|to\s+(?:fall\s+on\s+)?)?(.+)$/i,
-      /^(.+?)\s+(?:to|so it falls on|on)\s+(.+)$/i,
-    ];
-
-    let programmeQuery = "";
-    let dayText = "";
-    for (const p of patterns) {
-      const m = cmd.match(p);
-      if (m) { programmeQuery = m[1].trim(); dayText = m[2].trim(); break; }
-    }
-    if (!programmeQuery || !dayText) {
-      toast({ title: "Couldn't parse command", description: 'Try: "reschedule squat block to tuesdays/thursdays/saturdays"', variant: "destructive" });
-      return;
-    }
-
-    const days = parseDays(dayText);
-    if (!days.length) {
-      toast({ title: "No days found", description: "Include day names like 'tuesdays/thursdays'", variant: "destructive" });
-      return;
-    }
-
-    const q = programmeQuery.toLowerCase();
-    const prog =
-      clientProgrammes.find(p => p.title.toLowerCase().includes(q)) ??
-      clientProgrammes.find(p => q.split(" ").some(w => w.length > 2 && p.title.toLowerCase().includes(w)));
-
-    if (!prog) {
-      toast({ title: `Programme not found: "${programmeQuery}"`, variant: "destructive" });
-      return;
-    }
-
-    const newSessions = remapSessionDays(prog.sessions as Session[], days);
-    setPendingReschedule({
-      programmeId: prog.id,
-      programmeName: prog.title,
-      sessions: newSessions,
-      dayLabels: days.map(d => DAY_NAMES[d]),
-    });
   };
 
   const applyReschedule = async () => {
@@ -1831,8 +1955,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 type="text"
                 value={cmdListening ? (cmdInterim || cmdInput) : cmdInput}
                 onChange={e => setCmdInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") handleRescheduleCmd(); }}
-                placeholder='e.g. "reschedule squat block to tue/thu/sat" or "delete all sessions"'
+                onKeyDown={e => { if (e.key === "Enter") void handleRescheduleCmd(); }}
+                placeholder='e.g. "copy this week into 4 weeks +1 set −10% reps" · "move Mon/Wed/Fri → Tue/Thu/Sun"'
                 disabled={cmdListening}
                 className="flex-1 text-xs bg-background border rounded-lg px-3 py-1.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
               />
@@ -1848,10 +1972,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 size="sm"
                 variant="outline"
                 className="text-xs h-7 px-3 rounded-lg shrink-0"
-                onClick={handleRescheduleCmd}
-                disabled={!cmdInput.trim()}
+                onClick={() => void handleRescheduleCmd()}
+                disabled={!cmdInput.trim() || cmdParsing}
               >
-                Apply
+                {cmdParsing ? <Loader2 className="w-3 h-3 animate-spin" /> : "Apply"}
               </Button>
             </div>
             {pendingReschedule && (
@@ -1883,6 +2007,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     {bulkDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
                   </Button>
                   <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setPendingBulkDelete(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+            {pendingCommand && (
+              <div className="flex items-center justify-between gap-2 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+                <p className="text-xs text-violet-900 leading-snug flex-1">
+                  <strong>{pendingCommand.description}</strong> — affects {pendingCommand.changes.length} programme{pendingCommand.changes.length !== 1 ? "s" : ""}. Confirm?
+                </p>
+                <div className="flex gap-1.5 shrink-0">
+                  <Button size="sm" className="h-6 px-2 text-xs bg-violet-600 hover:bg-violet-700 text-white" onClick={applyCommand} disabled={cmdSaving}>
+                    {cmdSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Confirm"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setPendingCommand(null)}>
                     Cancel
                   </Button>
                 </div>

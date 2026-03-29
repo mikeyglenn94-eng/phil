@@ -11,6 +11,7 @@ import brainRouter from "./brain";
 import runSessionsRouter from "./run-sessions";
 import engineBuilderRouter from "./engine-builder";
 import xlsUploadRouter from "./xls-upload";
+import calendarCommandRouter from "./calendar-command";
 
 const router: IRouter = Router();
 
@@ -24,6 +25,7 @@ router.use(strengthBlocksRouter);
 router.use(enduranceCyclesRouter);
 router.use(engineBuilderRouter);
 router.use(xlsUploadRouter);
+router.use(calendarCommandRouter);
 router.use(brainRouter);
 router.use(runSessionsRouter);
 
