@@ -164,7 +164,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [assignSearch, setAssignSearch] = useState("");
 
   // ── Build-from-description / upload mode ──
-  const [buildMode, setBuildMode] = useState<"describe" | "upload">("describe");
+  const [buildMode, setBuildMode] = useState<"describe" | "template">("describe");
   const [describeText, setDescribeText] = useState("");
   const [describeListening, setDescribeListening] = useState(false);
   const [describeInterim, setDescribeInterim] = useState("");
@@ -176,10 +176,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[] } | null>(null);
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
   const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety" | null>(null);
-  const [xlsFile, setXlsFile] = useState<File | null>(null);
-  const [xlsUploading, setXlsUploading] = useState(false);
-  const [xlsError, setXlsError] = useState<string | null>(null);
-  const xlsInputRef = useRef<HTMLInputElement>(null);
   const [generationLimitError, setGenerationLimitError] = useState(false);
 
   // Proactive client-side limit check from loaded programmes
@@ -264,25 +260,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       toast({ title: "Failed to save programme", variant: "destructive" });
     } finally {
       setConfirmingGenerated(false);
-    }
-  }
-
-  async function handleXlsUpload() {
-    if (!xlsFile) return;
-    setXlsUploading(true);
-    setXlsError(null);
-    try {
-      const formData = new FormData();
-      formData.append("file", xlsFile);
-      const res = await fetch("/api/xls-upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Upload failed.");
-      setGeneratedPreview({ title: data.title, sessions: data.sessions });
-      setXlsFile(null);
-    } catch (e: any) {
-      setXlsError(e?.message ?? "Something went wrong parsing the spreadsheet.");
-    } finally {
-      setXlsUploading(false);
     }
   }
 
@@ -2162,23 +2139,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </div>
               ) : null}
 
-              {/* Tab bar — only shown on the input step */}
-              {!describeGenerating && !generatedPreview && !(monthlyLimitHit || generationLimitError) && (
-                <div className="flex rounded-xl border p-1 bg-muted/40 gap-1">
-                  <button
-                    onClick={() => { setBuildMode("describe"); setXlsError(null); }}
-                    className={`flex-1 text-xs font-medium rounded-lg py-1.5 transition-colors ${buildMode === "describe" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    Describe with AI
-                  </button>
-                  <button
-                    onClick={() => { setBuildMode("upload"); setXlsError(null); }}
-                    className={`flex-1 text-xs font-medium rounded-lg py-1.5 transition-colors ${buildMode === "upload" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    Upload Spreadsheet
-                  </button>
-                </div>
-              )}
               {describeGenerating ? (
                 /* Loading panel — shows rationale as it arrives */
                 <div className="space-y-4 py-2">
@@ -2209,46 +2169,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </div>
               ) : !generatedPreview ? (
                 <>
-                  {buildMode === "upload" ? (
-                    /* ── Upload Spreadsheet UI ── */
-                    <div className="space-y-4">
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        Upload an <strong>.xlsx</strong> or <strong>.xls</strong> file. Each row should be one exercise — group exercises into sessions using the same date and session name.
-                      </p>
-                      <a
-                        href="/api/xls-template"
-                        download
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                      >
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Download template
-                      </a>
-                      <input
-                        ref={xlsInputRef}
-                        type="file"
-                        accept=".xlsx,.xls"
-                        className="hidden"
-                        onChange={e => { setXlsFile(e.target.files?.[0] ?? null); setXlsError(null); }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => xlsInputRef.current?.click()}
-                        className="w-full rounded-xl border-2 border-dashed border-border hover:border-primary/50 bg-muted/20 hover:bg-primary/5 transition-colors px-4 py-6 flex flex-col items-center gap-2 cursor-pointer"
-                      >
-                        <svg className="w-8 h-8 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                        {xlsFile ? (
-                          <span className="text-sm font-medium text-foreground">{xlsFile.name}</span>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Tap to choose a spreadsheet</span>
-                        )}
-                      </button>
-                      {xlsError && (
-                        <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2 leading-relaxed">{xlsError}</p>
-                      )}
-                    </div>
-                  ) : (
-                  /* ── Describe with AI UI ── */
-                  <>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Describe the programme</label>
                     <div className="relative">
@@ -2304,8 +2224,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     <label className="text-sm font-medium">Start Date</label>
                     <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
                   </div>
-                  </>
-                  )}
                 </>
               ) : (
                 <>
@@ -2347,16 +2265,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               {!generatedPreview ? (
                 <>
                   <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Close</Button>
-                  {!(monthlyLimitHit || generationLimitError) && (buildMode === "upload" ? (
-                    <Button
-                      onClick={handleXlsUpload}
-                      disabled={!xlsFile || xlsUploading}
-                      className="gap-2"
-                    >
-                      {xlsUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>}
-                      {xlsUploading ? "Parsing…" : "Parse Spreadsheet"}
-                    </Button>
-                  ) : (
+                  {!(monthlyLimitHit || generationLimitError) && (
                     <Button
                       onClick={handleGenerateProgramme}
                       disabled={!describeText.trim() || !assignStartDate || (isStrengthDescription(describeText) && strengthStyle === null)}
@@ -2364,7 +2273,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     >
                       <Sparkles className="w-4 h-4" /> Generate
                     </Button>
-                  ))}
+                  )}
                 </>
               ) : (
                 <>
