@@ -290,6 +290,40 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [trainingWeekOffset, setTrainingWeekOffset] = useState(0);
   const [selectedTrainingSession, setSelectedTrainingSession] = useState<Session | null>(null);
 
+  // ── Quick-add single session ──
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddDate, setQuickAddDate] = useState("");
+  const [quickAddName, setQuickAddName] = useState("");
+  const [quickAddDesc, setQuickAddDesc] = useState("");
+  const [quickAddParsing, setQuickAddParsing] = useState(false);
+  const [quickAddError, setQuickAddError] = useState("");
+
+  async function handleQuickAdd() {
+    if (!quickAddDesc.trim()) return;
+    setQuickAddParsing(true);
+    setQuickAddError("");
+    try {
+      const res = await fetch("/api/parse-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error();
+      const session = await res.json();
+      const newSession = { ...session, id: `session-${Date.now()}`, date: quickAddDate, source: "manual" as const };
+      await addSessionToClientCalendar(quickAddDate, newSession, () => {}, newSession.id, () => {
+        setQuickAddOpen(false);
+        setQuickAddName("");
+        setQuickAddDesc("");
+        navigateToWeekOf(quickAddDate);
+      }, session.name);
+    } catch {
+      setQuickAddError("Couldn't parse your session — please try again.");
+    } finally {
+      setQuickAddParsing(false);
+    }
+  }
+
   // ── Drag-and-drop ──
   const draggedItemRef = useRef<{ sessionId: string; programmeId: number } | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
@@ -1842,6 +1876,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             moveSession(touch.sessionId, touch.programmeId, dateStr);
                             touchDragRef.current = null;
                             setTouchDragOverDate(null);
+                          } else {
+                            setQuickAddDate(dateStr);
+                            setQuickAddName("");
+                            setQuickAddDesc("");
+                            setQuickAddError("");
+                            setQuickAddOpen(true);
                           }
                         }}
                       >
@@ -1902,7 +1942,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   touchDragRef.current = null;
                                   setTouchDragOverDate(null);
                                 }}
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   if (touchDragRef.current) return;
                                   if (mode === "client" && prog) {
                                     setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
@@ -2266,6 +2307,47 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               )}
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick-add single session dialog */}
+      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add Session — {quickAddDate ? format(parseISO(quickAddDate), "EEE d MMM") : ""}</DialogTitle>
+            <DialogDescription>List your exercises in any format. The AI will structure them for you.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Session name (optional)</label>
+              <input
+                value={quickAddName}
+                onChange={e => setQuickAddName(e.target.value)}
+                placeholder="e.g. Push Day, Leg Session"
+                className="w-full mt-1 text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2 outline-none focus:border-primary/40 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Exercises</label>
+              <textarea
+                value={quickAddDesc}
+                onChange={e => setQuickAddDesc(e.target.value)}
+                placeholder={"Bench press 4x8\nSquat 3x5 @RPE 8\nRDL 3x10\nLateral raises 3x15"}
+                rows={6}
+                autoFocus
+                className="w-full mt-1 text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors resize-none"
+                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleQuickAdd(); } }}
+              />
+              <p className="text-[11px] text-muted-foreground/60 mt-1">One exercise per line, or comma-separated. Cmd+Enter to save.</p>
+            </div>
+            {quickAddError && <p className="text-sm text-red-500">{quickAddError}</p>}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" className="flex-1" onClick={() => setQuickAddOpen(false)}>Cancel</Button>
+            <Button className="flex-1" onClick={handleQuickAdd} disabled={!quickAddDesc.trim() || quickAddParsing}>
+              {quickAddParsing ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" />Parsing…</> : "Add Session"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -961,4 +961,56 @@ router.post("/transcribe", upload.single("audio"), async (req, res): Promise<voi
   }
 });
 
+// ── Quick single-session builder ───────────────────────────────────────────
+// POST /parse-session  { description, name? }
+// Returns a ready-to-save session object with structured exercises.
+router.post("/parse-session", async (req, res): Promise<void> => {
+  const { description, name } = req.body as { description?: string; name?: string };
+  if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
+
+  const systemPrompt = `You are a personal training assistant. Convert the user's exercise list into a structured session.
+
+Rules:
+- Parse each exercise, extracting: name, sets (number), reps (string e.g. "8", "8-10", "AMRAP"), and optional notes (e.g. "tempo 3010", "RPE 8")
+- Accept any common format: "4x8 bench press", "bench press 4 sets 8 reps", "3×10 squat @80kg"
+- If sets or reps are missing, leave them null
+- Generate a session name from the exercises if the user didn't provide one (e.g. "Upper Body", "Leg Day", "Push Session")
+- Return ONLY valid JSON, no markdown
+
+Response format:
+{
+  "name": "Upper Body",
+  "exercises": [
+    { "name": "Bench Press", "sets": 4, "reps": "8", "notes": null },
+    { "name": "Barbell Row", "sets": 3, "reps": "10", "notes": "@80kg" }
+  ]
+}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Session name (optional): ${name?.trim() || "(auto-generate)"}\n\nExercises:\n${description.trim()}` },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+    const sessionName = name?.trim() || parsed.name || "Session";
+    const exercises = (parsed.exercises ?? []).map((ex: any, i: number) => ({
+      id: `ex-${Date.now()}-${i}`,
+      name: ex.name ?? "",
+      sets: typeof ex.sets === "number" ? ex.sets : null,
+      reps: ex.reps ? String(ex.reps) : null,
+      notes: ex.notes ?? null,
+    }));
+
+    res.json({ name: sessionName, exercises });
+  } catch (err) {
+    req.log.error({ err }, "Error parsing session");
+    res.status(500).json({ error: "Failed to parse session" });
+  }
+});
+
 export default router;
