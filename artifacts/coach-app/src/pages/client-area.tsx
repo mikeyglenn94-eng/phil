@@ -1910,7 +1910,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     setSelectedTrainingSession(session);
                                   }
                                 }}
-                                className={`relative group w-full text-left rounded-md transition-colors cursor-grab active:cursor-grabbing ${calendarView === "week" ? "px-2.5 py-2 text-[11px]" : "px-1.5 py-1 text-[10px] leading-tight font-medium"} ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
+                                className={`relative group w-full text-left rounded-md transition-colors cursor-grab active:cursor-grabbing overflow-hidden ${calendarView === "week" ? "px-2.5 py-2 text-[11px]" : "px-1.5 py-1 text-[10px] leading-tight font-medium"} ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
                               >
                                 {calendarView === "month" ? (
                                   <>
@@ -1939,7 +1939,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                       </ul>
                                     )}
                                     {prog && (
-                                      <p className={`mt-2 text-[9px] uppercase tracking-wide ${isTouchPicked ? "opacity-60" : "opacity-40"}`}>{prog.title}</p>
+                                      <p className={`mt-2 text-[9px] uppercase tracking-wide truncate ${isTouchPicked ? "opacity-60" : "opacity-40"}`}>{prog.title}</p>
                                     )}
                                   </>
                                 )}
