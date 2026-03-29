@@ -971,18 +971,18 @@ router.post("/parse-session", async (req, res): Promise<void> => {
   const systemPrompt = `You are a personal training assistant. Convert the user's exercise list into a structured session.
 
 Rules:
-- Parse each exercise, extracting: name, sets (number), reps (string e.g. "8", "8-10", "AMRAP"), and optional notes (e.g. "tempo 3010", "RPE 8")
-- Accept any common format: "4x8 bench press", "bench press 4 sets 8 reps", "3×10 squat @80kg"
-- If sets or reps are missing, leave them null
-- Generate a session name from the exercises if the user didn't provide one (e.g. "Upper Body", "Leg Day", "Push Session")
-- Return ONLY valid JSON, no markdown
+- Parse each exercise extracting: name, sets (integer), reps (string e.g. "8", "8-10", "AMRAP"), rpe (string e.g. "7", "8-9" — if mentioned), rest (string e.g. "90s", "2 min" — if mentioned), weight (string e.g. "80kg", "185lb" — if mentioned), notes (anything else)
+- Accept any common format: "4x8 bench press", "bench press 4 sets 8 reps", "3×10 squat @80kg @RPE8"
+- If a field is not mentioned, set it to null
+- Generate a descriptive session name from the exercises if the user didn't provide one (e.g. "Upper Body Push", "Leg Day", "Back & Biceps")
+- Return ONLY valid JSON, no markdown fences
 
 Response format:
 {
-  "name": "Upper Body",
+  "name": "Upper Body Push",
   "exercises": [
-    { "name": "Bench Press", "sets": 4, "reps": "8", "notes": null },
-    { "name": "Barbell Row", "sets": 3, "reps": "10", "notes": "@80kg" }
+    { "name": "Bench Press", "sets": 4, "reps": "8", "rpe": "8", "rest": "90s", "weight": null, "notes": null },
+    { "name": "Barbell Row", "sets": 3, "reps": "10", "rpe": null, "rest": null, "weight": "80kg", "notes": null }
   ]
 }`;
 
@@ -998,15 +998,27 @@ Response format:
 
     const parsed = JSON.parse(completion.choices[0].message.content || "{}");
     const sessionName = name?.trim() || parsed.name || "Session";
+    const now = Date.now();
     const exercises = (parsed.exercises ?? []).map((ex: any, i: number) => ({
-      id: `ex-${Date.now()}-${i}`,
+      id: `ex-${now}-${i}`,
       name: ex.name ?? "",
-      sets: typeof ex.sets === "number" ? ex.sets : null,
-      reps: ex.reps ? String(ex.reps) : null,
+      sets: typeof ex.sets === "number" ? ex.sets : (typeof ex.sets === "string" && !isNaN(Number(ex.sets)) ? Number(ex.sets) : null),
+      reps: ex.reps != null ? String(ex.reps) : null,
+      rpe: ex.rpe != null ? String(ex.rpe) : null,
+      rest: ex.rest != null ? String(ex.rest) : null,
+      tempo: null,
       notes: ex.notes ?? null,
+      rawText: ex.rawText ?? "",
+      weekProgression: [],
+      clientComment: null,
+      perSetReps: null,
+      perSetRpe: null,
+      setWeights: null,
+      setReps: null,
+      weight: ex.weight ?? null,
     }));
 
-    res.json({ name: sessionName, exercises });
+    res.json({ name: sessionName, source: "strength_block", exercises });
   } catch (err) {
     req.log.error({ err }, "Error parsing session");
     res.status(500).json({ error: "Failed to parse session" });

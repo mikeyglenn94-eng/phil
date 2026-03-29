@@ -352,7 +352,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       });
       if (!res.ok) throw new Error();
       const session = await res.json();
-      const newSession = { ...session, id: `session-${Date.now()}`, date: quickAddDate, source: "manual" as const };
+      const newSession = { ...session, id: `session-${Date.now()}`, date: quickAddDate };
       await addSessionToClientCalendar(quickAddDate, newSession, () => {}, newSession.id, () => {
         setQuickAddOpen(false);
         setQuickAddName("");
