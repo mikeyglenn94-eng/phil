@@ -1928,13 +1928,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     {(session.exercises ?? []).length > 0 && (
                                       <ul className="space-y-0.5">
                                         {(session.exercises ?? []).map(ex => (
-                                          <li key={ex.id} className={`text-[10px] leading-snug flex gap-1 ${isTouchPicked ? "opacity-90" : "opacity-75"}`}>
-                                            <span className="truncate">{ex.name}</span>
-                                            {(ex.sets || ex.reps) && (
-                                              <span className="font-medium shrink-0 opacity-70">
-                                                {ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.sets ? `${ex.sets}×` : ex.reps}
-                                              </span>
-                                            )}
+                                          <li key={ex.id} className={`text-[10px] leading-snug truncate ${isTouchPicked ? "opacity-90" : "opacity-75"}`}>
+                                            {ex.name}
                                           </li>
                                         ))}
                                       </ul>
