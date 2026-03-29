@@ -1790,6 +1790,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             <div className="flex items-center gap-1.5 shrink-0">
               <Button
                 size="sm"
+                variant="outline"
+                className="rounded-xl text-xs h-8 px-2.5 gap-1 border-primary/40 text-primary hover:bg-primary/10"
+                onClick={() => { const today = format(new Date(), "yyyy-MM-dd"); setQuickAddDate(today); setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddOpen(true); }}
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span>Add Session</span>
+              </Button>
+              <Button
+                size="sm"
                 className="rounded-xl text-xs h-8 px-2.5 gap-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0 shadow-sm"
                 onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
                 title="Build From Brain"
@@ -1934,7 +1943,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             </div>
                             <button
                               onClick={e => { e.stopPropagation(); setQuickAddDate(dateStr); setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddOpen(true); }}
-                              className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground/40 hover:text-primary hover:bg-primary/10 active:bg-primary/20 transition-colors"
+                              className="w-5 h-5 flex items-center justify-center rounded text-primary/60 hover:text-primary hover:bg-primary/10 active:bg-primary/20 transition-colors"
                               title="Add session"
                             >
                               <Plus className="w-3 h-3" />
@@ -2046,10 +2055,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                         {calendarView === "week" && (
                           <button
                             onClick={e => { e.stopPropagation(); setQuickAddDate(dateStr); setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddOpen(true); }}
-                            className="mt-1.5 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-muted-foreground/40 hover:text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors text-[11px]"
+                            className="mt-1.5 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-primary/30 text-primary/60 hover:text-primary hover:bg-primary/8 hover:border-primary/50 active:bg-primary/15 transition-colors text-[11px]"
                             title="Add session"
                           >
                             <Plus className="w-3 h-3" />
+                            <span>Add</span>
                           </button>
                         )}
                       </div>
