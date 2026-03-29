@@ -2129,26 +2129,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             <DialogDescription className="sr-only">Build a programme for {client?.name ?? "this client"}</DialogDescription>
           </DialogHeader>
 
-          {/* Mode switcher — only show before generation starts */}
-          {!describeGenerating && !generatedPreview && (
-            <div className="shrink-0 flex rounded-xl bg-muted p-1 gap-0.5">
-              <button
-                type="button"
-                onClick={() => setBuildMode("describe")}
-                className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-medium transition-colors ${buildMode === "describe" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <Sparkles className="w-3.5 h-3.5" /> AI Generate
-              </button>
-              <button
-                type="button"
-                onClick={() => setBuildMode("scratch")}
-                className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-medium transition-colors ${buildMode === "scratch" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <Plus className="w-3.5 h-3.5" /> From Scratch
-              </button>
-            </div>
-          )}
-
           {/* Scrollable content — footer is pinned below, never clipped */}
           <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-1">
               {/* Monthly generation limit */}
@@ -2203,32 +2183,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </div>
               ) : !generatedPreview ? (
                 <>
-                  {buildMode === "scratch" ? (
-                    /* ── From Scratch form ── */
-                    <div className="space-y-4 py-1">
-                      <div className="rounded-xl border border-muted bg-muted/30 px-4 py-4 space-y-1.5">
-                        <p className="text-sm font-semibold">Name your programme</p>
-                        <p className="text-xs text-muted-foreground leading-relaxed">Give it a name, pick a start date, then use the <strong>+</strong> icons on the calendar to add sessions one by one — or use the Brain to drop in pre-built WODs &amp; blocks.</p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Programme Name</label>
-                        <input
-                          type="text"
-                          className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
-                          placeholder="e.g. Summer Strength Block"
-                          value={fromScratchTitle}
-                          onChange={e => setFromScratchTitle(e.target.value)}
-                          autoFocus
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Start Date</label>
-                        <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
-                      </div>
-                    </div>
-                  ) : (
-                  /* ── AI Generate form ── */
-                  <>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Describe the programme</label>
                     <div className="relative">
@@ -2284,8 +2238,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     <label className="text-sm font-medium">Start Date</label>
                     <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
                   </div>
-                  </>
-                  )}
                 </>
               ) : (
                 <>
@@ -2327,16 +2279,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               {!generatedPreview ? (
                 <>
                   <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Close</Button>
-                  {buildMode === "scratch" ? (
-                    <Button
-                      onClick={handleCreateFromScratch}
-                      disabled={!fromScratchTitle.trim() || !assignStartDate || fromScratchCreating}
-                      className="gap-2"
-                    >
-                      {fromScratchCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                      Create Programme
-                    </Button>
-                  ) : !(monthlyLimitHit || generationLimitError) && (
+                  {!(monthlyLimitHit || generationLimitError) && (
                     <Button
                       onClick={handleGenerateProgramme}
                       disabled={!describeText.trim() || !assignStartDate || (isStrengthDescription(describeText) && strengthStyle === null)}
