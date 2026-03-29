@@ -1929,11 +1929,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                       <ul className="space-y-0.5">
                                         {(session.exercises ?? []).map(ex => (
                                           <li key={ex.id} className={`text-[10px] leading-snug flex gap-1 ${isTouchPicked ? "opacity-90" : "opacity-75"}`}>
-                                            <span className="font-medium shrink-0">
-                                              {ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.sets ? `${ex.sets}×` : ex.reps ? ex.reps : ""}
-                                            </span>
                                             <span className="truncate">{ex.name}</span>
-                                            {ex.notes && <span className={`ml-auto shrink-0 text-[9px] ${isTouchPicked ? "opacity-70" : "opacity-50"}`}>{ex.notes}</span>}
+                                            {(ex.sets || ex.reps) && (
+                                              <span className="font-medium shrink-0 opacity-70">
+                                                {ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.sets ? `${ex.sets}×` : ex.reps}
+                                              </span>
+                                            )}
                                           </li>
                                         ))}
                                       </ul>
