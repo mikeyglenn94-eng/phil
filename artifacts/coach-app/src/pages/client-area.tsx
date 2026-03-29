@@ -297,6 +297,48 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [quickAddDesc, setQuickAddDesc] = useState("");
   const [quickAddParsing, setQuickAddParsing] = useState(false);
   const [quickAddError, setQuickAddError] = useState("");
+  const [quickAddListening, setQuickAddListening] = useState(false);
+  const [quickAddInterim, setQuickAddInterim] = useState("");
+  const quickAddInterimRef = useRef("");
+  const quickAddRecRef = useRef<any>(null);
+
+  function toggleQuickAddListening() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    if (quickAddListening) {
+      quickAddRecRef.current?.stop();
+      setQuickAddListening(false);
+      setQuickAddInterim("");
+      return;
+    }
+    const r = new SR();
+    r.continuous = true;
+    r.interimResults = true;
+    r.lang = "en-GB";
+    r.onstart = () => setQuickAddListening(true);
+    r.onend = () => { setQuickAddListening(false); setQuickAddInterim(""); quickAddInterimRef.current = ""; };
+    r.onresult = (e: any) => {
+      let final = ""; let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t;
+        else interim += t;
+      }
+      if (final) {
+        setQuickAddDesc(prev => {
+          const sep = prev.trim() ? "\n" : "";
+          return prev.trim() + sep + final.trim();
+        });
+        setQuickAddInterim("");
+        quickAddInterimRef.current = "";
+      } else {
+        quickAddInterimRef.current = interim;
+        setQuickAddInterim(interim);
+      }
+    };
+    r.start();
+    quickAddRecRef.current = r;
+  }
 
   async function handleQuickAdd() {
     if (!quickAddDesc.trim()) return;
@@ -2328,17 +2370,35 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Exercises</label>
+              <div className="flex items-center justify-between mt-0">
+                <label className="text-xs font-medium text-muted-foreground">Exercises</label>
+                <button
+                  type="button"
+                  onClick={toggleQuickAddListening}
+                  title={quickAddListening ? "Stop recording" : "Dictate exercises"}
+                  className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${quickAddListening ? "bg-red-500 border-red-500 text-white animate-pulse" : "border-muted text-muted-foreground hover:border-primary/40 hover:text-primary"}`}
+                >
+                  <Mic className="w-3 h-3" />
+                  {quickAddListening ? "Stop" : "Voice"}
+                </button>
+              </div>
               <textarea
                 value={quickAddDesc}
                 onChange={e => setQuickAddDesc(e.target.value)}
-                placeholder={"Bench press 4x8\nSquat 3x5 @RPE 8\nRDL 3x10\nLateral raises 3x15"}
+                placeholder={"Bench press 4x8\nSquat 3x5 @RPE 8\nRDL 3x10\nLateral raises 3x15\n\n…or speak naturally, e.g.\n\"Four sets of eight bench press, three sets of ten squat at RPE eight\""}
                 rows={6}
                 autoFocus
                 className="w-full mt-1 text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors resize-none"
                 onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleQuickAdd(); } }}
               />
-              <p className="text-[11px] text-muted-foreground/60 mt-1">One exercise per line, or comma-separated. Cmd+Enter to save.</p>
+              {quickAddListening && (
+                <p className="text-[11px] text-red-500 mt-1 min-h-[1rem] italic">
+                  {quickAddInterim || "Listening…"}
+                </p>
+              )}
+              {!quickAddListening && (
+                <p className="text-[11px] text-muted-foreground/60 mt-1">One exercise per line, comma-separated, or just speak. Cmd+Enter to save.</p>
+              )}
             </div>
             {quickAddError && <p className="text-sm text-red-500">{quickAddError}</p>}
           </div>
