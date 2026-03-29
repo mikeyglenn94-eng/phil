@@ -1796,7 +1796,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 title="Ask the Brain — search WODs, runs & templates"
               >
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span>Brain</span>
+                <span className="hidden sm:inline">Brain</span>
               </Button>
               <Button
                 size="sm"
@@ -1805,7 +1805,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 title="Build a Programme"
               >
                 <Dumbbell className="w-3.5 h-3.5 shrink-0" />
-                <span>Build Programme</span>
+                <span className="hidden sm:inline">Build Programme</span>
               </Button>
             </div>
           </div>
