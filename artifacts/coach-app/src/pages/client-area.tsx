@@ -373,6 +373,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const touchDragRef = useRef<{ sessionId: string; programmeId: number } | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const [touchDragOverDate, setTouchDragOverDate] = useState<string | null>(null);
+  const [touchDraggingActive, setTouchDraggingActive] = useState(false);
+  const [touchGhostPos, setTouchGhostPos] = useState<{ x: number; y: number } | null>(null);
+  const [touchGhostLabel, setTouchGhostLabel] = useState("");
+  const isDragActiveRef = useRef(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── AI reschedule command bar ──
   const [cmdInput, setCmdInput] = useState("");
@@ -1275,6 +1280,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       .catch(() => {});
   }, [assignDialogOpen]);
 
+  // Non-passive touchmove: blocks browser scroll while a drag is active
+  useEffect(() => {
+    const handler = (e: TouchEvent) => {
+      if (isDragActiveRef.current) e.preventDefault();
+    };
+    document.addEventListener("touchmove", handler, { passive: false });
+    return () => document.removeEventListener("touchmove", handler);
+  }, []);
+
   const toggleCmdListening = () => {
     const r = cmdRecRef.current;
     if (!r) return;
@@ -1913,18 +1927,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           if (item) { moveSession(item.sessionId, item.programmeId, dateStr); draggedItemRef.current = null; }
                         }}
                         onClick={() => {
-                          const touch = touchDragRef.current;
-                          if (touch) {
-                            moveSession(touch.sessionId, touch.programmeId, dateStr);
-                            touchDragRef.current = null;
-                            setTouchDragOverDate(null);
-                          } else {
-                            setQuickAddDate(dateStr);
-                            setQuickAddName("");
-                            setQuickAddDesc("");
-                            setQuickAddError("");
-                            setQuickAddOpen(true);
-                          }
+                          if (isDragActiveRef.current) return;
+                          setQuickAddDate(dateStr);
+                          setQuickAddName("");
+                          setQuickAddDesc("");
+                          setQuickAddError("");
+                          setQuickAddOpen(true);
                         }}
                       >
                         {calendarView === "month" ? (
@@ -1946,7 +1954,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             const prog = (clientProgrammes ?? []).find(p =>
                               (p.sessions as Session[]).some(s => s.id === session.id)
                             );
-                            const isTouchPicked = touchDragRef.current?.sessionId === session.id;
+                            const isTouchPicked = touchDraggingActive && touchDragRef.current?.sessionId === session.id;
                             const highlight = getSessionHighlight(session);
                             return (
                               <div
@@ -1957,52 +1965,78 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                 }}
                                 onDragEnd={() => { draggedItemRef.current = null; setDragOverDate(null); }}
                                 onTouchStart={e => {
-                                  touchStartPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                                  if (prog) touchDragRef.current = { sessionId: session.id, programmeId: prog.id };
+                                  const touch = e.touches[0];
+                                  touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+                                  // Clear any stale long-press timer
+                                  if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                                  // Start long-press: after 450ms activate drag mode
+                                  if (prog) {
+                                    longPressTimerRef.current = setTimeout(() => {
+                                      touchDragRef.current = { sessionId: session.id, programmeId: prog.id };
+                                      isDragActiveRef.current = true;
+                                      setTouchDraggingActive(true);
+                                      setTouchGhostLabel(session.name || "Session");
+                                      setTouchGhostPos({ x: touch.clientX, y: touch.clientY });
+                                      if (navigator.vibrate) navigator.vibrate(50);
+                                    }, 450);
+                                  }
                                 }}
                                 onTouchMove={e => {
                                   const t = e.touches[0];
                                   const start = touchStartPosRef.current;
                                   if (!start) return;
                                   const moved = Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y);
-                                  if (moved < 8) return;
-                                  e.preventDefault();
+                                  if (!isDragActiveRef.current) {
+                                    // Finger moved significantly before long-press fired — cancel it (user is scrolling)
+                                    if (moved > 10 && longPressTimerRef.current) {
+                                      clearTimeout(longPressTimerRef.current);
+                                      longPressTimerRef.current = null;
+                                    }
+                                    return;
+                                  }
+                                  // Drag is active — update ghost and target cell
+                                  setTouchGhostPos({ x: t.clientX, y: t.clientY });
                                   const el = document.elementFromPoint(t.clientX, t.clientY);
                                   const cell = el?.closest("[data-date]") as HTMLElement | null;
                                   setTouchDragOverDate(cell?.dataset.date ?? null);
                                 }}
                                 onTouchEnd={e => {
+                                  // Cancel any pending long-press
+                                  if (longPressTimerRef.current) {
+                                    clearTimeout(longPressTimerRef.current);
+                                    longPressTimerRef.current = null;
+                                  }
+                                  if (isDragActiveRef.current) {
+                                    // Drop the session on the cell under the finger
+                                    const t = e.changedTouches[0];
+                                    const el = document.elementFromPoint(t.clientX, t.clientY);
+                                    const cell = el?.closest("[data-date]") as HTMLElement | null;
+                                    const dropDate = cell?.dataset.date;
+                                    const item = touchDragRef.current;
+                                    if (dropDate && item) moveSession(item.sessionId, item.programmeId, dropDate);
+                                    touchDragRef.current = null;
+                                    isDragActiveRef.current = false;
+                                    setTouchDraggingActive(false);
+                                    setTouchGhostPos(null);
+                                    setTouchDragOverDate(null);
+                                    return;
+                                  }
+                                  // Short tap — open session
                                   const t = e.changedTouches[0];
                                   const start = touchStartPosRef.current;
                                   const moved = start ? Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y) : 0;
-                                  if (moved < 8) {
-                                    touchDragRef.current = null;
-                                    setTouchDragOverDate(null);
+                                  if (moved < 10) {
                                     if (mode === "client" && prog) {
                                       setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                     } else {
                                       setSelectedTrainingSession(session);
                                     }
-                                    return;
                                   }
-                                  const el = document.elementFromPoint(t.clientX, t.clientY);
-                                  const cell = el?.closest("[data-date]") as HTMLElement | null;
-                                  const dropDate = cell?.dataset.date;
-                                  const item = touchDragRef.current;
-                                  if (dropDate && item) moveSession(item.sessionId, item.programmeId, dropDate);
-                                  touchDragRef.current = null;
-                                  setTouchDragOverDate(null);
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (touchDragRef.current) return;
-                                  if (mode === "client" && prog) {
-                                    setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
-                                  } else {
-                                    setSelectedTrainingSession(session);
-                                  }
                                 }}
-                                className={`relative group w-full text-left rounded-md transition-colors cursor-grab active:cursor-grabbing overflow-hidden ${calendarView === "week" ? "px-2.5 py-2 text-[11px]" : "px-1.5 py-1 text-[10px] leading-tight font-medium"} ${isTouchPicked ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1 shadow-md" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
+                                className={`relative group w-full text-left rounded-md transition-all cursor-grab active:cursor-grabbing overflow-hidden select-none ${calendarView === "week" ? "px-2.5 py-2 text-[11px]" : "px-1.5 py-1 text-[10px] leading-tight font-medium"} ${isTouchPicked ? "opacity-50 scale-95 bg-primary/10 text-primary ring-2 ring-primary/50 ring-offset-1" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
                               >
                                 {calendarView === "month" ? (
                                   <>
@@ -2115,6 +2149,23 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* Touch drag ghost — fixed, follows finger */}
+      {touchDraggingActive && touchGhostPos && (
+        <div
+          style={{
+            position: "fixed",
+            left: touchGhostPos.x - 60,
+            top: touchGhostPos.y - 28,
+            zIndex: 9999,
+            pointerEvents: "none",
+            transform: "rotate(-2deg) scale(1.08)",
+          }}
+          className="bg-primary text-primary-foreground text-[11px] font-semibold px-3 py-1.5 rounded-lg shadow-2xl max-w-[140px] truncate"
+        >
+          {touchGhostLabel}
         </div>
       )}
 
