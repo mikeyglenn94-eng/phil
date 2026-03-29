@@ -1927,11 +1927,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           }
                         }}
                       >
-                        {calendarView === "month" && (
-                          <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
-                            {format(day, "d")}
+                        {calendarView === "month" ? (
+                          <div className="flex items-center justify-between mb-1">
+                            <div className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+                              {format(day, "d")}
+                            </div>
+                            <button
+                              onClick={e => { e.stopPropagation(); setQuickAddDate(dateStr); setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddOpen(true); }}
+                              className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground/40 hover:text-primary hover:bg-primary/10 active:bg-primary/20 transition-colors"
+                              title="Add session"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
                           </div>
-                        )}
+                        ) : null}
                         <div className="space-y-0.5">
                           {daySessions.map(session => {
                             const prog = (clientProgrammes ?? []).find(p =>
@@ -2034,6 +2043,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             );
                           })}
                         </div>
+                        {calendarView === "week" && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setQuickAddDate(dateStr); setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddOpen(true); }}
+                            className="mt-1.5 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-muted-foreground/40 hover:text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors text-[11px]"
+                            title="Add session"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
