@@ -961,6 +961,82 @@ router.post("/transcribe", upload.single("audio"), async (req, res): Promise<voi
   }
 });
 
+// ── Quick run session builder ───────────────────────────────────────────────
+// POST /parse-run-session  { description, name? }
+// Returns a ready-to-save run session (source: "run_brain") from free-text.
+router.post("/parse-run-session", async (req, res): Promise<void> => {
+  const { description, name } = req.body as { description?: string; name?: string };
+  if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
+
+  const systemPrompt = `You are a running coach assistant. Parse the user's run session description into structured JSON.
+
+Rules:
+- Extract DURATION in minutes (number, null if not mentioned)
+- Extract DISTANCE in km (number, null if not mentioned). Convert miles to km (1 mile = 1.609 km), convert metres to km.
+- Extract INTENSITY as a short label: "Easy", "Steady", "Tempo", "Intervals", "Hill Repeats", "Time Trial", "Sprint", "Recovery", or infer from context
+- Generate a concise SESSION NAME (e.g. "Easy Run", "Tempo Intervals", "Long Run", "Hill Repeats", "5K Time Trial")
+- Write a human-readable STRUCTURE string that fully describes the session (e.g. "30 min easy run at conversational pace", "5 × 1km at tempo pace, 90s jog recovery")
+- Return ONLY valid JSON, no markdown fences
+
+Response format:
+{
+  "name": "Tempo Intervals",
+  "duration": 35,
+  "distanceKm": 8,
+  "intensity": "Tempo",
+  "structure": "5 × 1 km at tempo pace, 90s jog recovery, total ~35 min"
+}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Session name (optional): ${name?.trim() || "(auto-generate)"}\n\nDescription:\n${description.trim()}` },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+    const sessionName = name?.trim() || parsed.name || "Run";
+    const duration: number | null = typeof parsed.duration === "number" ? parsed.duration : null;
+    const distanceKm: number | null = typeof parsed.distanceKm === "number" ? Math.round(parsed.distanceKm * 10) / 10 : null;
+    const intensity: string = parsed.intensity ?? "";
+    const structure: string = parsed.structure ?? description.trim();
+
+    const notesParts: string[] = [];
+    if (duration) notesParts.push(`${duration} min`);
+    if (distanceKm) notesParts.push(`${distanceKm} km`);
+    if (intensity) notesParts.push(intensity);
+    const notes = notesParts.join(" · ");
+
+    const now = Date.now();
+    const exercises = [{
+      id: `ex-${now}-0`,
+      name: sessionName,
+      sets: null,
+      reps: null,
+      rpe: null,
+      rest: null,
+      tempo: null,
+      notes,
+      rawText: structure,
+      weekProgression: [],
+      clientComment: null,
+      perSetReps: null,
+      perSetRpe: null,
+      setWeights: null,
+      setReps: null,
+      weight: null,
+    }];
+
+    res.json({ name: sessionName, source: "run_brain", structure, exercises });
+  } catch (err) {
+    req.log.error({ err }, "Error parsing run session");
+    res.status(500).json({ error: "Failed to parse run session" });
+  }
+});
+
 // ── Quick WOD / conditioning session builder ────────────────────────────────
 // POST /parse-wod-session  { description, name? }
 // Returns a ready-to-save WOD session (source: "wod_brain") from free-text.
