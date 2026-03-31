@@ -428,6 +428,12 @@
     color: #854D0E;
   }
 
+  .divider {
+    height: 1px;
+    background: var(--border);
+    width: 100%;
+  }
+
   .select-trigger {
     display: inline-flex;
     align-items: center;
