@@ -679,7 +679,7 @@ export default function ClientSession() {
       if (structure) lines.push(structure);
       else if (exerciseLines) lines.push(exerciseLines);
       if (comment) { lines.push(""); lines.push(`"${comment}"`); }
-      lines.push("", "Training with Cue Coaching 🏋️");
+      lines.push("", "Training with Axis 🏋️");
       return lines.join("\n");
     } else {
       const exerciseNames = [...(session.exercises || []), ...addedExercises]
@@ -698,7 +698,7 @@ export default function ClientSession() {
       const lines = [`💪 ${name} — ${dateStr}`];
       if (hasWeight) { lines.push(""); lines.push(`Total lifted: ${Math.round(totalKg).toLocaleString()} kg`); }
       if (exerciseNames) { lines.push(""); lines.push("Exercises:"); lines.push(exerciseNames); }
-      lines.push("", "Training with Cue Coaching 🏋️");
+      lines.push("", "Training with Axis 🏋️");
       return lines.join("\n");
     }
   }

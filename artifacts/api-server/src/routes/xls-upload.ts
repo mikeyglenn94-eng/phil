@@ -64,7 +64,7 @@ router.get("/xls-template", (_req, res) => {
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", 'attachment; filename="cue-coaching-programme-template.xlsx"');
+  res.setHeader("Content-Disposition", 'attachment; filename="axis-programme-template.xlsx"');
   res.send(buf);
 });
 

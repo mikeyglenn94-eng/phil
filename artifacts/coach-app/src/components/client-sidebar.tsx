@@ -30,7 +30,7 @@ export function ClientSidebar({ open, onClose }: ClientSidebarProps) {
           </div>
           <div>
             <h1 className="font-display font-bold text-base leading-none text-sidebar-foreground">
-              Cue <span className="text-primary">Coaching</span>
+              Axis
             </h1>
             <p className="text-[10px] text-sidebar-foreground/50 font-medium mt-0.5">Client Portal</p>
           </div>

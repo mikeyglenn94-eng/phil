@@ -50,8 +50,8 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: "Cue Coaching",
-        short_name: "Cue Coaching",
+        name: "Axis",
+        short_name: "Axis",
         description: "Your personal training and nutrition platform",
         theme_color: "#6366f1",
         background_color: "#ffffff",

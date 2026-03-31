@@ -25,7 +25,7 @@ export function AppSidebar() {
           </div>
           <div>
             <h1 className="font-display font-bold text-xl tracking-tight leading-none text-sidebar-foreground">
-              Cue <span className="text-primary">Coaching</span>
+              Axis
             </h1>
             <p className="text-xs text-sidebar-foreground/50 font-medium">Coach Dashboard</p>
           </div>

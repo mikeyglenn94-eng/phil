@@ -1533,7 +1533,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 <div className="bg-primary/15 p-1.5 rounded-lg">
                   <Dumbbell className="w-4 h-4 text-primary" />
                 </div>
-                <span className="font-display font-bold text-sm leading-none text-foreground/70">Cue <span className="text-primary">Coaching</span></span>
+                <span className="font-display font-bold text-sm leading-none text-foreground/70">Axis</span>
               </div>
             </Link>
           )}

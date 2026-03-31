@@ -73,7 +73,7 @@ export default function ClientPicker() {
       </div>
       <div>
         <h1 className="font-display font-bold text-2xl leading-none">
-          Cue <span className="text-primary">Coaching</span>
+          Axis
         </h1>
         <p className="text-xs text-muted-foreground mt-0.5">Client Portal</p>
       </div>

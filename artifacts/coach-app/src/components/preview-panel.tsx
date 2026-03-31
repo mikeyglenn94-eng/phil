@@ -174,7 +174,7 @@ export function PreviewPanel({ title, exercises }: PreviewPanelProps) {
           )}
           
           <div className="mt-16 pt-8 border-t border-slate-100 text-center print-only hidden">
-            <p className="text-xs text-slate-400">Created with Cue Coaching</p>
+            <p className="text-xs text-slate-400">Created with Axis</p>
           </div>
         </div>
       </div>
