@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
-  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle,
+  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2,
 } from "lucide-react";
 import {
   useGetProgramme,
@@ -142,6 +142,9 @@ export default function ClientSession() {
   const [commentInterim, setCommentInterim] = useState("");
   const commentRecRef = useRef<any>(null);
   const commentInterimRef = useRef(""); // sync ref so onend can read latest interim
+
+  // Share state
+  const [shareCopied, setShareCopied] = useState(false);
 
   // Feedback state
   const [feedbackText, setFeedbackText] = useState("");
@@ -658,6 +661,63 @@ export default function ClientSession() {
     </div>
   );
 
+  // ── Share workout ────────────────────────────────────────────────────────────
+  function buildShareText(): string {
+    const name = session.name || "Session";
+    const dateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM");
+    const src = (session as any).source as string | undefined;
+    const isCondition = src === "wod_brain" || src === "run_brain" || src === "endurance_cycle";
+
+    if (isCondition) {
+      const emoji = src === "run_brain" ? "🏃" : "🔥";
+      const structure = (session as any).structure as string | undefined;
+      const exerciseLines = (session.exercises || [])
+        .map(ex => `• ${ex.name}${ex.notes ? ` — ${ex.notes}` : ""}`)
+        .join("\n");
+      const comment = sessionComment.trim();
+      const lines = [`${emoji} ${name} — ${dateStr}`, ""];
+      if (structure) lines.push(structure);
+      else if (exerciseLines) lines.push(exerciseLines);
+      if (comment) { lines.push(""); lines.push(`"${comment}"`); }
+      lines.push("", "Training with Cue Coaching 🏋️");
+      return lines.join("\n");
+    } else {
+      const exerciseNames = [...(session.exercises || []), ...addedExercises]
+        .map(ex => `• ${nameOverrides[ex.id] || ex.name}`)
+        .join("\n");
+      let totalKg = 0;
+      let hasWeight = false;
+      for (const ex of [...(session.exercises || []), ...addedExercises]) {
+        for (const set of (logs[ex.id] || [])) {
+          if (set.weight !== null && set.reps !== null) {
+            totalKg += set.weight * set.reps;
+            hasWeight = true;
+          }
+        }
+      }
+      const lines = [`💪 ${name} — ${dateStr}`];
+      if (hasWeight) { lines.push(""); lines.push(`Total lifted: ${Math.round(totalKg).toLocaleString()} kg`); }
+      if (exerciseNames) { lines.push(""); lines.push("Exercises:"); lines.push(exerciseNames); }
+      lines.push("", "Training with Cue Coaching 🏋️");
+      return lines.join("\n");
+    }
+  }
+
+  async function handleShare() {
+    const text = buildShareText();
+    if (typeof navigator.share === "function") {
+      try { await navigator.share({ text }); } catch { /* cancelled */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(text);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2500);
+      } catch {
+        toast({ title: "Couldn't copy", description: "Try copying from the session manually." });
+      }
+    }
+  }
+
   const safeDate = session.date || format(new Date(), "yyyy-MM-dd");
   const dateLabel = format(parseISO(safeDate), "EEEE, d MMMM yyyy");
   const totalSets = (session.exercises || []).reduce((acc, ex) => acc + (ex.sets || 0), 0);
@@ -834,6 +894,16 @@ export default function ClientSession() {
               </p>
             )}
           </div>
+
+          {/* Share workout */}
+          <button
+            onClick={handleShare}
+            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
+          >
+            {shareCopied
+              ? <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700">Copied to clipboard!</span></>
+              : <><Share2 className="w-4 h-4" /> Share your workout</>}
+          </button>
         </div>
         );
       })()}
@@ -1309,6 +1379,16 @@ export default function ClientSession() {
             )}
           </div>
         </div>
+
+        {/* Share workout */}
+        <button
+          onClick={handleShare}
+          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
+        >
+          {shareCopied
+            ? <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700">Copied to clipboard!</span></>
+            : <><Share2 className="w-4 h-4" /> Share your workout</>}
+        </button>
 
         {/* WhatsApp Coach */}
         <div className="pt-4 pb-2 flex justify-center">
