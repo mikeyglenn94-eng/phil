@@ -961,6 +961,87 @@ router.post("/transcribe", upload.single("audio"), async (req, res): Promise<voi
   }
 });
 
+// ── Quick WOD / conditioning session builder ────────────────────────────────
+// POST /parse-wod-session  { description, name? }
+// Returns a ready-to-save WOD session (source: "wod_brain") from free-text.
+router.post("/parse-wod-session", async (req, res): Promise<void> => {
+  const { description, name } = req.body as { description?: string; name?: string };
+  if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
+
+  const systemPrompt = `You are a conditioning coach assistant. Parse the user's WOD/conditioning description into structured JSON.
+
+Rules:
+- Identify the workout FORMAT: "amrap", "emom", "for_time", "interval", "ladder", or "other"
+- Extract DURATION in minutes (integer). If not stated, infer from context (amrap usually has a stated duration; default to 20 if unclear)
+- Extract each movement/exercise as a BLOCK with: movement (lowercase name), amount (number), unit ("reps","m","km","cal","seconds","minutes")
+- For distances: convert miles to km, keep metres as "m"
+- Generate a concise workout NAME if not provided (e.g. "30 Min AMRAP", "EMOM 12", "Mixed Conditioning")
+- Write a human-readable STRUCTURE string (e.g. "AMRAP 30: 15 press ups, 1 km bike erg, 500 m run")
+- Return ONLY valid JSON, no markdown fences
+
+Response format:
+{
+  "format": "amrap",
+  "duration": 30,
+  "name": "Mixed AMRAP",
+  "structure": "AMRAP 30: 15 press ups, 1 km bike erg, 500 m run",
+  "blocks": [
+    { "movement": "press ups", "amount": 15, "unit": "reps" },
+    { "movement": "bike erg", "amount": 1, "unit": "km" },
+    { "movement": "running", "amount": 500, "unit": "m" }
+  ]
+}`;
+
+  const FORMAT_LABELS: Record<string, string> = {
+    amrap: "AMRAP", emom: "EMOM", for_time: "For Time",
+    interval: "Intervals", ladder: "Ladder", other: "Conditioning",
+  };
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `WOD name (optional): ${name?.trim() || "(auto-generate)"}\n\nDescription:\n${description.trim()}` },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+    const format: string = parsed.format ?? "other";
+    const formatLabel = FORMAT_LABELS[format] ?? "Conditioning";
+    const duration: number = typeof parsed.duration === "number" ? parsed.duration : 20;
+    const wodName = name?.trim() || parsed.name || `${formatLabel} ${duration}`;
+    const structure: string = parsed.structure ?? description.trim();
+    const blocks: { movement: string; amount: number; unit: string }[] = parsed.blocks ?? [];
+
+    const now = Date.now();
+    const exercises = blocks.map((block, idx) => ({
+      id: `ex-${now}-${idx}`,
+      name: block.movement.charAt(0).toUpperCase() + block.movement.slice(1),
+      sets: null,
+      reps: null,
+      rpe: null,
+      rest: null,
+      tempo: null,
+      notes: `${block.amount} ${block.unit}`,
+      rawText: `${block.amount} ${block.unit} ${block.movement}`,
+      weekProgression: [],
+      clientComment: null,
+      perSetReps: null,
+      perSetRpe: null,
+      setWeights: null,
+      setReps: null,
+      weight: null,
+    }));
+
+    res.json({ name: wodName, source: "wod_brain", structure, exercises });
+  } catch (err) {
+    req.log.error({ err }, "Error parsing WOD session");
+    res.status(500).json({ error: "Failed to parse WOD session" });
+  }
+});
+
 // ── Quick single-session builder ───────────────────────────────────────────
 // POST /parse-session  { description, name? }
 // Returns a ready-to-save session object with structured exercises.

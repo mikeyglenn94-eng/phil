@@ -293,6 +293,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   // ── Quick-add single session ──
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddDate, setQuickAddDate] = useState("");
+  const [quickAddType, setQuickAddType] = useState<"strength" | "wod">("strength");
   const [quickAddName, setQuickAddName] = useState("");
   const [quickAddDesc, setQuickAddDesc] = useState("");
   const [quickAddParsing, setQuickAddParsing] = useState(false);
@@ -345,7 +346,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setQuickAddParsing(true);
     setQuickAddError("");
     try {
-      const res = await fetch("/api/parse-session", {
+      const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : "/api/parse-session";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
@@ -357,10 +359,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         setQuickAddOpen(false);
         setQuickAddName("");
         setQuickAddDesc("");
+        setQuickAddType("strength");
         navigateToWeekOf(quickAddDate);
       }, session.name);
     } catch {
-      setQuickAddError("Couldn't parse your session — please try again.");
+      setQuickAddError(quickAddType === "wod" ? "Couldn't parse your WOD — please try again." : "Couldn't parse your session — please try again.");
     } finally {
       setQuickAddParsing(false);
     }
@@ -2494,29 +2497,55 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       </Dialog>
 
       {/* Quick-add single session dialog */}
-      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); } }}>
+      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Add Session — {quickAddDate ? format(parseISO(quickAddDate), "EEE d MMM") : ""}</DialogTitle>
-            <DialogDescription>List your exercises in any format. The AI will structure them for you.</DialogDescription>
+            <DialogDescription>
+              {quickAddType === "wod"
+                ? "Describe your WOD in any format. The AI will structure it."
+                : "List your exercises in any format. The AI will structure them for you."}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
+            {/* Type toggle */}
+            <div className="flex rounded-xl overflow-hidden border border-muted p-0.5 gap-0.5 bg-muted/30">
+              <button
+                type="button"
+                onClick={() => { setQuickAddType("strength"); setQuickAddDesc(""); setQuickAddError(""); }}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition-colors ${quickAddType === "strength" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Strength
+              </button>
+              <button
+                type="button"
+                onClick={() => { setQuickAddType("wod"); setQuickAddDesc(""); setQuickAddError(""); }}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition-colors ${quickAddType === "wod" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                WOD / Conditioning
+              </button>
+            </div>
+
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Session name (optional)</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {quickAddType === "wod" ? "WOD name (optional)" : "Session name (optional)"}
+              </label>
               <input
                 value={quickAddName}
                 onChange={e => setQuickAddName(e.target.value)}
-                placeholder="e.g. Push Day, Leg Session"
+                placeholder={quickAddType === "wod" ? "e.g. Thursday Metcon, Lunchtime WOD" : "e.g. Push Day, Leg Session"}
                 className="w-full mt-1 text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2 outline-none focus:border-primary/40 transition-colors"
               />
             </div>
             <div>
               <div className="flex items-center justify-between mt-0">
-                <label className="text-xs font-medium text-muted-foreground">Exercises</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  {quickAddType === "wod" ? "WOD description" : "Exercises"}
+                </label>
                 <button
                   type="button"
                   onClick={toggleQuickAddListening}
-                  title={quickAddListening ? "Stop recording" : "Dictate exercises"}
+                  title={quickAddListening ? "Stop recording" : quickAddType === "wod" ? "Dictate your WOD" : "Dictate exercises"}
                   className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${quickAddListening ? "bg-red-500 border-red-500 text-white animate-pulse" : "border-muted text-muted-foreground hover:border-primary/40 hover:text-primary"}`}
                 >
                   <Mic className="w-3 h-3" />
@@ -2524,13 +2553,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </button>
               </div>
               <textarea
-                value={quickAddDesc}
+                value={quickAddListening ? (quickAddInterim || quickAddDesc) : quickAddDesc}
                 onChange={e => setQuickAddDesc(e.target.value)}
-                placeholder={"Bench press 4x8\nSquat 3x5 @RPE 8\nRDL 3x10\nLateral raises 3x15\n\n…or speak naturally, e.g.\n\"Four sets of eight bench press, three sets of ten squat at RPE eight\""}
+                placeholder={quickAddType === "wod"
+                  ? "e.g. 30 min amrap, 15 press ups, 1km bike erg, 500m run\n\nor: EMOM 12 — min 1: 12 cal bike, min 2: 15 wall balls\nor: 5 rounds for time: 400m run, 20 burpees"
+                  : "Bench press 4x8\nSquat 3x5 @RPE 8\nRDL 3x10\nLateral raises 3x15\n\n…or speak naturally"}
                 rows={6}
                 autoFocus
                 className="w-full mt-1 text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors resize-none"
-                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleQuickAdd(); } }}
+                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void handleQuickAdd(); } }}
               />
               {quickAddListening && (
                 <p className="text-[11px] text-red-500 mt-1 min-h-[1rem] italic">
@@ -2538,15 +2569,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 </p>
               )}
               {!quickAddListening && (
-                <p className="text-[11px] text-muted-foreground/60 mt-1">One exercise per line, comma-separated, or just speak. Cmd+Enter to save.</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-1">
+                  {quickAddType === "wod"
+                    ? "Describe format, duration and movements. Cmd+Enter to save."
+                    : "One exercise per line, comma-separated, or just speak. Cmd+Enter to save."}
+                </p>
               )}
             </div>
             {quickAddError && <p className="text-sm text-red-500">{quickAddError}</p>}
           </div>
           <div className="flex gap-2 pt-1">
             <Button variant="outline" className="flex-1" onClick={() => setQuickAddOpen(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleQuickAdd} disabled={!quickAddDesc.trim() || quickAddParsing}>
-              {quickAddParsing ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" />Parsing…</> : "Add Session"}
+            <Button className="flex-1" onClick={() => void handleQuickAdd()} disabled={!quickAddDesc.trim() || quickAddParsing}>
+              {quickAddParsing
+                ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" />Parsing…</>
+                : quickAddType === "wod" ? "Add WOD" : "Add Session"}
             </Button>
           </div>
         </DialogContent>
