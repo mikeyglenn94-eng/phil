@@ -874,8 +874,14 @@ export default function ClientSession() {
     }
   }
 
-  function handleSaveImage() {
-    if (!shareImageUrl) return;
+  async function handleSaveImage() {
+    if (!shareFile || !shareImageUrl) return;
+    // On iOS/Android: native share sheet puts "Save Image" at the top
+    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [shareFile] })) {
+      try { await navigator.share({ files: [shareFile] }); setShareSaved(true); setTimeout(() => setShareSaved(false), 2000); return; }
+      catch { /* user cancelled */ return; }
+    }
+    // Desktop fallback: trigger download
     const a = document.createElement("a");
     a.href = shareImageUrl; a.download = "axis-workout.png"; a.click();
     setShareSaved(true); setTimeout(() => setShareSaved(false), 2000);
