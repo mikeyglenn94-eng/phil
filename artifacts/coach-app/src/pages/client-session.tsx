@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
-  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2,
+  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy,
 } from "lucide-react";
 import {
   useGetProgramme,
@@ -144,8 +144,12 @@ export default function ClientSession() {
   const commentInterimRef = useRef(""); // sync ref so onend can read latest interim
 
   // Share state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+  const [shareFile, setShareFile] = useState<File | null>(null);
+  const [shareImageLoading, setShareImageLoading] = useState(false);
+  const [shareSaved, setShareSaved] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
-  const [shareLoading, setShareLoading] = useState(false);
 
   // Feedback state
   const [feedbackText, setFeedbackText] = useState("");
@@ -815,26 +819,80 @@ export default function ClientSession() {
     });
   }
 
-  async function handleShare() {
-    setShareLoading(true);
+  function buildShareText(): string {
+    const name = session.name || "Session";
+    const dateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM");
+    const src = (session as any).source as string | undefined;
+    const isCondition = src === "wod_brain" || src === "run_brain" || src === "endurance_cycle";
+    if (isCondition) {
+      const emoji = src === "run_brain" ? "🏃" : "🔥";
+      const structure = (session as any).structure as string | undefined;
+      const lines = [`${emoji} ${name} — ${dateStr}`, ""];
+      if (structure) lines.push(structure);
+      else lines.push(...(session.exercises || []).map(ex => `• ${ex.name}${ex.notes ? ` — ${ex.notes}` : ""}`));
+      if (sessionComment.trim()) { lines.push(""); lines.push(`"${sessionComment.trim()}"`); }
+      lines.push("", "Training with Axis 🏋️");
+      return lines.join("\n");
+    } else {
+      let totalKg = 0; let hasWeight = false;
+      for (const ex of [...(session.exercises || []), ...addedExercises])
+        for (const set of (logs[ex.id] || []))
+          if (set.weight !== null && set.reps !== null) { totalKg += set.weight * set.reps; hasWeight = true; }
+      const exNames = [...(session.exercises || []), ...addedExercises].map(ex => `• ${nameOverrides[ex.id] || ex.name}`).join("\n");
+      const lines = [`💪 ${name} — ${dateStr}`];
+      if (hasWeight) { lines.push(""); lines.push(`Total lifted: ${Math.round(totalKg).toLocaleString()} kg`); }
+      if (exNames) { lines.push(""); lines.push("Exercises:"); lines.push(exNames); }
+      lines.push("", "Training with Axis 🏋️");
+      return lines.join("\n");
+    }
+  }
+
+  async function openShareModal() {
+    setShowShareModal(true);
+    setShareImageLoading(true);
+    setShareImageUrl(null);
+    setShareFile(null);
+    const file = await generateShareImage();
+    if (file) {
+      setShareFile(file);
+      setShareImageUrl(URL.createObjectURL(file));
+    }
+    setShareImageLoading(false);
+  }
+
+  function closeShareModal() {
+    setShowShareModal(false);
+    if (shareImageUrl) { URL.revokeObjectURL(shareImageUrl); setShareImageUrl(null); }
+    setShareFile(null);
+  }
+
+  async function shareInstagram() {
+    if (!shareFile) return;
+    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [shareFile] })) {
+      try { await navigator.share({ files: [shareFile], title: session.name || "Workout" }); }
+      catch { /* cancelled */ }
+    }
+  }
+
+  function handleSaveImage() {
+    if (!shareImageUrl) return;
+    const a = document.createElement("a");
+    a.href = shareImageUrl; a.download = "axis-workout.png"; a.click();
+    setShareSaved(true); setTimeout(() => setShareSaved(false), 2000);
+  }
+
+  async function handleCopyText() {
     try {
-      const file = await generateShareImage();
-      if (file) {
-        // Native file share — shows Instagram, WhatsApp, etc. on iOS/Android
-        if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
-          try { await navigator.share({ files: [file], title: session.name || "Workout" }); return; }
-          catch { /* user cancelled or error */ }
-        }
-        // Fallback: download the transparent PNG
-        const url = URL.createObjectURL(file);
-        const a = document.createElement("a");
-        a.href = url; a.download = "axis-workout.png"; a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-        setShareCopied(true);
-        setTimeout(() => setShareCopied(false), 2500);
-      }
-    } finally {
-      setShareLoading(false);
+      await navigator.clipboard.writeText(buildShareText());
+      setShareCopied(true); setTimeout(() => setShareCopied(false), 2000);
+    } catch { /* */ }
+  }
+
+  async function handleShareMore() {
+    if (!shareFile) return;
+    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [shareFile] })) {
+      try { await navigator.share({ files: [shareFile], title: session.name || "Workout" }); }
+      catch { /* cancelled */ }
     }
   }
 
@@ -1017,15 +1075,10 @@ export default function ClientSession() {
 
           {/* Share workout */}
           <button
-            onClick={handleShare}
-            disabled={shareLoading}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all disabled:opacity-60"
+            onClick={openShareModal}
+            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
           >
-            {shareLoading
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating card…</>
-              : shareCopied
-              ? <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700">Image saved!</span></>
-              : <><Share2 className="w-4 h-4" /> Share workout</>}
+            <Share2 className="w-4 h-4" /> Share workout
           </button>
         </div>
         );
@@ -1505,15 +1558,10 @@ export default function ClientSession() {
 
         {/* Share workout */}
         <button
-          onClick={handleShare}
-          disabled={shareLoading}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all disabled:opacity-60"
+          onClick={openShareModal}
+          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
         >
-          {shareLoading
-            ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating card…</>
-            : shareCopied
-            ? <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700">Image saved!</span></>
-            : <><Share2 className="w-4 h-4" /> Share workout</>}
+          <Share2 className="w-4 h-4" /> Share workout
         </button>
 
         {/* WhatsApp Coach */}
@@ -1531,6 +1579,120 @@ export default function ClientSession() {
           </a>
         </div>
       </div>
+      )}
+
+      {/* ── Share Activity Modal (Strava-style) ─────────────────────────── */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60" onClick={closeShareModal} />
+
+          {/* Sheet */}
+          <div className="relative bg-background rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
+            {/* Handle bar */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/25" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b">
+              <button onClick={closeShareModal} className="text-sm text-foreground font-medium">Close</button>
+              <p className="font-semibold text-sm">Share Activity</p>
+              <div className="w-12" />
+            </div>
+
+            {/* Card preview — checkerboard = transparent indicator */}
+            <div className="flex justify-center py-6 px-5">
+              <div
+                className="relative rounded-2xl overflow-hidden shadow-xl"
+                style={{
+                  width: 210, height: 374,
+                  backgroundImage: "linear-gradient(45deg,#8b8b8b 25%,transparent 25%),linear-gradient(-45deg,#8b8b8b 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#8b8b8b 75%),linear-gradient(-45deg,transparent 75%,#8b8b8b 75%)",
+                  backgroundSize: "18px 18px",
+                  backgroundPosition: "0 0,0 9px,9px -9px,-9px 0",
+                  backgroundColor: "#6b7280",
+                }}
+              >
+                {/* TRANSPARENT badge */}
+                <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 bg-black/55 backdrop-blur-sm text-white text-[9px] font-bold tracking-wider px-2 py-0.5 rounded">
+                  TRANSPARENT
+                </div>
+                {shareImageLoading ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-white/60" />
+                  </div>
+                ) : shareImageUrl ? (
+                  <img src={shareImageUrl} alt="Workout card preview" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <p className="text-white/40 text-xs text-center px-4">Couldn't generate card</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Dot indicator */}
+            <div className="flex justify-center gap-2 mb-5">
+              <div className="w-2 h-2 rounded-full bg-primary" />
+            </div>
+
+            {/* Actions */}
+            <div className="px-5 pb-8">
+              <p className="font-bold text-base mb-4">Share to</p>
+
+              {/* Instagram Story — primary button */}
+              <button
+                onClick={shareInstagram}
+                disabled={shareImageLoading}
+                className="flex items-center gap-4 w-full p-4 rounded-2xl mb-4 shadow-md disabled:opacity-50 transition-opacity"
+                style={{ background: "linear-gradient(135deg, #833ab4 0%, #fd1d1d 50%, #fcb045 100%)" }}
+              >
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <svg viewBox="0 0 24 24" className="w-7 h-7 fill-white" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
+                  </svg>
+                </div>
+                <div className="text-left text-white">
+                  <p className="font-bold text-base leading-tight">Instagram Story</p>
+                  <p className="text-sm text-white/70 mt-0.5">Share to your story</p>
+                </div>
+              </button>
+
+              {/* Secondary actions */}
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={handleSaveImage}
+                  disabled={shareImageLoading}
+                  className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50"
+                >
+                  <div className="w-12 h-12 rounded-full border-2 border-foreground/15 flex items-center justify-center bg-background">
+                    {shareSaved ? <Check className="w-5 h-5 text-green-600" /> : <Download className="w-5 h-5" />}
+                  </div>
+                  <span className="text-xs font-medium">{shareSaved ? "Saved!" : "Save"}</span>
+                </button>
+                <button
+                  onClick={handleCopyText}
+                  className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted hover:bg-muted/80 transition-colors"
+                >
+                  <div className="w-12 h-12 rounded-full border-2 border-foreground/15 flex items-center justify-center bg-background">
+                    {shareCopied ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5" />}
+                  </div>
+                  <span className="text-xs font-medium">{shareCopied ? "Copied!" : "Copy Text"}</span>
+                </button>
+                <button
+                  onClick={handleShareMore}
+                  disabled={shareImageLoading}
+                  className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50"
+                >
+                  <div className="w-12 h-12 rounded-full border-2 border-foreground/15 flex items-center justify-center bg-background">
+                    <Share2 className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-medium">More</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
