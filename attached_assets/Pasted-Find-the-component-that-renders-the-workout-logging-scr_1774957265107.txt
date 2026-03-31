@@ -1,0 +1,102 @@
+Find the component that renders the workout logging screen, the one that shows an exercise title like “Bench Press”, set rows with weight/reps inputs, exercise action buttons such as swap or voice, a notes field, and a save button.
+
+Refactor ONLY that screen.
+
+Important constraints:
+- Do not add any new features
+- Do not add any new UI elements that do not already exist
+- Do not change business logic
+- Do not change state, props, handlers, API calls, routing, validation, or data shape
+- Do not invent or display any new data
+- Do not add progression text, previous performance, duration, sticky behaviour, or extra buttons unless they already exist in the current UI
+- Only improve layout, spacing, typography, visual hierarchy, container styling, and classNames
+- Reuse all existing functionality exactly as it works now
+
+What to change:
+1. Improve spacing and hierarchy across the whole screen
+2. Wrap each existing exercise block in a cleaner card-style container
+3. Clean up the exercise header layout so the title and existing actions are better aligned
+4. Restyle the existing set rows so they are easier to scan and more consistent
+5. Improve the visual styling of existing inputs
+6. Restyle any existing low-emphasis text actions so they look more intentional
+7. Improve the notes section styling without changing its functionality
+8. Improve the save area styling without changing its behaviour
+9. Use the design system colours, spacing, and shared component styles already added to the app
+
+Add or update styling so these classes are used where appropriate:
+
+.exercise {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: var(--space-4);
+  background: #fff;
+}
+
+.exercise + .exercise {
+  margin-top: var(--space-5);
+}
+
+.exercise-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.exercise-name {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.exercise-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.set-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 60px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.set-row + .set-row {
+  margin-top: var(--space-2);
+}
+
+.set-index {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.set-input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+}
+
+.set-target {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.notes-section {
+  margin-top: var(--space-4);
+}
+
+.save-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+If there are existing secondary text actions, style them with the existing ghost or secondary button styles rather than raw coloured text.
+
+Keep the result minimal, premium, and consistent with the rest of the design system.
+
+When finished, tell me which file you changed.

@@ -1089,7 +1089,7 @@ export default function ClientSession() {
 
       {/* Exercises (strength sessions — no source, or source = strength_block) */}
       {(!(session as any).source || (session as any).source === "strength_block") && (
-      <div className="max-w-lg mx-auto px-4 pt-4 space-y-5">
+      <div className="max-w-lg mx-auto px-4 pt-4">
         {(session.exercises || []).map((ex, exIdx) => {
           const setsCount = ex.sets || 0;
           const exLogs = logs[ex.id] || [];
@@ -1102,111 +1102,104 @@ export default function ClientSession() {
           const allLogged = setsCount > 0 && loggedCount === setsCount;
 
           return (
-            <div key={ex.id} className={`bg-card rounded-2xl border shadow-sm overflow-hidden transition-all ${isListening ? "ring-2 ring-primary/50" : ""} ${isSwapping ? "ring-2 ring-orange-400/60" : ""}`}>
+            <div key={ex.id} className={`exercise transition-all ${isListening ? "ring-2 ring-primary/50" : ""} ${isSwapping ? "ring-2 ring-orange-400/60" : ""}`}>
               {/* Exercise header */}
-              <div className="px-4 pt-4 pb-3 border-b bg-muted/20">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${allLogged ? "bg-green-100 text-green-700" : "bg-primary/10 text-primary"}`}>
-                      {allLogged ? "✓" : exIdx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="font-bold text-base leading-tight">{displayName}</h3>
-                      <a
-                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(displayName + " exercise tutorial")}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:text-red-600 font-medium mt-0.5 transition-colors"
-                      >
-                        <PlayCircle className="w-3 h-3" /> Watch demo
-                      </a>
-                      {wasSwapped && (
-                        <p className="text-[10px] text-orange-600 font-medium flex items-center gap-1 mt-0.5">
-                          <ArrowLeftRight className="w-2.5 h-2.5" /> swapped from {ex.name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Swap button */}
-                    <Button
-                      size="sm" variant="ghost"
-                      className={`rounded-xl gap-1 h-8 px-2 text-xs ${isSwapping ? "text-orange-600 bg-orange-50" : "text-muted-foreground hover:text-foreground"}`}
-                      onClick={() => { if (isSwapping) { cancelSwap(); } else { setSwappingExId(ex.id); setSwapText(""); } }}
-                      disabled={isParsing || (!!listeningFor && !isListening)}
+              <div className="exercise-header">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${allLogged ? "bg-green-100 text-green-700" : "bg-primary/10 text-primary"}`}>
+                    {allLogged ? "✓" : exIdx + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="exercise-name">{displayName}</h3>
+                    <a
+                      href={`https://www.youtube.com/results?search_query=${encodeURIComponent(displayName + " exercise tutorial")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:text-red-600 font-medium mt-0.5 transition-colors"
                     >
-                      {isSwapping ? <X className="w-3.5 h-3.5" /> : <ArrowLeftRight className="w-3.5 h-3.5" />}
-                      {isSwapping ? "Cancel" : "Swap"}
-                    </Button>
-
-                    {/* Log voice button */}
-                    {!isSwapping && (
-                      <Button
-                        size="sm"
-                        variant={isListening ? "default" : "outline"}
-                        className={`rounded-xl gap-1.5 h-8 px-3 text-xs ${isListening ? "bg-destructive hover:bg-destructive/90 text-white border-0" : ""}`}
-                        onClick={() => startLogListening(ex.id)}
-                        disabled={isParsing || (!!listeningFor && !isListening)}
-                      >
-                        {isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
-                          isListening ? <><Square className="w-3 h-3 fill-current" /> Stop</> :
-                          <><Mic className="w-3.5 h-3.5" /> Log</>}
-                      </Button>
+                      <PlayCircle className="w-3 h-3" /> Watch demo
+                    </a>
+                    {wasSwapped && (
+                      <p className="text-[10px] text-orange-600 font-medium flex items-center gap-1 mt-0.5">
+                        <ArrowLeftRight className="w-2.5 h-2.5" /> swapped from {ex.name}
+                      </p>
                     )}
                   </div>
                 </div>
-
-                {/* Meta tags */}
-                <div className="flex flex-wrap gap-1.5 mt-2 ml-8">
-                  {ex.perSetReps && ex.perSetReps.length > 0
-                    ? <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.perSetReps.join("/")} reps</span>
-                    : ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
-                  {!ex.perSetRpe?.length && ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
-                  {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
+                <div className="exercise-actions">
+                  <Button
+                    size="sm" variant="ghost"
+                    className={`rounded-xl gap-1 h-8 px-2 text-xs ${isSwapping ? "text-orange-600 bg-orange-50" : "text-muted-foreground hover:text-foreground"}`}
+                    onClick={() => { if (isSwapping) { cancelSwap(); } else { setSwappingExId(ex.id); setSwapText(""); } }}
+                    disabled={isParsing || (!!listeningFor && !isListening)}
+                  >
+                    {isSwapping ? <X className="w-3.5 h-3.5" /> : <ArrowLeftRight className="w-3.5 h-3.5" />}
+                    {isSwapping ? "Cancel" : "Swap"}
+                  </Button>
+                  {!isSwapping && (
+                    <Button
+                      size="sm"
+                      variant={isListening ? "default" : "outline"}
+                      className={`rounded-xl gap-1.5 h-8 px-3 text-xs ${isListening ? "bg-destructive hover:bg-destructive/90 text-white border-0" : ""}`}
+                      onClick={() => startLogListening(ex.id)}
+                      disabled={isParsing || (!!listeningFor && !isListening)}
+                    >
+                      {isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
+                        isListening ? <><Square className="w-3 h-3 fill-current" /> Stop</> :
+                        <><Mic className="w-3.5 h-3.5" /> Log</>}
+                    </Button>
+                  )}
                 </div>
-                {ex.notes && <p className="text-xs text-muted-foreground mt-1.5 ml-8 italic">{ex.notes}</p>}
-
-                {/* Last time reminder — weights/reps */}
-                {(() => {
-                  const prev = prevLogs[ex.name.toLowerCase().trim()];
-                  if (!prev) return null;
-                  const setsText = prev.sets
-                    .map(s => {
-                      if (s.weight !== null && s.reps !== null) return `${s.weight}×${s.reps}`;
-                      if (s.weight !== null) return `${s.weight}kg`;
-                      if (s.reps !== null) return `×${s.reps}`;
-                      return null;
-                    })
-                    .filter(Boolean)
-                    .join(" · ");
-                  if (!setsText) return null;
-                  return (
-                    <div className="flex items-center gap-1.5 mt-2 ml-8">
-                      <Clock className="w-3 h-3 text-blue-400 shrink-0" />
-                      <p className="text-[11px] text-muted-foreground">
-                        <span className="font-semibold text-blue-500">{format(parseISO(prev.date), "d MMM")}:</span>{" "}
-                        {setsText}
-                      </p>
-                    </div>
-                  );
-                })()}
-                {/* Last time reminder — exercise comment */}
-                {(() => {
-                  const prevComment = prevSession?.exerciseComments[ex.name.toLowerCase().trim()];
-                  if (!prevComment) return null;
-                  return (
-                    <div className="flex items-start gap-1.5 mt-1 ml-8">
-                      <span className="text-[11px] text-amber-600 font-semibold shrink-0 mt-px">Note:</span>
-                      <p className="text-[11px] text-amber-700 italic leading-snug">"{prevComment}"</p>
-                    </div>
-                  );
-                })()}
               </div>
 
-              {/* Swap input panel */}
+              {/* Meta tags */}
+              <div className="flex flex-wrap gap-1.5 mb-2 ml-8">
+                {ex.perSetReps && ex.perSetReps.length > 0
+                  ? <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.perSetReps.join("/")} reps</span>
+                  : ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
+                {!ex.perSetRpe?.length && ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
+                {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
+              </div>
+              {ex.notes && <p className="text-xs text-muted-foreground mb-2 ml-8 italic">{ex.notes}</p>}
+
+              {/* Last time reminder — weights/reps */}
+              {(() => {
+                const prev = prevLogs[ex.name.toLowerCase().trim()];
+                if (!prev) return null;
+                const setsText = prev.sets
+                  .map(s => {
+                    if (s.weight !== null && s.reps !== null) return `${s.weight}×${s.reps}`;
+                    if (s.weight !== null) return `${s.weight}kg`;
+                    if (s.reps !== null) return `×${s.reps}`;
+                    return null;
+                  })
+                  .filter(Boolean)
+                  .join(" · ");
+                if (!setsText) return null;
+                return (
+                  <div className="flex items-center gap-1.5 mb-1 ml-8">
+                    <Clock className="w-3 h-3 text-blue-400 shrink-0" />
+                    <p className="text-[11px] text-muted-foreground">
+                      <span className="font-semibold text-blue-500">{format(parseISO(prev.date), "d MMM")}:</span>{" "}
+                      {setsText}
+                    </p>
+                  </div>
+                );
+              })()}
+              {(() => {
+                const prevComment = prevSession?.exerciseComments[ex.name.toLowerCase().trim()];
+                if (!prevComment) return null;
+                return (
+                  <div className="flex items-start gap-1.5 mb-1 ml-8">
+                    <span className="text-[11px] text-amber-600 font-semibold shrink-0 mt-px">Note:</span>
+                    <p className="text-[11px] text-amber-700 italic leading-snug">"{prevComment}"</p>
+                  </div>
+                );
+              })()}
+
+              {/* Swap input panel — negative margin to break out of card padding */}
               {isSwapping && (
-                <div className="px-4 py-4 bg-orange-50/60 border-b border-orange-100">
+                <div className="-mx-4 mt-3 px-4 py-4 bg-orange-50/60 border-y border-orange-100">
                   <p className="text-xs font-semibold text-orange-700 mb-2 flex items-center gap-1.5">
                     <ArrowLeftRight className="w-3.5 h-3.5" /> What did you swap to?
                   </p>
@@ -1247,7 +1240,7 @@ export default function ClientSession() {
               )}
 
               {/* Set rows */}
-              <div className="px-4 py-3">
+              <div className="mt-3">
                 {isParsing ? (
                   <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin text-primary" />Parsing your log...
@@ -1255,8 +1248,8 @@ export default function ClientSession() {
                 ) : setsCount === 0 ? (
                   <p className="text-xs text-muted-foreground italic text-center py-2">No sets defined</p>
                 ) : (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-1 mb-1">
+                  <>
+                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-2 mb-1">
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Set</span>
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Weight (kg)</span>
                       <div className="text-center">
@@ -1274,7 +1267,7 @@ export default function ClientSession() {
                       const perSetTarget = ex.perSetReps?.[setIdx];
                       const perSetRpeTarget = ex.perSetRpe?.[setIdx];
                       return (
-                        <div key={setIdx} className={`grid grid-cols-[3rem_1fr_1fr] gap-2 items-center rounded-xl px-2 py-1.5 transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
+                        <div key={setIdx} className={`set-row transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
                           <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
                             <div>{setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}</div>
                             {perSetRpeTarget && <div className="text-[9px] font-semibold text-muted-foreground normal-case">RPE {perSetRpeTarget}</div>}
@@ -1303,13 +1296,13 @@ export default function ClientSession() {
                         </div>
                       );
                     })}
-                  </div>
+                  </>
                 )}
               </div>
 
               {/* Client comment box */}
-              <div className="px-4 pb-4">
-                <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-muted bg-muted/20 hover:border-muted-foreground/30"}`}>
+              <div className="notes-section">
+                <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-border bg-muted/20 hover:border-muted-foreground/30"}`}>
                   <textarea
                     value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
                     onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
@@ -1347,44 +1340,45 @@ export default function ClientSession() {
           const totalIdx = (session.exercises?.length || 0) + exIdx;
 
           return (
-            <div key={ex.id} className="bg-card rounded-2xl border border-dashed border-primary/40 shadow-sm overflow-hidden">
-              <div className="px-4 pt-4 pb-3 border-b bg-primary/5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${allLogged ? "bg-green-100 text-green-700" : "bg-primary/20 text-primary"}`}>
-                      {allLogged ? "✓" : totalIdx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="font-bold text-base leading-tight">{ex.name}</h3>
-                      <p className="text-[10px] text-primary/60 font-medium mt-0.5 flex items-center gap-1">
-                        <Plus className="w-2.5 h-2.5" /> added by you
-                      </p>
-                    </div>
+            <div key={ex.id} className="exercise border-dashed border-primary/40">
+              <div className="exercise-header">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${allLogged ? "bg-green-100 text-green-700" : "bg-primary/20 text-primary"}`}>
+                    {allLogged ? "✓" : totalIdx + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="exercise-name">{ex.name}</h3>
+                    <p className="text-[10px] text-primary/60 font-medium mt-0.5 flex items-center gap-1">
+                      <Plus className="w-2.5 h-2.5" /> added by you
+                    </p>
                   </div>
+                </div>
+                <div className="exercise-actions">
                   <Button
                     size="sm" variant="ghost"
-                    className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                    className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                     onClick={() => removeAddedExercise(ex.id)}
                   >
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-2 ml-8">
-                  {ex.perSetReps && ex.perSetReps.length > 0
-                    ? <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.perSetReps.join("/")} reps</span>
-                    : ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
-                  {!ex.perSetRpe?.length && ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
-                  {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
-                </div>
-                {ex.notes && <p className="text-xs text-muted-foreground mt-1.5 ml-8 italic">{ex.notes}</p>}
               </div>
 
-              <div className="px-4 py-3">
+              <div className="flex flex-wrap gap-1.5 mb-2 ml-8">
+                {ex.perSetReps && ex.perSetReps.length > 0
+                  ? <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.perSetReps.join("/")} reps</span>
+                  : ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
+                {!ex.perSetRpe?.length && ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
+                {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
+              </div>
+              {ex.notes && <p className="text-xs text-muted-foreground mb-2 ml-8 italic">{ex.notes}</p>}
+
+              <div className="mt-3">
                 {setsCount === 0 ? (
                   <p className="text-xs text-muted-foreground italic text-center py-2">No sets defined</p>
                 ) : (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-1 mb-1">
+                  <>
+                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-2 mb-1">
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Set</span>
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Weight (kg)</span>
                       <div className="text-center">
@@ -1400,8 +1394,8 @@ export default function ClientSession() {
                       const log = exLogs[setIdx] || { weight: null, reps: null };
                       const isDone = log.weight !== null || log.reps !== null;
                       return (
-                        <div key={setIdx} className={`grid grid-cols-[3rem_1fr_1fr] gap-2 items-center rounded-xl px-2 py-1.5 ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
-                          <div className={`text-sm font-bold pl-1 ${isDone ? "text-primary" : "text-muted-foreground"}`}>
+                        <div key={setIdx} className={`set-row transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
+                          <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
                             {setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}
                           </div>
                           <Input
@@ -1421,13 +1415,13 @@ export default function ClientSession() {
                         </div>
                       );
                     })}
-                  </div>
+                  </>
                 )}
               </div>
 
               {/* Client comment box */}
-              <div className="px-4 pb-4">
-                <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-muted bg-muted/20 hover:border-muted-foreground/30"}`}>
+              <div className="notes-section">
+                <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-border bg-muted/20 hover:border-muted-foreground/30"}`}>
                   <textarea
                     value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
                     onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
