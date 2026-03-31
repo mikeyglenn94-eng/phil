@@ -145,6 +145,7 @@ export default function ClientSession() {
 
   // Share state
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
 
   // Feedback state
   const [feedbackText, setFeedbackText] = useState("");
@@ -661,60 +662,179 @@ export default function ClientSession() {
     </div>
   );
 
-  // ── Share workout ────────────────────────────────────────────────────────────
-  function buildShareText(): string {
-    const name = session.name || "Session";
-    const dateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM");
+  // ── Share workout — transparent PNG card (Strava-style) ──────────────────────
+  async function generateShareImage(): Promise<File | null> {
+    await document.fonts.ready;
+    const W = 1080, H = 1920;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
     const src = (session as any).source as string | undefined;
     const isCondition = src === "wod_brain" || src === "run_brain" || src === "endurance_cycle";
 
-    if (isCondition) {
-      const emoji = src === "run_brain" ? "🏃" : "🔥";
-      const structure = (session as any).structure as string | undefined;
-      const exerciseLines = (session.exercises || [])
-        .map(ex => `• ${ex.name}${ex.notes ? ` — ${ex.notes}` : ""}`)
-        .join("\n");
-      const comment = sessionComment.trim();
-      const lines = [`${emoji} ${name} — ${dateStr}`, ""];
-      if (structure) lines.push(structure);
-      else if (exerciseLines) lines.push(exerciseLines);
-      if (comment) { lines.push(""); lines.push(`"${comment}"`); }
-      lines.push("", "Training with Axis 🏋️");
-      return lines.join("\n");
-    } else {
-      const exerciseNames = [...(session.exercises || []), ...addedExercises]
-        .map(ex => `• ${nameOverrides[ex.id] || ex.name}`)
-        .join("\n");
-      let totalKg = 0;
-      let hasWeight = false;
-      for (const ex of [...(session.exercises || []), ...addedExercises]) {
+    // Collect exercises and metrics
+    const allExercises = [...(session.exercises || []), ...addedExercises];
+    let totalKg = 0, hasWeight = false;
+    if (!isCondition) {
+      for (const ex of allExercises) {
         for (const set of (logs[ex.id] || [])) {
-          if (set.weight !== null && set.reps !== null) {
-            totalKg += set.weight * set.reps;
-            hasWeight = true;
-          }
+          if (set.weight !== null && set.reps !== null) { totalKg += set.weight * set.reps; hasWeight = true; }
         }
       }
-      const lines = [`💪 ${name} — ${dateStr}`];
-      if (hasWeight) { lines.push(""); lines.push(`Total lifted: ${Math.round(totalKg).toLocaleString()} kg`); }
-      if (exerciseNames) { lines.push(""); lines.push("Exercises:"); lines.push(exerciseNames); }
-      lines.push("", "Training with Axis 🏋️");
-      return lines.join("\n");
     }
+
+    const dateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM").toUpperCase();
+    const name = session.name || "Session";
+    const structure = (session as any).structure as string | undefined;
+
+    // Rounded rect helper
+    function rr(x: number, y: number, w: number, h: number, r: number) {
+      ctx!.beginPath();
+      ctx!.moveTo(x + r, y);
+      ctx!.arcTo(x + w, y, x + w, y + h, r);
+      ctx!.arcTo(x + w, y + h, x, y + h, r);
+      ctx!.arcTo(x, y + h, x, y, r);
+      ctx!.arcTo(x, y, x + w, y, r);
+      ctx!.closePath();
+    }
+
+    // Card geometry — bottom ~42% of the 1920px canvas
+    const pad = 52;
+    const cardTop = Math.round(H * 0.555);
+    const cardH = H - cardTop - 44;
+    const cardW = W - pad * 2;
+
+    // ── Card background (dark, semi-transparent — so video shows through) ──────
+    ctx.fillStyle = "rgba(6, 6, 18, 0.84)";
+    rr(pad, cardTop, cardW, cardH, 40);
+    ctx.fill();
+
+    // Indigo accent bar along top-left of card
+    ctx.fillStyle = "rgba(99, 102, 241, 0.9)";
+    rr(pad, cardTop, 200, 5, 3);
+    ctx.fill();
+
+    const cx = pad + 48;
+    let cy = cardTop + 60;
+
+    // ── AXIS brand + date ────────────────────────────────────────────────────
+    ctx.fillStyle = "rgba(99, 102, 241, 1)";
+    ctx.font = "700 30px 'Inter', system-ui, sans-serif";
+    ctx.fillText("AXIS", cx, cy);
+
+    ctx.fillStyle = "rgba(255,255,255,0.42)";
+    ctx.font = "28px 'Inter', system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(dateStr, pad + cardW - 48, cy);
+    ctx.textAlign = "left";
+    cy += 66;
+
+    // ── Session name ─────────────────────────────────────────────────────────
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "700 62px 'Inter', system-ui, sans-serif";
+    let displayName = name;
+    const maxNW = cardW - 96;
+    while (ctx.measureText(displayName).width > maxNW && displayName.length > 6)
+      displayName = displayName.slice(0, -1);
+    if (displayName !== name) displayName += "…";
+    ctx.fillText(displayName, cx, cy);
+    cy += 20;
+
+    // ── Divider ──────────────────────────────────────────────────────────────
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy + 24); ctx.lineTo(pad + cardW - 48, cy + 24); ctx.stroke();
+    cy += 60;
+
+    if (!isCondition) {
+      // ── Strength: total weight + exercise list ───────────────────────────
+      if (hasWeight) {
+        ctx.fillStyle = "rgba(165, 180, 252, 1)"; // indigo-300
+        ctx.font = "700 90px 'Inter', system-ui, sans-serif";
+        ctx.fillText(`${Math.round(totalKg).toLocaleString()} kg`, cx, cy);
+        cy += 14;
+        ctx.fillStyle = "rgba(255,255,255,0.38)";
+        ctx.font = "28px 'Inter', system-ui, sans-serif";
+        ctx.fillText("TOTAL LIFTED", cx, cy + 30);
+        cy += 78;
+      }
+      ctx.fillStyle = "rgba(255,255,255,0.72)";
+      ctx.font = "36px 'Inter', system-ui, sans-serif";
+      for (const ex of allExercises.slice(0, 6)) {
+        if (cy > cardTop + cardH - 60) break;
+        ctx.fillText(`· ${nameOverrides[ex.id] || ex.name}`, cx, cy);
+        cy += 50;
+      }
+    } else {
+      // ── WOD/Run: structure or exercise list + athlete comment ────────────
+      if (structure) {
+        ctx.fillStyle = "rgba(255,255,255,0.80)";
+        ctx.font = "38px 'Inter', system-ui, sans-serif";
+        const words = structure.split(" ");
+        let line = "";
+        for (const word of words) {
+          const test = line ? `${line} ${word}` : word;
+          if (ctx.measureText(test).width > cardW - 96) {
+            if (cy > cardTop + cardH - 120) break;
+            ctx.fillText(line, cx, cy); cy += 52; line = word;
+          } else { line = test; }
+        }
+        if (line && cy <= cardTop + cardH - 120) { ctx.fillText(line, cx, cy); cy += 52; }
+      } else {
+        ctx.fillStyle = "rgba(255,255,255,0.78)";
+        ctx.font = "38px 'Inter', system-ui, sans-serif";
+        for (const ex of allExercises.slice(0, 5)) {
+          if (cy > cardTop + cardH - 120) break;
+          const notePart = ex.notes ? ` · ${ex.notes}` : "";
+          let line = `· ${ex.name}${notePart}`;
+          while (ctx.measureText(line).width > cardW - 96 && line.length > 4)
+            line = line.slice(0, -1);
+          if (line !== `· ${ex.name}${notePart}`) line += "…";
+          ctx.fillText(line, cx, cy); cy += 52;
+        }
+      }
+      const comment = sessionComment.trim();
+      if (comment && cy <= cardTop + cardH - 60) {
+        cy += 16;
+        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.font = "italic 34px 'Inter', system-ui, sans-serif";
+        let cl = `"${comment}"`;
+        while (ctx.measureText(cl).width > cardW - 96 && cl.length > 4) cl = cl.slice(0, -1);
+        if (cl !== `"${comment}"`) cl += '…"';
+        ctx.fillText(cl, cx, cy);
+      }
+    }
+
+    return new Promise(resolve => {
+      canvas.toBlob(blob => {
+        if (!blob) { resolve(null); return; }
+        resolve(new File([blob], "axis-workout.png", { type: "image/png" }));
+      }, "image/png");
+    });
   }
 
   async function handleShare() {
-    const text = buildShareText();
-    if (typeof navigator.share === "function") {
-      try { await navigator.share({ text }); } catch { /* cancelled */ }
-    } else {
-      try {
-        await navigator.clipboard.writeText(text);
+    setShareLoading(true);
+    try {
+      const file = await generateShareImage();
+      if (file) {
+        // Native file share — shows Instagram, WhatsApp, etc. on iOS/Android
+        if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+          try { await navigator.share({ files: [file], title: session.name || "Workout" }); return; }
+          catch { /* user cancelled or error */ }
+        }
+        // Fallback: download the transparent PNG
+        const url = URL.createObjectURL(file);
+        const a = document.createElement("a");
+        a.href = url; a.download = "axis-workout.png"; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
         setShareCopied(true);
         setTimeout(() => setShareCopied(false), 2500);
-      } catch {
-        toast({ title: "Couldn't copy", description: "Try copying from the session manually." });
       }
+    } finally {
+      setShareLoading(false);
     }
   }
 
@@ -898,11 +1018,14 @@ export default function ClientSession() {
           {/* Share workout */}
           <button
             onClick={handleShare}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
+            disabled={shareLoading}
+            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all disabled:opacity-60"
           >
-            {shareCopied
-              ? <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700">Copied to clipboard!</span></>
-              : <><Share2 className="w-4 h-4" /> Share your workout</>}
+            {shareLoading
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating card…</>
+              : shareCopied
+              ? <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700">Image saved!</span></>
+              : <><Share2 className="w-4 h-4" /> Share workout</>}
           </button>
         </div>
         );
@@ -1383,11 +1506,14 @@ export default function ClientSession() {
         {/* Share workout */}
         <button
           onClick={handleShare}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
+          disabled={shareLoading}
+          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all disabled:opacity-60"
         >
-          {shareCopied
-            ? <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700">Copied to clipboard!</span></>
-            : <><Share2 className="w-4 h-4" /> Share your workout</>}
+          {shareLoading
+            ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating card…</>
+            : shareCopied
+            ? <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700">Image saved!</span></>
+            : <><Share2 className="w-4 h-4" /> Share workout</>}
         </button>
 
         {/* WhatsApp Coach */}
