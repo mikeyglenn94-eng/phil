@@ -1080,10 +1080,7 @@ export default function ClientSession() {
           </div>
 
           {/* Share workout */}
-          <button
-            onClick={openShareModal}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
-          >
+          <button onClick={openShareModal} className="button-secondary w-full">
             <Share2 className="w-4 h-4" /> Share workout
           </button>
         </div>
@@ -1563,10 +1560,7 @@ export default function ClientSession() {
         </div>
 
         {/* Share workout */}
-        <button
-          onClick={openShareModal}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary/30 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
-        >
+        <button onClick={openShareModal} className="button-secondary w-full">
           <Share2 className="w-4 h-4" /> Share workout
         </button>
 

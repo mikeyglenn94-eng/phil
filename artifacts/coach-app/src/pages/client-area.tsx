@@ -1594,16 +1594,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-4 bg-muted/50 rounded-xl p-1 w-fit">
+        <div className="tabs mt-4">
           {(["nutrition", "training"] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === tab
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`tab gap-1.5${activeTab === tab ? " active" : ""}`}
             >
               {tab === "nutrition" ? <Utensils className="w-3.5 h-3.5" /> : <Dumbbell className="w-3.5 h-3.5" />}
               {tab === "nutrition" ? "Nutrition" : "Training"}
@@ -1689,7 +1685,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           )}
 
           {/* Add food input */}
-          <div className="bg-card border rounded-2xl p-4 shadow-sm">
+          <div className="card">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <Plus className="w-3 h-3" /> Add Food / Meal
             </p>
@@ -1806,7 +1802,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               {entries.map((entry: NutritionEntry) => {
                 const isEditing = editingEntryId === entry.id;
                 return (
-                  <div key={entry.id} className="bg-card border rounded-2xl px-4 py-3.5">
+                  <div key={entry.id} className="card" style={{ padding: "14px 16px" }}>
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-sm font-medium leading-snug flex-1">{entry.description}</p>
                       <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
@@ -1913,19 +1909,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
-              <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
-                <button
-                  onClick={() => setCalendarView("month")}
-                  className={`h-7 px-3 text-xs rounded-md font-medium transition-colors ${calendarView === "month" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  Month
-                </button>
-                <button
-                  onClick={() => setCalendarView("week")}
-                  className={`h-7 px-3 text-xs rounded-md font-medium transition-colors ${calendarView === "week" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  Week
-                </button>
+              <div className="tabs">
+                <button onClick={() => setCalendarView("month")} className={`tab${calendarView === "month" ? " active" : ""}`}>Month</button>
+                <button onClick={() => setCalendarView("week")} className={`tab${calendarView === "week" ? " active" : ""}`}>Week</button>
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -2534,7 +2520,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   : quickAddType === "run" ? "e.g. Tuesday Tempo, Long Run"
                   : "e.g. Push Day, Leg Session"
                 }
-                className="w-full mt-1 text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2 outline-none focus:border-primary/40 transition-colors"
+                className="input mt-1"
               />
             </div>
             <div>
@@ -2564,7 +2550,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 }
                 rows={6}
                 autoFocus
-                className="w-full mt-1 text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors resize-none"
+                className="input mt-1 resize-none"
                 onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void handleQuickAdd(); } }}
               />
               {quickAddListening && (
@@ -3132,7 +3118,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           {result.tags?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {result.tags.slice(0, 5).map((tag: string) => (
-                                <span key={tag} className="text-xs opacity-60 border rounded px-1.5 py-0.5 capitalize">{tag.replace(/_/g, " ")}</span>
+                                <span key={tag} className="chip opacity-60 capitalize">{tag.replace(/_/g, " ")}</span>
                               ))}
                             </div>
                           )}
