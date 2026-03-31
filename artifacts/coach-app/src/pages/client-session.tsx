@@ -60,6 +60,26 @@ export default function ClientSession() {
     return programme.sessions.find((s: Session) => s.id === sessionId) || null;
   }, [programme, sessionId]);
 
+  // Most recent past session with the same name that has any comment data
+  const prevSession = useMemo<{ date: string; comment: string | null; exerciseComments: Record<string, string> } | null>(() => {
+    if (!programme?.sessions || !session) return null;
+    const sessionName = session.name?.toLowerCase().trim() || "";
+    if (!sessionName) return null;
+    const past = (programme.sessions as Session[])
+      .filter(s => s.id !== sessionId && s.date < session.date && s.name?.toLowerCase().trim() === sessionName)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    // Prefer a session that has comment data, fall back to any past session
+    const candidate = past.find(s =>
+      (s as any).clientComment || (s.exercises || []).some(ex => ex.clientComment)
+    ) ?? past[0] ?? null;
+    if (!candidate) return null;
+    const exerciseComments: Record<string, string> = {};
+    for (const ex of (candidate.exercises || [])) {
+      if (ex.clientComment) exerciseComments[ex.name.toLowerCase().trim()] = ex.clientComment;
+    }
+    return { date: candidate.date, comment: (candidate as any).clientComment ?? null, exerciseComments };
+  }, [programme, sessionId, session]);
+
   // Previous logged results for each exercise name — used to show "last time" reminder
   const prevLogs = useMemo<Record<string, { date: string; sets: SetLog[] }>>(() => {
     if (!programme?.sessions || !session) return {};
@@ -680,6 +700,33 @@ export default function ClientSession() {
         )}
       </div>
 
+      {/* Last time you did this session */}
+      {prevSession && (prevSession.comment || Object.keys(prevSession.exerciseComments).length > 0) && (
+        <div className="max-w-lg mx-auto px-4 pt-4">
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-amber-700 mb-1">
+                Last time — {format(parseISO(prevSession.date), "EEE d MMM")}
+              </p>
+              {prevSession.comment && (
+                <p className="text-sm text-amber-900 italic leading-snug">"{prevSession.comment}"</p>
+              )}
+              {Object.keys(prevSession.exerciseComments).length > 0 && (
+                <ul className="mt-1.5 space-y-0.5">
+                  {Object.entries(prevSession.exerciseComments).map(([name, comment]) => (
+                    <li key={name} className="text-xs text-amber-800">
+                      <span className="font-semibold capitalize">{name}:</span>{" "}
+                      <span className="italic">"{comment}"</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Log voice listening banner */}
       {listeningFor && (() => {
         const listeningExName = session?.exercises?.find((e: Exercise) => e.id === listeningFor)
@@ -871,7 +918,7 @@ export default function ClientSession() {
                 </div>
                 {ex.notes && <p className="text-xs text-muted-foreground mt-1.5 ml-8 italic">{ex.notes}</p>}
 
-                {/* Last time reminder */}
+                {/* Last time reminder — weights/reps */}
                 {(() => {
                   const prev = prevLogs[ex.name.toLowerCase().trim()];
                   if (!prev) return null;
@@ -892,6 +939,17 @@ export default function ClientSession() {
                         <span className="font-semibold text-blue-500">{format(parseISO(prev.date), "d MMM")}:</span>{" "}
                         {setsText}
                       </p>
+                    </div>
+                  );
+                })()}
+                {/* Last time reminder — exercise comment */}
+                {(() => {
+                  const prevComment = prevSession?.exerciseComments[ex.name.toLowerCase().trim()];
+                  if (!prevComment) return null;
+                  return (
+                    <div className="flex items-start gap-1.5 mt-1 ml-8">
+                      <span className="text-[11px] text-amber-600 font-semibold shrink-0 mt-px">Note:</span>
+                      <p className="text-[11px] text-amber-700 italic leading-snug">"{prevComment}"</p>
                     </div>
                   );
                 })()}
