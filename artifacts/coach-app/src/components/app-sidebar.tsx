@@ -64,7 +64,7 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <Link href="/client">
                   <SidebarMenuButton
-                    className="hover:bg-sidebar-accent/50 font-medium rounded-lg text-primary/80 hover:text-primary"
+                    className="hover:bg-sidebar-accent/50 font-medium rounded-lg text-sidebar-foreground/70 hover:text-sidebar-foreground"
                   >
                     <Eye className="w-4 h-4" />
                     <span>Client Portal</span>
