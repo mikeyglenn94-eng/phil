@@ -1638,8 +1638,13 @@ export default function ClientSession() {
             </div>
 
             {/* Dot indicator */}
-            <div className="flex justify-center gap-2 mb-5">
+            <div className="flex justify-center gap-2 mb-4">
               <div className="w-2 h-2 rounded-full bg-primary" />
+            </div>
+
+            {/* Guidance */}
+            <div className="mx-5 mb-5 px-4 py-3 rounded-xl bg-muted text-muted-foreground text-xs leading-relaxed text-center">
+              Save the image, then add it as an <span className="font-semibold text-foreground">overlay</span> on top of your workout content in Instagram, TikTok, or any editor.
             </div>
 
             {/* Actions */}
