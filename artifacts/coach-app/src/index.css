@@ -427,6 +427,19 @@
     background: var(--accent-soft);
     color: #854D0E;
   }
+
+  .select-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+  }
 }
 
 @layer base {
