@@ -177,6 +177,29 @@
 }
 
 @layer components {
+  .button-primary {
+    background: var(--primary);
+    color: white;
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-weight: 600;
+    border: none;
+  }
+  .button-primary:hover {
+    opacity: 0.9;
+  }
+
+  .button-secondary {
+    background: white;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 12px;
+    padding: 10px 16px;
+  }
+  .button-secondary:hover {
+    background: #F1F5F9;
+  }
+
   .card {
     background: var(--card);
     border: 1px solid var(--border);
