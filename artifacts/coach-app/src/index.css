@@ -201,27 +201,60 @@
 }
 
 @layer components {
+  .button,
+  .button-primary,
+  .button-secondary,
+  .button-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 12px;
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    line-height: 1;
+    cursor: pointer;
+    border: 1px solid transparent;
+    text-decoration: none;
+  }
+
   .button-primary {
     background: var(--primary);
-    color: white;
-    border-radius: 12px;
-    padding: 10px 16px;
-    font-weight: 600;
-    border: none;
+    color: #fff;
+    border-color: var(--primary);
   }
   .button-primary:hover {
-    opacity: 0.9;
+    background: var(--primary-soft);
+    border-color: var(--primary-soft);
   }
 
   .button-secondary {
-    background: white;
-    border: 1px solid var(--border);
+    background: #fff;
     color: var(--text-primary);
-    border-radius: 12px;
-    padding: 10px 16px;
+    border-color: var(--border);
   }
   .button-secondary:hover {
+    background: #F8FAFC;
+  }
+
+  .button-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: transparent;
+  }
+  .button-ghost:hover {
     background: #F1F5F9;
+    color: var(--text-primary);
+  }
+
+  .button:disabled,
+  .button-primary:disabled,
+  .button-secondary:disabled,
+  .button-ghost:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .card {
