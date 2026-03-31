@@ -403,6 +403,30 @@
     background: #F8FAFC;
     color: var(--text-primary);
   }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    background: #F1F5F9;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chip-primary {
+    background: #E2E8F0;
+    color: #0F172A;
+  }
+  .chip-accent {
+    background: var(--accent-soft);
+    color: #854D0E;
+  }
 }
 
 @layer base {
