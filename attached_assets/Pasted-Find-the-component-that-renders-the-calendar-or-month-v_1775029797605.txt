@@ -1,0 +1,94 @@
+Find the component that renders the calendar or month view, the screen that shows days in a grid with workouts or items inside each day.
+
+Refactor ONLY that screen.
+
+Important constraints:
+- Do not add any new features
+- Do not change any data, logic, or behaviour
+- Do not change routing, state, props, or API calls
+- Do not add new labels, tags, or information
+- Only improve layout, spacing, typography, and visual hierarchy
+- Keep all existing content exactly as it is
+
+What to improve:
+
+1. Clean up the calendar grid so each day cell feels consistent and readable
+- Ensure even padding inside each day cell
+- Add subtle borders between cells using the design system border colour
+- Make sure spacing between rows and columns is consistent
+
+2. Improve the day number styling
+- Day numbers should be small but clear
+- Use secondary text colour for non-selected days
+- Use primary colour for the current day if that styling already exists
+
+3. Improve how items (workouts / entries) appear inside each day
+- Ensure each item sits on a single line with ellipsis if too long
+- Add small internal padding so items are not touching edges
+- Use a subtle background (like a chip style) rather than raw text
+- Keep font small and readable
+
+4. Standardise item styling using a chip-like pattern
+Use this structure where possible without changing logic:
+- .chip
+- .chip-primary (for main items if already visually highlighted)
+
+5. Improve spacing inside each day cell
+- Add vertical spacing between multiple items
+- Ensure items do not feel cramped
+
+6. Improve selected / active day styling (only if it already exists)
+- Use a subtle background highlight instead of harsh colours
+- Keep it consistent with the design system
+
+7. Improve hover or tap states (purely visual)
+- Slight background change on hover for desktop
+- No behaviour changes
+
+Add or update CSS for consistency:
+
+.calendar-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+}
+
+.calendar-cell {
+  background: #fff;
+  padding: var(--space-3);
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.calendar-day {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.calendar-item {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #F1F5F9;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-item.primary {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+.calendar-cell:hover {
+  background: #F8FAFC;
+}
+
+Do not restructure how data is rendered, only apply these styles and classNames to existing elements.
+
+Keep the result minimal, clean, and easy to scan quickly.
+
+When finished, tell me which file you changed.

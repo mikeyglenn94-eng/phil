@@ -2033,7 +2033,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 ))}
               </div>
               {trainingWeeks.map((week, wi) => (
-                <div key={wi} className={`grid grid-cols-7 border-b ${calendarView === "week" ? "min-h-[calc(100vh-280px)]" : "min-h-[80px]"}`}>
+                <div key={wi} className={`calendar-grid grid-cols-7 border-b ${calendarView === "week" ? "min-h-[calc(100vh-280px)]" : ""}`}>
                   {week.map((day, di) => {
                     const daySessions = allClientSessions.filter(s => {
                       try { return isSameDay(parseISO(s.date), day); } catch { return false; }
@@ -2045,7 +2045,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                       <div
                         key={di}
                         data-date={dateStr}
-                        className={`border-r last:border-r-0 p-1.5 transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${isDropTarget ? "bg-primary/10 ring-2 ring-inset ring-primary/30" : ""}`}
+                        className={`calendar-cell transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${isDropTarget ? "!bg-primary/10 ring-2 ring-inset ring-primary/30" : ""} ${calendarView === "week" ? "!min-h-[calc(100vh-280px)]" : ""}`}
                         onDragOver={e => { e.preventDefault(); setDragOverDate(dateStr); }}
                         onDragLeave={() => setDragOverDate(null)}
                         onDrop={e => {
@@ -2064,8 +2064,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                         }}
                       >
                         {calendarView === "month" ? (
-                          <div className="flex items-center justify-between mb-1">
-                            <div className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+                          <div className="flex items-center justify-between">
+                            <div className={`calendar-day w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
                               {format(day, "d")}
                             </div>
                             <button
@@ -2077,7 +2077,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             </button>
                           </div>
                         ) : null}
-                        <div className="space-y-0.5">
+                        <div className="flex flex-col gap-1">
                           {daySessions.map(session => {
                             const prog = (clientProgrammes ?? []).find(p =>
                               (p.sessions as Session[]).some(s => s.id === session.id)
@@ -2164,7 +2164,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                 onClick={(e) => {
                                   e.stopPropagation();
                                 }}
-                                className={`relative group w-full text-left rounded-md transition-all cursor-grab active:cursor-grabbing overflow-hidden select-none ${calendarView === "week" ? "px-2.5 py-2 text-[11px]" : "px-1.5 py-1 text-[10px] leading-tight font-medium"} ${isTouchPicked ? "opacity-50 scale-95 bg-primary/10 text-primary ring-2 ring-primary/50 ring-offset-1" : "bg-primary/10 hover:bg-primary/20 text-primary"}`}
+                                className={`calendar-item relative group w-full text-left select-none transition-all ${calendarView === "week" ? "!whitespace-normal !px-2.5 !py-2 !text-[11px] !bg-primary/10 !text-primary !rounded-md !overflow-visible hover:!bg-primary/20" : ""} ${isTouchPicked ? "opacity-50 scale-95 ring-2 ring-primary/50 ring-offset-1" : ""}`}
                               >
                                 {calendarView === "month" ? (
                                   <>
