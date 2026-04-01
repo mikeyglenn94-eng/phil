@@ -1610,43 +1610,43 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
       {/* Nutrition Tab */}
       {activeTab === "nutrition" && (
-        <div className="px-6 py-6 max-w-2xl mx-auto space-y-5">
+        <div className="nutrition-screen px-6 py-6 max-w-2xl mx-auto">
           {/* Date selector */}
-          <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-muted-foreground" />
+          <div className="nutrition-date">
+            <CalendarDays className="w-5 h-5 text-muted-foreground" />
             <input
               type="date"
               value={selectedDate}
               onChange={e => setSelectedDate(e.target.value)}
-              className="text-sm font-medium bg-transparent border-none outline-none cursor-pointer text-foreground"
+              className="bg-transparent border-none outline-none cursor-pointer"
             />
           </div>
 
           {/* Daily totals */}
           {((entries?.length ?? 0) > 0 || (client?.dailyCalorieGoal ?? 0) > 0) && (
-            <div className="bg-primary/5 border border-primary/15 rounded-2xl px-5 py-4 space-y-3">
-              {/* Consumed row */}
+            <div className="card totals-card">
+              {/* Consumed section */}
               {(entries?.length ?? 0) > 0 && (
-                <>
-                  <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider">Daily Totals</p>
-                  <div className="grid grid-cols-4 gap-3 text-center">
+                <div className="totals-section">
+                  <p className="totals-heading">Daily Totals</p>
+                  <div className="totals-grid">
                     {[
                       { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500" },
-                      { label: "Protein", value: totals.protein.toFixed(1), unit: "g", color: "text-blue-500" },
-                      { label: "Carbs", value: totals.carbs.toFixed(1), unit: "g", color: "text-yellow-500" },
-                      { label: "Fats", value: totals.fats.toFixed(1), unit: "g", color: "text-pink-500" },
+                      { label: "Protein",  value: totals.protein.toFixed(1),   unit: "g",    color: "text-blue-500"   },
+                      { label: "Carbs",    value: totals.carbs.toFixed(1),     unit: "g",    color: "text-yellow-500" },
+                      { label: "Fats",     value: totals.fats.toFixed(1),      unit: "g",    color: "text-pink-500"   },
                     ].map(({ label, value, unit, color }) => (
-                      <div key={label}>
-                        <p className={`text-lg font-bold ${color}`}>{value}</p>
-                        <p className="text-[10px] text-muted-foreground font-medium">{unit}</p>
-                        <p className="text-[10px] text-muted-foreground">{label}</p>
+                      <div key={label} className="total-metric">
+                        <p className={`total-value ${color}`}>{value}</p>
+                        <p className="total-unit">{unit}</p>
+                        <p className="total-label">{label}</p>
                       </div>
                     ))}
                   </div>
-                </>
+                </div>
               )}
 
-              {/* Remaining row */}
+              {/* Remaining section */}
               {(client?.dailyCalorieGoal ?? 0) > 0 && (() => {
                 const remCal = (client!.dailyCalorieGoal ?? 0) - Math.round(totals.calories);
                 const remPro = (client!.dailyProteinGoal ?? 0) - totals.protein;
@@ -1654,108 +1654,129 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 const remFat = (client!.dailyFatGoal ?? 0) - totals.fats;
                 const remainingItems = [
                   { label: "Calories", value: Math.abs(Math.round(remCal)), unit: "kcal", over: remCal < 0 },
-                  { label: "Protein", value: Math.abs(remPro).toFixed(1), unit: "g", over: remPro < 0 },
-                  { label: "Carbs", value: Math.abs(remCarb).toFixed(1), unit: "g", over: remCarb < 0 },
-                  { label: "Fats", value: Math.abs(remFat).toFixed(1), unit: "g", over: remFat < 0 },
+                  { label: "Protein",  value: Math.abs(remPro).toFixed(1),  unit: "g",    over: remPro < 0  },
+                  { label: "Carbs",    value: Math.abs(remCarb).toFixed(1), unit: "g",    over: remCarb < 0 },
+                  { label: "Fats",     value: Math.abs(remFat).toFixed(1),  unit: "g",    over: remFat < 0  },
                 ];
                 return (
-                  <>
-                    {(entries?.length ?? 0) > 0 && <div className="border-t border-primary/10" />}
-                    <p className="text-xs font-semibold text-primary/70 uppercase tracking-wider">
+                  <div className="totals-section">
+                    <p className="totals-heading">
                       {remainingItems.some(r => r.over) ? "Remaining / Over" : "Remaining"}
                     </p>
-                    <div className="grid grid-cols-4 gap-3 text-center">
+                    <div className="totals-grid">
                       {remainingItems.map(({ label, value, unit, over }) => (
-                        <div key={label}>
-                          <p className={`text-lg font-bold ${over ? "text-red-500" : "text-green-500"}`}>
+                        <div key={label} className="total-metric">
+                          <p className={`total-value ${over ? "text-red-500" : "text-green-500"}`}>
                             {over ? "-" : ""}{value}
                           </p>
-                          <p className="text-[10px] text-muted-foreground font-medium">{unit}</p>
-                          <p className="text-[10px] text-muted-foreground">{label}</p>
+                          <p className="total-unit">{unit}</p>
+                          <p className="total-label">{label}</p>
                         </div>
                       ))}
                     </div>
                     {(entries?.length ?? 0) === 0 && (
-                      <p className="text-[11px] text-muted-foreground/60 text-center">Nothing logged yet — full allowance remaining</p>
+                      <p className="meal-help-text text-center mt-3">Nothing logged yet — full allowance remaining</p>
                     )}
-                  </>
+                  </div>
                 );
               })()}
             </div>
           )}
 
           {/* Add food input */}
-          <div className="card">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <Plus className="w-3 h-3" /> Add Food / Meal
+          <div className="card meal-card">
+            <p className="section-title mb-4 flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Add Food / Meal
             </p>
 
-            {/* Label photo thumbnails */}
-            {labelPreviews.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {labelPreviews.map((src, i) => (
-                  <div key={i} className="relative inline-block">
-                    <img src={src} alt={`Label ${i + 1}`} className="h-24 w-auto rounded-xl border object-cover shadow-sm" />
-                    <button
-                      onClick={() => removeLabelPhoto(i)}
-                      className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5 shadow-sm text-muted-foreground hover:text-red-500 transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                    <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] font-medium rounded-md px-1.5 py-0.5">
-                      {i + 1}/{labelPreviews.length}
+            <div className="meal-input-group">
+              {/* Label photo thumbnails */}
+              {labelPreviews.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {labelPreviews.map((src, i) => (
+                    <div key={i} className="relative inline-block">
+                      <img src={src} alt={`Label ${i + 1}`} className="h-24 w-auto rounded-xl border object-cover shadow-sm" />
+                      <button
+                        onClick={() => removeLabelPhoto(i)}
+                        className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5 shadow-sm text-muted-foreground hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] font-medium rounded-md px-1.5 py-0.5">
+                        {i + 1}/{labelPreviews.length}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+
+              {/* Text input */}
+              <div className="relative">
+                <textarea
+                  value={listening ? (interim || foodInput) : foodInput}
+                  onChange={e => setFoodInput(e.target.value)}
+                  placeholder={
+                    labelImages.length > 0
+                      ? 'Add a note (optional) — e.g. "2 servings" or "half a pack"'
+                      : listening
+                      ? "Listening…"
+                      : 'e.g. "200g chicken breast, 100g basmati rice, 1 tbsp olive oil"'
+                  }
+                  rows={2}
+                  disabled={listening}
+                  className="input resize-none !min-h-[64px] pr-10"
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdd(); } }}
+                />
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className={`absolute right-2 bottom-2.5 p-1.5 rounded-lg transition-colors ${listening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                  title={listening ? "Stop" : "Dictate"}
+                >
+                  {listening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-3.5 h-3.5" />}
+                </button>
               </div>
-            )}
 
-            <div className="relative">
-              <textarea
-                value={listening ? (interim || foodInput) : foodInput}
-                onChange={e => setFoodInput(e.target.value)}
-                placeholder={
-                  labelImages.length > 0
-                    ? 'Add a note (optional) — e.g. "2 servings" or "half a pack"'
-                    : listening
-                    ? "Listening…"
-                    : 'e.g. "200g chicken breast, 100g basmati rice, 1 tbsp olive oil"'
-                }
-                rows={2}
-                disabled={listening}
-                className="w-full resize-none text-sm bg-muted/40 border border-muted rounded-xl px-3 py-2.5 pr-10 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdd(); } }}
-              />
-              <button
-                type="button"
-                onClick={toggleListening}
-                className={`absolute right-2 bottom-2.5 p-1.5 rounded-lg transition-colors ${listening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-                title={listening ? "Stop" : "Dictate"}
-              >
-                {listening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-3.5 h-3.5" />}
-              </button>
-            </div>
+              {/* Actions row */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => labelInputRef.current?.click()}
+                  className={`button-secondary flex-shrink-0 gap-1.5 ${labelImages.length > 0 ? "border-primary/40 bg-primary/10 text-primary" : ""}`}
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  {labelImages.length > 0 ? `${labelImages.length} label${labelImages.length > 1 ? "s" : ""} added` : "Scan labels"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAdd}
+                  disabled={(!foodInput.trim() && !labelImages.length) || isAdding || listening}
+                  className="flex flex-1 items-center justify-center gap-2 min-h-[44px] px-4 rounded-xl text-sm font-semibold bg-primary text-primary-foreground border border-primary hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                >
+                  {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
+                </button>
+              </div>
 
-            <div className="flex gap-2 mt-2">
+              {/* Guide toggle */}
               <button
-                type="button"
-                onClick={() => labelInputRef.current?.click()}
-                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border transition-colors flex-shrink-0 ${
-                  labelImages.length > 0
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-muted bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-primary hover:bg-primary/5"
-                }`}
+                onClick={() => setShowGuide(g => !g)}
+                className="meal-help-text flex items-center gap-1 hover:text-primary transition-colors"
               >
-                <Camera className="w-3.5 h-3.5" />
-                {labelImages.length > 0 ? `${labelImages.length} label${labelImages.length > 1 ? "s" : ""} added` : "Scan labels"}
+                <Info className="w-3 h-3" />
+                Tips for accurate estimates
+                {showGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               </button>
-              <Button
-                onClick={handleAdd}
-                disabled={(!foodInput.trim() && !labelImages.length) || isAdding || listening}
-                className="rounded-xl h-9 px-4 flex-1"
-              >
-                {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
-              </Button>
+              {showGuide && (
+                <div className="p-3 bg-primary/5 border border-primary/15 rounded-xl text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
+                  <p className="font-semibold text-foreground/70 mb-1">Always describe your quantity in <span className="text-primary">servings or grams</span> — even grams gives a better estimate than nothing:</p>
+                  <p>✅ <span className="text-foreground/80">200g chicken breast, 120g cooked white rice, 1 tbsp olive oil</span></p>
+                  <p>✅ <span className="text-foreground/80">3 large scrambled eggs, 2 slices wholegrain toast, 10g butter</span></p>
+                  <p>✅ <span className="text-foreground/80">McDonald's Big Mac and medium fries</span></p>
+                  <p>✅ <span className="text-foreground/80">Protein shake — 1 scoop MyProtein Impact Whey, 300ml whole milk</span></p>
+                  <p className="pt-1 border-t border-primary/10">📷 <strong>Scanning a label?</strong> Add a note like <em>"4 bags"</em> or <em>"120g"</em> so the AI knows your portion. Without a quantity it assumes 1 serving.</p>
+                  <p className="border-t border-primary/10 pt-1">The AI shows what it assumed so you can spot any errors.</p>
+                </div>
+              )}
             </div>
 
             <input
@@ -1766,25 +1787,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               className="hidden"
               onChange={handleLabelPhoto}
             />
-            <button
-              onClick={() => setShowGuide(g => !g)}
-              className="mt-2.5 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
-            >
-              <Info className="w-3 h-3" />
-              Tips for accurate estimates
-              {showGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {showGuide && (
-              <div className="mt-2 p-3 bg-primary/5 border border-primary/15 rounded-xl text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
-                <p className="font-semibold text-foreground/70 mb-1">Always describe your quantity in <span className="text-primary">servings or grams</span> — even grams gives a better estimate than nothing:</p>
-                <p>✅ <span className="text-foreground/80">200g chicken breast, 120g cooked white rice, 1 tbsp olive oil</span></p>
-                <p>✅ <span className="text-foreground/80">3 large scrambled eggs, 2 slices wholegrain toast, 10g butter</span></p>
-                <p>✅ <span className="text-foreground/80">McDonald's Big Mac and medium fries</span></p>
-                <p>✅ <span className="text-foreground/80">Protein shake — 1 scoop MyProtein Impact Whey, 300ml whole milk</span></p>
-                <p className="pt-1 border-t border-primary/10">📷 <strong>Scanning a label?</strong> Add a note like <em>"4 bags"</em> or <em>"120g"</em> so the AI knows your portion. Without a quantity it assumes 1 serving.</p>
-                <p className="border-t border-primary/10 pt-1">The AI shows what it assumed so you can spot any errors.</p>
-              </div>
-            )}
           </div>
 
           {/* Entries list */}
@@ -1798,91 +1800,77 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               <p className="text-sm">No food logged for this day yet</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-3">
               {entries.map((entry: NutritionEntry) => {
                 const isEditing = editingEntryId === entry.id;
                 return (
-                  <div key={entry.id} className="card" style={{ padding: "14px 16px" }}>
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-medium leading-snug flex-1">{entry.description}</p>
-                      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                        {isEditing ? (
+                  <div key={entry.id} className="card">
+                    <div className="food-entry">
+                      <div className="food-entry-header">
+                        <p className="food-entry-title flex-1">{entry.description}</p>
+                        <div className="food-entry-actions">
+                          {isEditing ? (
+                            <button
+                              onClick={() => handleSaveEdit(entry.id)}
+                              className="icon-button text-green-500 hover:text-green-600"
+                              title="Save"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => startEditing(entry)}
+                              className="icon-button"
+                              title="Edit macros"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleSaveEdit(entry.id)}
-                            className="text-green-500 hover:text-green-600 transition-colors"
-                            title="Save"
+                            onClick={() => { setEditingEntryId(null); handleDelete(entry.id); }}
+                            className="icon-button hover:text-red-400"
+                            title="Delete"
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        ) : (
-                          <button
-                            onClick={() => startEditing(entry)}
-                            className="text-muted-foreground/40 hover:text-primary transition-colors"
-                            title="Edit macros"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => { setEditingEntryId(null); handleDelete(entry.id); }}
-                          className="text-muted-foreground/40 hover:text-red-400 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {isEditing ? (
-                      <div className="mt-2.5 grid grid-cols-4 gap-2">
-                        {[
-                          { label: "kcal", value: editCalories, set: setEditCalories, color: "text-orange-500" },
-                          { label: "P (g)", value: editProtein, set: setEditProtein, color: "text-blue-500" },
-                          { label: "C (g)", value: editCarbs, set: setEditCarbs, color: "text-yellow-600" },
-                          { label: "F (g)", value: editFats, set: setEditFats, color: "text-pink-500" },
-                        ].map(({ label, value, set, color }) => (
-                          <div key={label} className="flex flex-col gap-0.5">
-                            <label className={`text-[10px] font-semibold ${color}`}>{label}</label>
-                            <input
-                              type="number"
-                              value={value}
-                              onChange={e => set(e.target.value)}
-                              className="w-full text-xs bg-muted/50 border border-muted rounded-lg px-2 py-1.5 outline-none focus:border-primary/40 text-center"
-                              onKeyDown={e => { if (e.key === "Enter") handleSaveEdit(entry.id); if (e.key === "Escape") setEditingEntryId(null); }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      entry.calories !== null && (
-                        <div className="flex gap-2 mt-2.5 flex-wrap">
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-500 bg-orange-50 rounded-lg px-2 py-0.5">
-                            {entry.calories} kcal
-                          </span>
-                          {entry.protein && (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-500 bg-blue-50 rounded-lg px-2 py-0.5">
-                              P: {parseFloat(entry.protein).toFixed(1)}g
-                            </span>
-                          )}
-                          {entry.carbs && (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-600 bg-yellow-50 rounded-lg px-2 py-0.5">
-                              C: {parseFloat(entry.carbs).toFixed(1)}g
-                            </span>
-                          )}
-                          {entry.fats && (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-pink-500 bg-pink-50 rounded-lg px-2 py-0.5">
-                              F: {parseFloat(entry.fats).toFixed(1)}g
-                            </span>
-                          )}
                         </div>
-                      )
-                    )}
+                      </div>
 
-                    {!isEditing && entry.aiNote && (
-                      <p className="mt-1.5 text-[10px] text-muted-foreground/70 italic leading-snug">
-                        AI assumed: {entry.aiNote}
-                      </p>
-                    )}
+                      {isEditing ? (
+                        <div className="grid grid-cols-4 gap-2">
+                          {[
+                            { label: "kcal", value: editCalories, set: setEditCalories, color: "text-orange-500" },
+                            { label: "P (g)", value: editProtein, set: setEditProtein, color: "text-blue-500" },
+                            { label: "C (g)", value: editCarbs, set: setEditCarbs, color: "text-yellow-600" },
+                            { label: "F (g)", value: editFats, set: setEditFats, color: "text-pink-500" },
+                          ].map(({ label, value, set, color }) => (
+                            <div key={label} className="flex flex-col gap-0.5">
+                              <label className={`text-[10px] font-semibold ${color}`}>{label}</label>
+                              <input
+                                type="number"
+                                value={value}
+                                onChange={e => set(e.target.value)}
+                                className="w-full text-xs bg-muted/50 border border-muted rounded-lg px-2 py-1.5 outline-none focus:border-primary/40 text-center"
+                                onKeyDown={e => { if (e.key === "Enter") handleSaveEdit(entry.id); if (e.key === "Escape") setEditingEntryId(null); }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        entry.calories !== null && (
+                          <div className="food-entry-badges">
+                            <span className="badge text-orange-500 bg-orange-50">{entry.calories} kcal</span>
+                            {entry.protein && <span className="badge text-blue-500 bg-blue-50">P: {parseFloat(entry.protein).toFixed(1)}g</span>}
+                            {entry.carbs   && <span className="badge text-yellow-600 bg-yellow-50">C: {parseFloat(entry.carbs).toFixed(1)}g</span>}
+                            {entry.fats    && <span className="badge text-pink-500 bg-pink-50">F: {parseFloat(entry.fats).toFixed(1)}g</span>}
+                          </div>
+                        )
+                      )}
+
+                      {!isEditing && entry.aiNote && (
+                        <p className="food-entry-note">AI assumed: {entry.aiNote}</p>
+                      )}
+                    </div>
                   </div>
                 );
               })}

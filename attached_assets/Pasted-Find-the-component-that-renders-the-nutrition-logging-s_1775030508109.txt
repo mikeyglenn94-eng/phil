@@ -1,0 +1,177 @@
+Find the component that renders the nutrition logging screen, the one that shows:
+- the selected date at the top
+- a daily totals summary card
+- an add food / meal section with text input, voice or scan actions, and an add button
+- a list of logged food entries with calories and macro badges
+
+Refactor ONLY that screen.
+
+Important constraints:
+- Do not add any new features
+- Do not change any data, logic, or behaviour
+- Do not change routing, state, props, handlers, API calls, calculations, or data shape
+- Do not add new metrics, charts, progress bars, or labels
+- Do not change how entries are created, edited, or deleted
+- Only improve layout, spacing, typography, visual hierarchy, and styling
+- Keep all existing content exactly as it is
+
+What to improve:
+
+1. Improve the overall spacing and hierarchy of the screen
+- Make the date feel like a clean page header
+- Ensure consistent spacing between the summary card, add meal card, and logged entries
+
+2. Clean up the daily totals summary card
+- Improve internal spacing
+- Make section headings clearer
+- Make the metric values feel aligned and easier to scan
+- Keep all existing numbers and labels exactly the same
+
+3. Improve the add food / meal card
+- Better spacing between heading, input, action buttons, and help text
+- Make the input feel cleaner and more premium
+- Make the primary add button feel more deliberate using the existing button system
+- Keep scan and voice actions exactly as they currently work
+
+4. Improve the logged food entry cards
+- Add cleaner spacing inside each card
+- Make the meal title more prominent
+- Keep macro badges aligned and visually tidy
+- Make the explanatory AI text look quieter and more secondary
+- Keep edit and delete controls exactly as they are
+
+5. Standardise this screen using existing shared component styles where possible
+Use:
+- .card
+- .card-header
+- .card-body
+- .button-primary
+- .button-secondary
+- .icon-button
+- .badge
+- .badge-neutral
+- .badge-accent
+
+6. Add or update CSS for these nutrition-specific classes:
+
+.nutrition-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.nutrition-date {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.totals-card {
+  padding: var(--space-5);
+}
+
+.totals-section + .totals-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.totals-heading {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+.totals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.total-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.total-value {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.total-unit,
+.total-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.meal-card {
+  padding: var(--space-5);
+}
+
+.meal-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.meal-help-text {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.food-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.food-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.food-entry-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.food-entry-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.food-entry-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.food-entry-note {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+7. Make sure the screen remains mobile-friendly
+- Preserve current functionality and responsive behaviour
+- If needed, stack buttons neatly on smaller widths without changing behaviour
+
+8. Keep the result minimal, clean, and consistent with the darker neutral + yellow-accent design direction already added elsewhere
+
+Do not invent new UI patterns on this screen.
+Do not add charts, rings, or progress bars.
+Do not change any wording unless needed for consistency with the existing UI.
+
+When finished, tell me which file you changed.
