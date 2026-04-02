@@ -666,7 +666,7 @@ export default function ClientSession() {
     </div>
   );
 
-  // ── Share workout — transparent PNG card (Strava-style) ──────────────────────
+  // ── Share workout — transparent PNG card ─────────────────────────────────────
   async function generateShareImage(): Promise<File | null> {
     await document.fonts.ready;
     const W = 1080, H = 1920;
@@ -675,23 +675,40 @@ export default function ClientSession() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
+    ctx.clearRect(0, 0, W, H); // fully transparent background
+
     const src = (session as any).source as string | undefined;
     const isCondition = src === "wod_brain" || src === "run_brain" || src === "endurance_cycle";
 
-    // Collect exercises and metrics
+    // ── Collect metrics ───────────────────────────────────────────────────────
     const allExercises = [...(session.exercises || []), ...addedExercises];
-    let totalKg = 0, hasWeight = false;
+    let totalKg = 0, totalReps = 0, totalSets = 0;
     if (!isCondition) {
       for (const ex of allExercises) {
         for (const set of (logs[ex.id] || [])) {
-          if (set.weight !== null && set.reps !== null) { totalKg += set.weight * set.reps; hasWeight = true; }
+          if (set.weight !== null && set.reps !== null) {
+            totalKg += set.weight * set.reps;
+            totalReps += set.reps;
+            totalSets++;
+          }
         }
       }
     }
+    const hasWeight = totalKg > 0;
+    const avgReps = totalSets > 0 ? Math.round(totalReps / totalSets) : 0;
 
     const dateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM").toUpperCase();
     const name = session.name || "Session";
     const structure = (session as any).structure as string | undefined;
+
+    // ── Layout ────────────────────────────────────────────────────────────────
+    // Card fills the bottom 68% — transparent above so video shows through
+    const pad = 56;
+    const cardTop = Math.round(H * 0.32);
+    const cardH = H - cardTop - 40;
+    const cardW = W - pad * 2;
+    const cx = pad + 60;
+    const right = pad + cardW - 60;
 
     // Rounded rect helper
     function rr(x: number, y: number, w: number, h: number, r: number) {
@@ -704,108 +721,174 @@ export default function ClientSession() {
       ctx!.closePath();
     }
 
-    // Card geometry — bottom ~42% of the 1920px canvas
-    const pad = 52;
-    const cardTop = Math.round(H * 0.555);
-    const cardH = H - cardTop - 44;
-    const cardW = W - pad * 2;
-
-    // ── Card background (dark, semi-transparent — so video shows through) ──────
-    ctx.fillStyle = "rgba(6, 6, 18, 0.84)";
-    rr(pad, cardTop, cardW, cardH, 40);
+    // ── Card background ───────────────────────────────────────────────────────
+    ctx.fillStyle = "rgba(5, 5, 16, 0.92)";
+    rr(pad, cardTop, cardW, cardH, 52);
     ctx.fill();
 
-    // Indigo accent bar along top-left of card
-    ctx.fillStyle = "rgba(99, 102, 241, 0.9)";
-    rr(pad, cardTop, 200, 5, 3);
+    // Top accent gradient bar
+    const accentGrad = ctx.createLinearGradient(pad, 0, pad + 320, 0);
+    accentGrad.addColorStop(0, "rgba(99, 102, 241, 1)");
+    accentGrad.addColorStop(1, "rgba(139, 92, 246, 0.0)");
+    ctx.fillStyle = accentGrad;
+    rr(pad, cardTop, 340, 6, 3);
     ctx.fill();
 
-    const cx = pad + 48;
-    let cy = cardTop + 60;
+    let cy = cardTop + 72;
 
-    // ── AXIS brand + date ────────────────────────────────────────────────────
+    // ── AXIS brand + date ─────────────────────────────────────────────────────
     ctx.fillStyle = "rgba(99, 102, 241, 1)";
-    ctx.font = "700 30px 'Inter', system-ui, sans-serif";
+    ctx.font = "800 38px 'Inter', system-ui, sans-serif";
+    ctx.textAlign = "left";
     ctx.fillText("AXIS", cx, cy);
 
-    ctx.fillStyle = "rgba(255,255,255,0.42)";
-    ctx.font = "28px 'Inter', system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.40)";
+    ctx.font = "500 32px 'Inter', system-ui, sans-serif";
     ctx.textAlign = "right";
-    ctx.fillText(dateStr, pad + cardW - 48, cy);
+    ctx.fillText(dateStr, right, cy);
     ctx.textAlign = "left";
-    cy += 66;
+    cy += 78;
 
-    // ── Session name ─────────────────────────────────────────────────────────
+    // ── Session name ──────────────────────────────────────────────────────────
     ctx.fillStyle = "#ffffff";
-    ctx.font = "700 62px 'Inter', system-ui, sans-serif";
+    ctx.font = "700 76px 'Inter', system-ui, sans-serif";
+    const maxNW = cardW - 120;
     let displayName = name;
-    const maxNW = cardW - 96;
     while (ctx.measureText(displayName).width > maxNW && displayName.length > 6)
       displayName = displayName.slice(0, -1);
     if (displayName !== name) displayName += "…";
     ctx.fillText(displayName, cx, cy);
-    cy += 20;
+    cy += 28;
 
-    // ── Divider ──────────────────────────────────────────────────────────────
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(cx, cy + 24); ctx.lineTo(pad + cardW - 48, cy + 24); ctx.stroke();
-    cy += 60;
+    // ── Divider ───────────────────────────────────────────────────────────────
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy + 26); ctx.lineTo(right, cy + 26); ctx.stroke();
+    cy += 72;
 
-    if (!isCondition) {
-      // ── Strength: total weight + exercise list ───────────────────────────
-      if (hasWeight) {
-        ctx.fillStyle = "rgba(165, 180, 252, 1)"; // indigo-300
-        ctx.font = "700 90px 'Inter', system-ui, sans-serif";
-        ctx.fillText(`${Math.round(totalKg).toLocaleString()} kg`, cx, cy);
-        cy += 14;
-        ctx.fillStyle = "rgba(255,255,255,0.38)";
-        ctx.font = "28px 'Inter', system-ui, sans-serif";
-        ctx.fillText("TOTAL LIFTED", cx, cy + 30);
-        cy += 78;
+    if (!isCondition && hasWeight) {
+      // ── STRENGTH STATS ────────────────────────────────────────────────────
+
+      // Hero: Total kg lifted
+      const kgStr = Math.round(totalKg).toLocaleString();
+      ctx.font = "800 172px 'Inter', system-ui, sans-serif";
+      const kgW = ctx.measureText(kgStr).width;
+
+      // Indigo glow behind the number
+      ctx.shadowColor = "rgba(99, 102, 241, 0.55)";
+      ctx.shadowBlur = 60;
+      ctx.fillStyle = "rgba(165, 180, 252, 1)";
+      ctx.fillText(kgStr, cx, cy);
+      ctx.shadowBlur = 0;
+
+      // "kg" unit inline
+      ctx.fillStyle = "rgba(165, 180, 252, 0.65)";
+      ctx.font = "600 68px 'Inter', system-ui, sans-serif";
+      ctx.fillText("kg", cx + kgW + 18, cy - 10);
+
+      cy += 18;
+      ctx.fillStyle = "rgba(255,255,255,0.32)";
+      ctx.font = "600 30px 'Inter', system-ui, sans-serif";
+      ctx.fillText("TOTAL LIFTED", cx, cy + 36);
+      cy += 108;
+
+      // ── Secondary stat: avg reps per set ─────────────────────────────────
+      if (avgReps > 0) {
+        // Pill background
+        const pillW = 420, pillH = 108, pillX = cx, pillY = cy;
+        rr(pillX, pillY, pillW, pillH, 54);
+        ctx.fillStyle = "rgba(255,255,255,0.07)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.lineWidth = 1.5;
+        rr(pillX, pillY, pillW, pillH, 54);
+        ctx.stroke();
+
+        // Avg reps number
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 68px 'Inter', system-ui, sans-serif";
+        ctx.fillText(`${avgReps}`, pillX + 44, pillY + 74);
+        const numW = ctx.measureText(`${avgReps}`).width;
+
+        // Label
+        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.font = "500 26px 'Inter', system-ui, sans-serif";
+        ctx.fillText("AVG REPS", pillX + 44 + numW + 18, pillY + 52);
+        ctx.fillText("/ SET", pillX + 44 + numW + 18, pillY + 84);
+
+        cy += pillH + 56;
       }
-      ctx.fillStyle = "rgba(255,255,255,0.72)";
-      ctx.font = "36px 'Inter', system-ui, sans-serif";
-      for (const ex of allExercises.slice(0, 6)) {
+
+      // ── Subtle divider ────────────────────────────────────────────────────
+      ctx.strokeStyle = "rgba(255,255,255,0.07)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(right, cy); ctx.stroke();
+      cy += 44;
+
+      // ── Exercise list ─────────────────────────────────────────────────────
+      ctx.fillStyle = "rgba(255,255,255,0.48)";
+      ctx.font = "400 36px 'Inter', system-ui, sans-serif";
+      for (const ex of allExercises.slice(0, 5)) {
         if (cy > cardTop + cardH - 60) break;
         ctx.fillText(`· ${nameOverrides[ex.id] || ex.name}`, cx, cy);
-        cy += 50;
+        cy += 52;
       }
+
+    } else if (!isCondition) {
+      // ── Strength — no weight data yet ────────────────────────────────────
+      ctx.fillStyle = "rgba(165, 180, 252, 0.7)";
+      ctx.font = "600 38px 'Inter', system-ui, sans-serif";
+      ctx.fillText("STRENGTH SESSION", cx, cy);
+      cy += 60;
+      ctx.fillStyle = "rgba(255,255,255,0.65)";
+      ctx.font = "400 38px 'Inter', system-ui, sans-serif";
+      for (const ex of allExercises.slice(0, 7)) {
+        if (cy > cardTop + cardH - 60) break;
+        ctx.fillText(`· ${nameOverrides[ex.id] || ex.name}`, cx, cy);
+        cy += 52;
+      }
+
     } else {
-      // ── WOD/Run: structure or exercise list + athlete comment ────────────
+      // ── WOD / Run ─────────────────────────────────────────────────────────
+      const bucketLabel = src === "run_brain" ? "RUN" : "WOD";
+      ctx.fillStyle = src === "run_brain" ? "rgba(134, 239, 172, 0.80)" : "rgba(196, 181, 253, 0.80)";
+      ctx.font = "700 34px 'Inter', system-ui, sans-serif";
+      ctx.fillText(bucketLabel, cx, cy);
+      cy += 58;
+
       if (structure) {
-        ctx.fillStyle = "rgba(255,255,255,0.80)";
-        ctx.font = "38px 'Inter', system-ui, sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.82)";
+        ctx.font = "400 40px 'Inter', system-ui, sans-serif";
         const words = structure.split(" ");
         let line = "";
         for (const word of words) {
           const test = line ? `${line} ${word}` : word;
-          if (ctx.measureText(test).width > cardW - 96) {
+          if (ctx.measureText(test).width > cardW - 120) {
             if (cy > cardTop + cardH - 120) break;
-            ctx.fillText(line, cx, cy); cy += 52; line = word;
+            ctx.fillText(line, cx, cy); cy += 56; line = word;
           } else { line = test; }
         }
-        if (line && cy <= cardTop + cardH - 120) { ctx.fillText(line, cx, cy); cy += 52; }
+        if (line && cy <= cardTop + cardH - 120) { ctx.fillText(line, cx, cy); cy += 56; }
       } else {
         ctx.fillStyle = "rgba(255,255,255,0.78)";
-        ctx.font = "38px 'Inter', system-ui, sans-serif";
+        ctx.font = "400 40px 'Inter', system-ui, sans-serif";
         for (const ex of allExercises.slice(0, 5)) {
           if (cy > cardTop + cardH - 120) break;
           const notePart = ex.notes ? ` · ${ex.notes}` : "";
           let line = `· ${ex.name}${notePart}`;
-          while (ctx.measureText(line).width > cardW - 96 && line.length > 4)
+          while (ctx.measureText(line).width > cardW - 120 && line.length > 4)
             line = line.slice(0, -1);
           if (line !== `· ${ex.name}${notePart}`) line += "…";
-          ctx.fillText(line, cx, cy); cy += 52;
+          ctx.fillText(line, cx, cy); cy += 56;
         }
       }
       const comment = sessionComment.trim();
       if (comment && cy <= cardTop + cardH - 60) {
-        cy += 16;
-        ctx.fillStyle = "rgba(255,255,255,0.45)";
-        ctx.font = "italic 34px 'Inter', system-ui, sans-serif";
+        cy += 20;
+        ctx.fillStyle = "rgba(255,255,255,0.42)";
+        ctx.font = "italic 36px 'Inter', system-ui, sans-serif";
         let cl = `"${comment}"`;
-        while (ctx.measureText(cl).width > cardW - 96 && cl.length > 4) cl = cl.slice(0, -1);
+        while (ctx.measureText(cl).width > cardW - 120 && cl.length > 4) cl = cl.slice(0, -1);
         if (cl !== `"${comment}"`) cl += '…"';
         ctx.fillText(cl, cx, cy);
       }
