@@ -18,8 +18,13 @@ router.get("/programmes", async (req, res): Promise<void> => {
   }
 
   if (clientIdParam !== undefined) {
-    // All programmes are visible to all clients
-    const programmes = await db.select().from(programmesTable).orderBy(programmesTable.updatedAt);
+    const clientId = parseInt(clientIdParam, 10);
+    if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+    const programmes = await db
+      .select()
+      .from(programmesTable)
+      .where(eq(programmesTable.clientId, clientId))
+      .orderBy(programmesTable.updatedAt);
     res.json(programmes.reverse());
     return;
   }
