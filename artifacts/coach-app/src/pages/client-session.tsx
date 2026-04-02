@@ -760,7 +760,7 @@ export default function ClientSession() {
     ctx.strokeStyle = "rgba(255,255,255,0.10)";
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(cx, cy + 26); ctx.lineTo(right, cy + 26); ctx.stroke();
-    cy += 72;
+    cy += 120;
 
     if (!isCondition) {
       // ── STRENGTH — exercise names + total weight at bottom ─────────────────
