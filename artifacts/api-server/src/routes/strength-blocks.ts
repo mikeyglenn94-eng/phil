@@ -394,7 +394,7 @@ const templates: StrengthBlockTemplate[] = [
         week: 1, label: "Week 1 — Establish",
         sessions: [
           {
-            dayOfWeek: 1, name: "Monday — Snatch Focus",
+            dayOfWeek: 1, name: "Snatch Focus",
             exercises: [
               { name: "Front Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
               { name: "Hang Above Knee Snatch (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
@@ -405,7 +405,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 2, name: "Tuesday — Clean Focus",
+            dayOfWeek: 2, name: "Clean Focus",
             exercises: [
               { name: "Hang Above Knee Clean (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
               { name: "Front Squat", sets: 3, reps: "3", percentage: "" },
@@ -416,7 +416,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 3, name: "Wednesday — Competition Lifts",
+            dayOfWeek: 3, name: "Competition Lifts",
             exercises: [
               { name: "Snatch", sets: 3, reps: "3", percentage: "" },
               { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "" },
@@ -428,7 +428,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 5, name: "Friday — Power Variations",
+            dayOfWeek: 5, name: "Power Variations",
             exercises: [
               { name: "Back Squat", sets: 3, reps: "3", percentage: "" },
               { name: "Block Power Snatch", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
@@ -438,7 +438,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 6, name: "Saturday — Volume Day",
+            dayOfWeek: 6, name: "Volume Day",
             exercises: [
               { name: "Snatch", sets: 3, reps: "3", percentage: "" },
               { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
@@ -455,7 +455,7 @@ const templates: StrengthBlockTemplate[] = [
         week: 2, label: "Week 2 — Build",
         sessions: [
           {
-            dayOfWeek: 1, name: "Monday — Snatch Focus",
+            dayOfWeek: 1, name: "Snatch Focus",
             exercises: [
               { name: "Front Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
               { name: "Hang Above Knee Snatch (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
@@ -467,7 +467,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 2, name: "Tuesday — Clean Focus",
+            dayOfWeek: 2, name: "Clean Focus",
             exercises: [
               { name: "Hang Above Knee Clean", sets: 3, reps: "3", percentage: "" },
               { name: "Front Squat", sets: 3, reps: "3", percentage: "" },
@@ -478,7 +478,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 3, name: "Wednesday — Competition Lifts",
+            dayOfWeek: 3, name: "Competition Lifts",
             exercises: [
               { name: "Snatch", sets: 2, reps: "2", percentage: "" },
               { name: "Clean & Jerk", sets: 3, reps: "3", percentage: "" },
@@ -490,7 +490,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 5, name: "Friday — Power Variations",
+            dayOfWeek: 5, name: "Power Variations",
             exercises: [
               { name: "Back Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
               { name: "Power Snatch", sets: 3, reps: "3", percentage: "" },
@@ -500,7 +500,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 6, name: "Saturday — Volume Day",
+            dayOfWeek: 6, name: "Volume Day",
             exercises: [
               { name: "Snatch", sets: 3, reps: "3", percentage: "" },
               { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
@@ -517,7 +517,7 @@ const templates: StrengthBlockTemplate[] = [
         week: 3, label: "Week 3 — Accumulate",
         sessions: [
           {
-            dayOfWeek: 1, name: "Monday — Snatch Focus",
+            dayOfWeek: 1, name: "Snatch Focus",
             exercises: [
               { name: "Front Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
               { name: "Hang Above Knee Snatch (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
@@ -528,7 +528,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 2, name: "Tuesday — Clean Focus",
+            dayOfWeek: 2, name: "Clean Focus",
             exercises: [
               { name: "Hang Above Knee Clean (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
               { name: "Front Squat", sets: 3, reps: "3", percentage: "" },
@@ -539,7 +539,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 3, name: "Wednesday — Competition Lifts",
+            dayOfWeek: 3, name: "Competition Lifts",
             exercises: [
               { name: "Snatch", sets: 3, reps: "3", percentage: "" },
               { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "" },
@@ -551,7 +551,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 5, name: "Friday — Power Variations",
+            dayOfWeek: 5, name: "Power Variations",
             exercises: [
               { name: "Back Squat", sets: 3, reps: "3", percentage: "" },
               { name: "Block Power Snatch", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
@@ -561,7 +561,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 6, name: "Saturday — Volume Day",
+            dayOfWeek: 6, name: "Volume Day",
             exercises: [
               { name: "Snatch", sets: 3, reps: "3", percentage: "" },
               { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
@@ -578,7 +578,7 @@ const templates: StrengthBlockTemplate[] = [
         week: 4, label: "Week 4 — Peak",
         sessions: [
           {
-            dayOfWeek: 1, name: "Monday — Snatch Focus",
+            dayOfWeek: 1, name: "Snatch Focus",
             exercises: [
               { name: "Front Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
               { name: "Hang Above Knee Snatch (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
@@ -590,7 +590,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 2, name: "Tuesday — Clean Focus",
+            dayOfWeek: 2, name: "Clean Focus",
             exercises: [
               { name: "Hang Above Knee Clean", sets: 3, reps: "3", percentage: "" },
               { name: "Front Squat", sets: 3, reps: "3", percentage: "" },
@@ -601,7 +601,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 3, name: "Wednesday — Competition Lifts",
+            dayOfWeek: 3, name: "Competition Lifts",
             exercises: [
               { name: "Snatch", sets: 2, reps: "2", percentage: "" },
               { name: "Clean & Jerk", sets: 3, reps: "3", percentage: "" },
@@ -613,7 +613,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 5, name: "Friday — Power Variations",
+            dayOfWeek: 5, name: "Power Variations",
             exercises: [
               { name: "Back Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
               { name: "Power Snatch", sets: 3, reps: "3", percentage: "" },
@@ -623,7 +623,7 @@ const templates: StrengthBlockTemplate[] = [
             ],
           },
           {
-            dayOfWeek: 6, name: "Saturday — Volume Day",
+            dayOfWeek: 6, name: "Volume Day",
             exercises: [
               { name: "Snatch", sets: 3, reps: "3", percentage: "" },
               { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
