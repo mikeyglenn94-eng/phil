@@ -1177,11 +1177,40 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         const sessions: any[] = (raw.sessions ?? []).slice().sort((a: any, b: any) => (a.date ?? "").localeCompare(b.date ?? ""));
         const firstDate = sessions.find((s: any) => s.date)?.date;
         const offsetDays = firstDate ? Math.round((new Date(date).getTime() - new Date(firstDate).getTime()) / 86400000) : 0;
-        const rescheduled = sessions.map((s: any) => {
-          if (!s.date) return s;
-          const shifted = new Date(new Date(s.date).getTime() + offsetDays * 86400000);
-          return { ...s, date: shifted.toISOString().slice(0, 10) };
+
+        // Normalize each exercise so it has the tracking fields the client UI expects
+        const normalizeExercise = (ex: any) => {
+          const sets = ex.sets ?? 0;
+          return {
+            ...ex,
+            rpe: ex.rpe ?? null,
+            rest: ex.rest ?? null,
+            tempo: ex.tempo ?? null,
+            rawText: ex.rawText ?? ex.name ?? "",
+            clientComment: ex.clientComment ?? null,
+            setReps: Array.isArray(ex.setReps) ? ex.setReps : Array(sets).fill(null),
+            setWeights: Array.isArray(ex.setWeights) ? ex.setWeights : Array(sets).fill(null),
+            weekProgression: ex.weekProgression ?? [],
+          };
+        };
+
+        const ts = Date.now();
+        const rescheduled = sessions.map((s: any, si: number) => {
+          const newSessionId = `session-${ts}-${si}`;
+          const shifted = s.date
+            ? new Date(new Date(s.date).getTime() + offsetDays * 86400000).toISOString().slice(0, 10)
+            : undefined;
+          return {
+            ...s,
+            id: newSessionId,
+            source: "strength_programme",
+            ...(shifted ? { date: shifted } : {}),
+            exercises: (s.exercises ?? []).map((ex: any, ei: number) =>
+              normalizeExercise({ ...ex, id: `ex-${ts}-${si}-${ei}` })
+            ),
+          };
         });
+
         const res = await fetch("/api/programmes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1195,7 +1224,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
       // ── Session insertion (wod_session / run_session) ───────────
       const raw = result.raw ?? {};
-      const newSession = result.category === "run"
+      const newSession = (result.bucket === "run" || source === "run_session")
         ? {
             id: `sess-${Date.now()}`,
             date,
