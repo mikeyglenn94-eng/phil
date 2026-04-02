@@ -470,9 +470,9 @@ export default function Library() {
             <div className="flex gap-1 rounded-lg bg-muted p-1">
               {([
                 { key: "all", label: `All (${totalBlocks})` },
-                { key: "wod", label: `WOD (${masterProgrammes.length + enduranceCycles.length})` },
+                { key: "wod", label: `WOD (${enduranceCycles.length})` },
                 { key: "run", label: `Run (${runTemplates.length})` },
-                { key: "strength", label: `Strength (${strengthTemplates.length})` },
+                { key: "strength", label: `Strength (${masterProgrammes.length + strengthTemplates.length})` },
               ] as { key: BlockFilter; label: string }[]).map(f => (
                 <button
                   key={f.key}
@@ -518,21 +518,13 @@ export default function Library() {
           </div>
         ) : tab === "blocks" ? (
           <div className="space-y-8">
-            {/* WOD blocks: master programmes + endurance cycles */}
-            {(blockFilter === "all" || blockFilter === "wod") && (masterProgrammes.length > 0 || enduranceCycles.length > 0) && (
+            {/* WOD blocks: endurance cycles only */}
+            {(blockFilter === "all" || blockFilter === "wod") && enduranceCycles.length > 0 && (
               <div>
                 <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1 flex items-center gap-2">
                   <Brain className="w-3.5 h-3.5 text-purple-500" /> WOD Blocks
                 </h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {masterProgrammes.map((p: any) => (
-                    <ProgrammeCard
-                      key={p.id}
-                      programme={p}
-                      expanded={expandedId === String(p.id)}
-                      onToggle={() => setExpandedId(expandedId === String(p.id) ? null : String(p.id))}
-                    />
-                  ))}
                   {enduranceCycles.map((c: any) => (
                     <EnduranceCycleCard
                       key={c.id}
@@ -564,13 +556,21 @@ export default function Library() {
               </div>
             )}
 
-            {/* Strength cycles */}
-            {(blockFilter === "all" || blockFilter === "strength") && strengthTemplates.length > 0 && (
+            {/* Strength cycles: master programmes + strength templates */}
+            {(blockFilter === "all" || blockFilter === "strength") && (masterProgrammes.length > 0 || strengthTemplates.length > 0) && (
               <div>
                 <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1 flex items-center gap-2">
                   <Dumbbell className="w-3.5 h-3.5 text-orange-500" /> Strength Cycles
                 </h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {masterProgrammes.map((p: any) => (
+                    <ProgrammeCard
+                      key={p.id}
+                      programme={p}
+                      expanded={expandedId === String(p.id)}
+                      onToggle={() => setExpandedId(expandedId === String(p.id) ? null : String(p.id))}
+                    />
+                  ))}
                   {strengthTemplates.map((t: any) => (
                     <StrengthBlockCard
                       key={t.id}
