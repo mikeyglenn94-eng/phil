@@ -2379,20 +2379,39 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     <label className="text-sm font-medium">
                       {quickAddType === "wod" ? "WOD description" : quickAddType === "run" ? "Run description" : "What are you working with?"}
                     </label>
-                    <textarea
-                      className="w-full min-h-[110px] rounded-xl border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
-                      placeholder={
-                        quickAddType === "wod"
-                          ? "e.g. 30 min AMRAP: 10 burpees, 15 box jumps, 20 wall balls. I have a 24kg KB."
-                          : quickAddType === "run"
-                          ? "e.g. 45 min easy run, 4×500m with 90s rest, 5km time trial"
-                          : "e.g. I have 30 mins, 22.5kg dumbbells, and can run 500m laps. Build me a full-body circuit."
-                      }
-                      value={quickAddDesc}
-                      onChange={e => setQuickAddDesc(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void handleAiSession(); } }}
-                    />
-                    <p className="text-xs text-muted-foreground">Include available kit, duration, and any preferences. Cmd+Enter to generate.</p>
+                    <div className="relative">
+                      <textarea
+                        className={`w-full min-h-[110px] rounded-xl border bg-background px-3 py-2.5 pr-10 text-sm resize-none focus:outline-none focus:ring-2 placeholder:text-muted-foreground transition-all ${quickAddListening ? "ring-2 ring-red-400/50 border-red-300" : "focus:ring-primary/40"}`}
+                        placeholder={
+                          quickAddType === "wod"
+                            ? "e.g. 30 min AMRAP: 10 burpees, 15 box jumps, 20 wall balls. I have a 24kg KB."
+                            : quickAddType === "run"
+                            ? "e.g. 45 min easy run, 4×500m with 90s rest, 5km time trial"
+                            : "e.g. I have 30 mins, 22.5kg dumbbells, and can run 500m laps. Build me a full-body circuit."
+                        }
+                        value={quickAddListening ? (quickAddInterim || quickAddDesc) : quickAddDesc}
+                        onChange={e => { if (!quickAddListening) setQuickAddDesc(e.target.value); }}
+                        onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void handleAiSession(); } }}
+                        disabled={quickAddListening}
+                      />
+                      <button
+                        type="button"
+                        onClick={toggleQuickAddListening}
+                        className={`absolute right-2.5 bottom-2.5 p-1.5 rounded-lg transition-colors ${quickAddListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                        title={quickAddListening ? "Stop recording" : "Speak your description"}
+                      >
+                        {quickAddListening
+                          ? <><span className="absolute inset-0 rounded-lg bg-red-400/20 animate-ping" /><Square className="w-3.5 h-3.5 fill-current relative z-10" /></>
+                          : <Mic className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {quickAddListening && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        Listening… describe your session, then tap stop
+                      </p>
+                    )}
+                    {!quickAddListening && <p className="text-xs text-muted-foreground">Include available kit, duration, and any preferences. Cmd+Enter to generate.</p>}
                   </div>
 
                   {/* Date */}
