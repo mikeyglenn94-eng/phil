@@ -776,86 +776,97 @@ export default function ClientSession() {
     cy += 72;
 
     if (!isCondition) {
-      // ── STRENGTH ──────────────────────────────────────────────────────────
+      // ── STRENGTH — two big stats + exercise list ───────────────────────────
 
-      if (hasWeight) {
-        // ── Hero: Total kg lifted ─────────────────────────────────────────
-        const kgStr = Math.round(totalKg).toLocaleString();
-        ctx.font = "800 160px 'Inter', system-ui, sans-serif";
-        const kgW = ctx.measureText(kgStr).width;
+      // Left stat: total kg (if available) or total reps
+      // Right stat: avg reps per set
+      const statColW = Math.floor((cardW - 120 - 60) / 2); // 60px gap between cols
+      const leftX = cx;
+      const rightX = cx + statColW + 60;
 
-        ctx.shadowColor = "rgba(99, 102, 241, 0.6)";
-        ctx.shadowBlur = 64;
-        ctx.fillStyle = "rgba(165, 180, 252, 1)";
-        ctx.fillText(kgStr, cx, cy);
-        ctx.shadowBlur = 0;
+      const leftVal  = hasWeight ? Math.round(totalKg).toLocaleString() : (totalReps > 0 ? `${totalReps}` : "—");
+      const leftUnit = hasWeight ? "kg" : "reps";
+      const leftLbl  = hasWeight ? "TOTAL LIFTED" : "TOTAL REPS";
+      const rightVal = avgReps > 0 ? `${avgReps}` : (totalSets > 0 ? `${totalSets}` : "—");
+      const rightLbl = avgReps > 0 ? "AVG REPS / SET" : "TOTAL SETS";
 
-        ctx.fillStyle = "rgba(165, 180, 252, 0.60)";
-        ctx.font = "600 60px 'Inter', system-ui, sans-serif";
-        ctx.fillText("kg", cx + kgW + 16, cy - 8);
+      // ── Helper: draw one big stat ─────────────────────────────────────────
+      function drawBigStat(
+        x: number, baseY: number,
+        val: string, unit: string, lbl: string,
+        numColor: string, glowColor: string, unitColor: string
+      ) {
+        // Auto-shrink font if value is wide
+        let fs = 120;
+        ctx!.font = `800 ${fs}px 'Inter', system-ui, sans-serif`;
+        while (ctx!.measureText(val).width > statColW - 20 && fs > 60) {
+          fs -= 8;
+          ctx!.font = `800 ${fs}px 'Inter', system-ui, sans-serif`;
+        }
+        const numW = ctx!.measureText(val).width;
 
-        cy += 14;
-        ctx.fillStyle = "rgba(255,255,255,0.30)";
-        ctx.font = "600 28px 'Inter', system-ui, sans-serif";
-        ctx.fillText("TOTAL LIFTED", cx, cy + 34);
-        cy += 88;
-      }
+        ctx!.shadowColor = glowColor;
+        ctx!.shadowBlur = 44;
+        ctx!.fillStyle = numColor;
+        ctx!.fillText(val, x, baseY);
+        ctx!.shadowBlur = 0;
 
-      // ── Stat pills — always shown ─────────────────────────────────────────
-      if (totalReps > 0 || totalSets > 0) {
-        function drawPill(px: number, py: number, pw: number, ph: number, val: string, lbl: string) {
-          rr(px, py, pw, ph, ph / 2);
-          ctx!.fillStyle = "rgba(255,255,255,0.07)";
-          ctx!.fill();
-          ctx!.strokeStyle = "rgba(255,255,255,0.14)";
-          ctx!.lineWidth = 1.5;
-          rr(px, py, pw, ph, ph / 2);
-          ctx!.stroke();
-
-          ctx!.fillStyle = "#ffffff";
-          ctx!.font = `700 ${Math.round(ph * 0.55)}px 'Inter', system-ui, sans-serif`;
-          const vw = ctx!.measureText(val).width;
-          ctx!.fillText(val, px + pw / 2 - vw / 2, py + ph * 0.62);
-
-          ctx!.fillStyle = "rgba(255,255,255,0.40)";
-          ctx!.font = `500 ${Math.round(ph * 0.26)}px 'Inter', system-ui, sans-serif`;
-          const lw = ctx!.measureText(lbl).width;
-          ctx!.fillText(lbl, px + pw / 2 - lw / 2, py + ph * 0.89);
+        // unit tag
+        if (unit) {
+          ctx!.fillStyle = unitColor;
+          ctx!.font = `600 ${Math.round(fs * 0.38)}px 'Inter', system-ui, sans-serif`;
+          ctx!.fillText(unit, x + numW + 8, baseY - Math.round(fs * 0.06));
         }
 
-        const pills: Array<{ val: string; lbl: string }> = [];
-        if (totalReps > 0) pills.push({ val: `${totalReps}`, lbl: "TOTAL REPS" });
-        if (totalSets > 0) pills.push({ val: `${totalSets}`, lbl: "SETS" });
-        if (avgReps > 0) pills.push({ val: `${avgReps}`, lbl: "AVG REPS/SET" });
-
-        const pillH = 148;
-        const gap = 20;
-        const totalPillW = cardW - 120;
-        const pillW = Math.floor((totalPillW - gap * (pills.length - 1)) / pills.length);
-        const pillY = cy;
-        pills.forEach((p, i) => drawPill(cx + i * (pillW + gap), pillY, pillW, pillH, p.val, p.lbl));
-        cy += pillH + 52;
+        // label below
+        ctx!.fillStyle = "rgba(255,255,255,0.28)";
+        ctx!.font = "600 26px 'Inter', system-ui, sans-serif";
+        ctx!.fillText(lbl, x, baseY + 40);
       }
 
+      drawBigStat(
+        leftX, cy,
+        leftVal, leftUnit, leftLbl,
+        "rgba(165, 180, 252, 1)", "rgba(99, 102, 241, 0.5)", "rgba(165,180,252,0.55)"
+      );
+      drawBigStat(
+        rightX, cy,
+        rightVal, "", rightLbl,
+        "rgba(250, 204, 21, 1)", "rgba(250, 204, 21, 0.4)", ""
+      );
+
+      cy += 40 + 60; // label row + gap
+
       // ── Divider ───────────────────────────────────────────────────────────
-      ctx.strokeStyle = "rgba(255,255,255,0.07)";
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(right, cy); ctx.stroke();
-      cy += 44;
+      cy += 52;
 
       // ── Exercise list ─────────────────────────────────────────────────────
-      ctx.fillStyle = "rgba(255,255,255,0.50)";
-      ctx.font = "400 36px 'Inter', system-ui, sans-serif";
+      const exFont = 48;
+      ctx.font = `500 ${exFont}px 'Inter', system-ui, sans-serif`;
       for (const ex of allExercises.slice(0, 6)) {
-        if (cy > cardTop + cardH - 56) break;
+        if (cy > cardTop + cardH - 60) break;
         const exName = nameOverrides[ex.id] || ex.name;
-        const setInfo = ex.sets ? ` ${ex.sets}×${ex.setReps?.[0] ?? "?"}` : "";
-        let line = `· ${exName}${setInfo}`;
-        while (ctx.measureText(line).width > cardW - 120 && line.length > 4)
+        const setInfo = ex.sets ? `  ${ex.sets}×${ex.setReps?.[0] ?? "?"}` : "";
+        let line = `· ${exName}`;
+        // truncate name to fit, then append set info right-aligned
+        while (ctx.measureText(line + setInfo).width > cardW - 120 && line.length > 2)
           line = line.slice(0, -1);
-        if (line !== `· ${exName}${setInfo}`) line += "…";
+        if (line !== `· ${exName}`) line += "…";
+
+        ctx.fillStyle = "rgba(255,255,255,0.80)";
         ctx.fillText(line, cx, cy);
-        cy += 52;
+
+        // set/rep info right-aligned in muted colour
+        if (setInfo) {
+          ctx.fillStyle = "rgba(255,255,255,0.35)";
+          ctx.textAlign = "right";
+          ctx.fillText(setInfo.trim(), right, cy);
+          ctx.textAlign = "left";
+        }
+        cy += exFont + 20;
       }
 
     } else {
