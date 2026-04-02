@@ -136,18 +136,43 @@ function normaliseStrength(t: any) {
   };
 }
 
+// Keywords that suggest a programme type from its session names/exercises
+const OLYMPIC_KW = ["snatch", "clean", "jerk", "clean & jerk", "clean and jerk", "overhead squat", "ohs", "power clean", "power snatch", "hang clean", "hang snatch", "split jerk", "push jerk", "muscle snatch"];
+const POWERLIFTING_KW = ["squat", "bench", "deadlift", "sbd", "powerlifting", "sumo", "pause squat", "rdl", "row"];
+
+function inferProgrammeType(sessions: any[]): string {
+  const corpus = sessions.flatMap((s: any) => {
+    const exs: any[] = s.exercises ?? [];
+    return [(s.name ?? ""), ...exs.map((e: any) => e.name ?? ""), ...exs.map((e: any) => e.rawText ?? "")];
+  }).join(" ").toLowerCase();
+
+  const olympicHits = OLYMPIC_KW.filter(k => corpus.includes(k)).length;
+  const strengthHits = POWERLIFTING_KW.filter(k => corpus.includes(k)).length;
+
+  if (olympicHits >= 2) return "olympic weightlifting";
+  if (strengthHits >= 2) return "strength";
+  return "strength";
+}
+
 function scoreMasterProgramme(prog: any, query: string): number {
   const q = query.toLowerCase();
   const title = (prog.title ?? "").toLowerCase();
   const sessions: any[] = prog.sessions ?? [];
   const sessionNames = sessions.map((s: any) => (s.name ?? "").toLowerCase()).join(" ");
+  const exerciseCorpus = sessions.flatMap((s: any) =>
+    (s.exercises ?? []).map((e: any) => `${e.name ?? ""} ${e.rawText ?? ""}`.toLowerCase())
+  ).join(" ");
+  const programmeType = inferProgrammeType(sessions);
 
   let score = 0;
   if (title.includes(q)) score += 30;
+
   const words = q.split(/\s+/).filter((w: string) => w.length > 2);
   words.forEach((word: string) => {
     if (title.includes(word)) score += 15;
-    if (sessionNames.includes(word)) score += 3;
+    if (sessionNames.includes(word)) score += 5;
+    if (exerciseCorpus.includes(word)) score += 3;
+    if (programmeType.includes(word)) score += 8;
   });
   return score;
 }
@@ -158,11 +183,12 @@ function normaliseMasterProgramme(p: any, score: number) {
   const weeks = dates.length >= 2
     ? Math.ceil((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / (7 * 86400000)) + 1
     : Math.ceil(sessions.length / 5);
+  const programmeType = inferProgrammeType(sessions);
   return {
     id: String(p.id),
     name: p.title,
     category: "master_programme" as const,
-    subtitle: `${weeks > 0 ? `${weeks}-week` : ""} strength block · ${sessions.length} sessions`,
+    subtitle: `${weeks > 0 ? `${weeks}-week` : ""} ${programmeType} block · ${sessions.length} sessions`,
     tags: [],
     totalWeeks: weeks,
     sessionCount: sessions.length,
