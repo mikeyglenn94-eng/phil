@@ -706,40 +706,53 @@ function scoreTemplate(template: StrengthBlockTemplate, query: string): number {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function generateSessions(template: StrengthBlockTemplate, startDateStr: string) {
-  // Snap to Monday of the provided start date week
-  const startDate = startOfWeek(parseISO(startDateStr), { weekStartsOn: 1 });
-  const sessions: any[] = [];
+  const startDate = parseISO(startDateStr); // Use the exact chosen date — no Monday snapping
 
-  for (const week of template.weeks) {
-    const weekStart = addWeeks(startDate, week.week - 1);
-    for (const session of week.sessions) {
-      // dayOfWeek: 1=Mon (+0), 2=Tue (+1), ... 7=Sun (+6)
-      const sessionDate = addDays(weekStart, session.dayOfWeek - 1);
-      const exercises = session.exercises.map((ex) => ({
+  // Flatten all sessions with their absolute day offset from week 1 session 1
+  // (week.week - 1) * 7 gives the week offset in days; (dayOfWeek - 1) gives day within week
+  const flat = template.weeks
+    .flatMap(week =>
+      week.sessions.map(session => ({
+        week,
+        session,
+        absOffset: (week.week - 1) * 7 + (session.dayOfWeek - 1),
+      }))
+    )
+    .sort((a, b) => a.absOffset - b.absOffset);
+
+  // Anchor: the first session's absolute offset (so session 1 always lands on startDate)
+  const firstOffset = flat[0]?.absOffset ?? 0;
+
+  return flat.map(({ week, session, absOffset }) => {
+    const sessionDate = addDays(startDate, absOffset - firstOffset);
+
+    const exercises = session.exercises.map((ex) => {
+      const parts: string[] = [];
+      if (ex.percentage) parts.push(`@ ${ex.percentage}`);
+      if (ex.notes) parts.push(ex.notes);
+      return {
         id: `ex-${randomUUID().slice(0, 8)}`,
         name: ex.name,
         sets: ex.sets,
         reps: ex.reps,
-        notes: ex.notes ? `@ ${ex.percentage} — ${ex.notes}` : `@ ${ex.percentage}`,
-        rawText: `${ex.sets}×${ex.reps} @ ${ex.percentage}`,
+        notes: parts.join(" — ") || null,
+        rawText: `${ex.sets}×${ex.reps}${ex.percentage ? ` @ ${ex.percentage}` : ""}`,
         rpe: null,
         rest: null,
         tempo: null,
         weekProgression: [],
-      }));
+      };
+    });
 
-      sessions.push({
-        id: `session-${randomUUID().slice(0, 8)}`,
-        date: format(sessionDate, "yyyy-MM-dd"),
-        name: session.name,
-        source: "strength_block" as any,
-        structure: `${template.name} — ${week.label}`,
-        exercises,
-      });
-    }
-  }
-
-  return sessions;
+    return {
+      id: `session-${randomUUID().slice(0, 8)}`,
+      date: format(sessionDate, "yyyy-MM-dd"),
+      name: session.name,
+      source: "strength_block" as any,
+      structure: `${template.name} — ${week.label}`,
+      exercises,
+    };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
