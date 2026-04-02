@@ -775,16 +775,17 @@ export default function ClientSession() {
       const weightBlockH = 260;
       const listBottom = cardTop + cardH - weightBlockH - 40;
 
-      for (const ex of allExercises.slice(0, 8)) {
-        if (cy + exLineH > listBottom) break;
+      allExercises.slice(0, 8).forEach((ex, i) => {
+        if (cy + exLineH > listBottom) return;
         const exName = nameOverrides[ex.id] || ex.name;
-        let line = `· ${exName}`;
-        while (ctx.measureText(line).width > cardW - 120 && line.length > 2)
+        const prefix = `${i + 1}.  `;
+        let line = `${prefix}${exName}`;
+        while (ctx.measureText(line).width > cardW - 120 && line.length > prefix.length)
           line = line.slice(0, -1);
-        if (line !== `· ${exName}`) line += "…";
+        if (line !== `${prefix}${exName}`) line += "…";
         ctx.fillText(line, cx, cy);
         cy += exLineH;
-      }
+      });
 
       // ── Divider above weight callout ──────────────────────────────────────
       const divY = cardTop + cardH - weightBlockH - 20;
