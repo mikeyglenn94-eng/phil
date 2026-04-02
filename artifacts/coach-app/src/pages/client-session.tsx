@@ -685,17 +685,26 @@ export default function ClientSession() {
     let totalKg = 0, totalReps = 0, totalSets = 0;
     if (!isCondition) {
       for (const ex of allExercises) {
-        for (const set of (logs[ex.id] || [])) {
-          if (set.weight !== null && set.reps !== null) {
-            totalKg += set.weight * set.reps;
-            totalReps += set.reps;
+        // Pull from logs first, then fall back to exercise plan data
+        const exSets = logs[ex.id]?.length
+          ? logs[ex.id]
+          : Array.from({ length: ex.sets || 0 }, (_, i) => ({
+              weight: ex.setWeights?.[i] ?? null,
+              reps: ex.setReps?.[i] ?? null,
+            }));
+        for (const set of exSets) {
+          const r = set.reps ?? 0;
+          const w = set.weight ?? null;
+          if (r > 0) {
+            totalReps += r;
             totalSets++;
+            if (w !== null) totalKg += w * r;
           }
         }
       }
     }
     const hasWeight = totalKg > 0;
-    const avgReps = totalSets > 0 ? Math.round(totalReps / totalSets) : 0;
+    const avgReps = totalSets > 0 ? +(totalReps / totalSets).toFixed(1) : 0;
 
     const dateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM").toUpperCase();
     const name = session.name || "Session";
@@ -766,85 +775,86 @@ export default function ClientSession() {
     ctx.beginPath(); ctx.moveTo(cx, cy + 26); ctx.lineTo(right, cy + 26); ctx.stroke();
     cy += 72;
 
-    if (!isCondition && hasWeight) {
-      // ── STRENGTH STATS ────────────────────────────────────────────────────
+    if (!isCondition) {
+      // ── STRENGTH ──────────────────────────────────────────────────────────
 
-      // Hero: Total kg lifted
-      const kgStr = Math.round(totalKg).toLocaleString();
-      ctx.font = "800 172px 'Inter', system-ui, sans-serif";
-      const kgW = ctx.measureText(kgStr).width;
+      if (hasWeight) {
+        // ── Hero: Total kg lifted ─────────────────────────────────────────
+        const kgStr = Math.round(totalKg).toLocaleString();
+        ctx.font = "800 160px 'Inter', system-ui, sans-serif";
+        const kgW = ctx.measureText(kgStr).width;
 
-      // Indigo glow behind the number
-      ctx.shadowColor = "rgba(99, 102, 241, 0.55)";
-      ctx.shadowBlur = 60;
-      ctx.fillStyle = "rgba(165, 180, 252, 1)";
-      ctx.fillText(kgStr, cx, cy);
-      ctx.shadowBlur = 0;
+        ctx.shadowColor = "rgba(99, 102, 241, 0.6)";
+        ctx.shadowBlur = 64;
+        ctx.fillStyle = "rgba(165, 180, 252, 1)";
+        ctx.fillText(kgStr, cx, cy);
+        ctx.shadowBlur = 0;
 
-      // "kg" unit inline
-      ctx.fillStyle = "rgba(165, 180, 252, 0.65)";
-      ctx.font = "600 68px 'Inter', system-ui, sans-serif";
-      ctx.fillText("kg", cx + kgW + 18, cy - 10);
+        ctx.fillStyle = "rgba(165, 180, 252, 0.60)";
+        ctx.font = "600 60px 'Inter', system-ui, sans-serif";
+        ctx.fillText("kg", cx + kgW + 16, cy - 8);
 
-      cy += 18;
-      ctx.fillStyle = "rgba(255,255,255,0.32)";
-      ctx.font = "600 30px 'Inter', system-ui, sans-serif";
-      ctx.fillText("TOTAL LIFTED", cx, cy + 36);
-      cy += 108;
-
-      // ── Secondary stat: avg reps per set ─────────────────────────────────
-      if (avgReps > 0) {
-        // Pill background
-        const pillW = 420, pillH = 108, pillX = cx, pillY = cy;
-        rr(pillX, pillY, pillW, pillH, 54);
-        ctx.fillStyle = "rgba(255,255,255,0.07)";
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.12)";
-        ctx.lineWidth = 1.5;
-        rr(pillX, pillY, pillW, pillH, 54);
-        ctx.stroke();
-
-        // Avg reps number
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "700 68px 'Inter', system-ui, sans-serif";
-        ctx.fillText(`${avgReps}`, pillX + 44, pillY + 74);
-        const numW = ctx.measureText(`${avgReps}`).width;
-
-        // Label
-        ctx.fillStyle = "rgba(255,255,255,0.45)";
-        ctx.font = "500 26px 'Inter', system-ui, sans-serif";
-        ctx.fillText("AVG REPS", pillX + 44 + numW + 18, pillY + 52);
-        ctx.fillText("/ SET", pillX + 44 + numW + 18, pillY + 84);
-
-        cy += pillH + 56;
+        cy += 14;
+        ctx.fillStyle = "rgba(255,255,255,0.30)";
+        ctx.font = "600 28px 'Inter', system-ui, sans-serif";
+        ctx.fillText("TOTAL LIFTED", cx, cy + 34);
+        cy += 88;
       }
 
-      // ── Subtle divider ────────────────────────────────────────────────────
+      // ── Stat pills — always shown ─────────────────────────────────────────
+      if (totalReps > 0 || totalSets > 0) {
+        function drawPill(px: number, py: number, pw: number, ph: number, val: string, lbl: string) {
+          rr(px, py, pw, ph, ph / 2);
+          ctx!.fillStyle = "rgba(255,255,255,0.07)";
+          ctx!.fill();
+          ctx!.strokeStyle = "rgba(255,255,255,0.14)";
+          ctx!.lineWidth = 1.5;
+          rr(px, py, pw, ph, ph / 2);
+          ctx!.stroke();
+
+          ctx!.fillStyle = "#ffffff";
+          ctx!.font = `700 ${Math.round(ph * 0.55)}px 'Inter', system-ui, sans-serif`;
+          const vw = ctx!.measureText(val).width;
+          ctx!.fillText(val, px + pw / 2 - vw / 2, py + ph * 0.62);
+
+          ctx!.fillStyle = "rgba(255,255,255,0.40)";
+          ctx!.font = `500 ${Math.round(ph * 0.26)}px 'Inter', system-ui, sans-serif`;
+          const lw = ctx!.measureText(lbl).width;
+          ctx!.fillText(lbl, px + pw / 2 - lw / 2, py + ph * 0.89);
+        }
+
+        const pills: Array<{ val: string; lbl: string }> = [];
+        if (totalReps > 0) pills.push({ val: `${totalReps}`, lbl: "TOTAL REPS" });
+        if (totalSets > 0) pills.push({ val: `${totalSets}`, lbl: "SETS" });
+        if (avgReps > 0) pills.push({ val: `${avgReps}`, lbl: "AVG REPS/SET" });
+
+        const pillH = 148;
+        const gap = 20;
+        const totalPillW = cardW - 120;
+        const pillW = Math.floor((totalPillW - gap * (pills.length - 1)) / pills.length);
+        const pillY = cy;
+        pills.forEach((p, i) => drawPill(cx + i * (pillW + gap), pillY, pillW, pillH, p.val, p.lbl));
+        cy += pillH + 52;
+      }
+
+      // ── Divider ───────────────────────────────────────────────────────────
       ctx.strokeStyle = "rgba(255,255,255,0.07)";
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(right, cy); ctx.stroke();
       cy += 44;
 
       // ── Exercise list ─────────────────────────────────────────────────────
-      ctx.fillStyle = "rgba(255,255,255,0.48)";
+      ctx.fillStyle = "rgba(255,255,255,0.50)";
       ctx.font = "400 36px 'Inter', system-ui, sans-serif";
-      for (const ex of allExercises.slice(0, 5)) {
-        if (cy > cardTop + cardH - 60) break;
-        ctx.fillText(`· ${nameOverrides[ex.id] || ex.name}`, cx, cy);
-        cy += 52;
-      }
-
-    } else if (!isCondition) {
-      // ── Strength — no weight data yet ────────────────────────────────────
-      ctx.fillStyle = "rgba(165, 180, 252, 0.7)";
-      ctx.font = "600 38px 'Inter', system-ui, sans-serif";
-      ctx.fillText("STRENGTH SESSION", cx, cy);
-      cy += 60;
-      ctx.fillStyle = "rgba(255,255,255,0.65)";
-      ctx.font = "400 38px 'Inter', system-ui, sans-serif";
-      for (const ex of allExercises.slice(0, 7)) {
-        if (cy > cardTop + cardH - 60) break;
-        ctx.fillText(`· ${nameOverrides[ex.id] || ex.name}`, cx, cy);
+      for (const ex of allExercises.slice(0, 6)) {
+        if (cy > cardTop + cardH - 56) break;
+        const exName = nameOverrides[ex.id] || ex.name;
+        const setInfo = ex.sets ? ` ${ex.sets}×${ex.setReps?.[0] ?? "?"}` : "";
+        let line = `· ${exName}${setInfo}`;
+        while (ctx.measureText(line).width > cardW - 120 && line.length > 4)
+          line = line.slice(0, -1);
+        if (line !== `· ${exName}${setInfo}`) line += "…";
+        ctx.fillText(line, cx, cy);
         cy += 52;
       }
 
