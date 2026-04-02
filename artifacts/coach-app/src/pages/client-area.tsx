@@ -164,6 +164,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [assignSearch, setAssignSearch] = useState("");
 
   // ── Build-from-description / from-scratch mode ──
+  const [aiMode, setAiMode] = useState<"session" | "programme">("programme");
   const [buildMode, setBuildMode] = useState<"describe" | "scratch">("describe");
   const [fromScratchTitle, setFromScratchTitle] = useState("");
   const [fromScratchCreating, setFromScratchCreating] = useState(false);
@@ -299,6 +300,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [quickAddError, setQuickAddError] = useState("");
   const [quickAddListening, setQuickAddListening] = useState(false);
   const [quickAddInterim, setQuickAddInterim] = useState("");
+  // ── AI session generation from Build Through AI dialog ──
+  const [aiSessionGenerating, setAiSessionGenerating] = useState(false);
   const quickAddInterimRef = useRef("");
   const quickAddRecRef = useRef<any>(null);
 
@@ -365,6 +368,35 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       setQuickAddError(quickAddType === "wod" ? "Couldn't parse your WOD — please try again." : "Couldn't parse your session — please try again.");
     } finally {
       setQuickAddParsing(false);
+    }
+  }
+
+  /** Build Through AI — single session mode: uses assignStartDate as the date */
+  async function handleAiSession() {
+    if (!quickAddDesc.trim() || !assignStartDate) return;
+    setAiSessionGenerating(true);
+    setQuickAddError("");
+    try {
+      const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error();
+      const session = await res.json();
+      const newSession = { ...session, id: `session-${Date.now()}`, date: assignStartDate };
+      await addSessionToClientCalendar(assignStartDate, newSession, () => {}, newSession.id, () => {
+        setAssignDialogOpen(false);
+        setQuickAddName("");
+        setQuickAddDesc("");
+        setQuickAddType("strength");
+        navigateToWeekOf(assignStartDate);
+      }, session.name);
+    } catch {
+      setQuickAddError(quickAddType === "wod" ? "Couldn't parse your WOD — please try again." : "Couldn't parse your session — please try again.");
+    } finally {
+      setAiSessionGenerating(false);
     }
   }
 
@@ -1960,11 +1992,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               <Button
                 size="sm"
                 className="rounded-xl text-xs h-8 px-2.5 gap-1"
-                onClick={() => { setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setBuildMode("describe"); setGeneratedPreview(null); setDescribeText(""); setFromScratchTitle(""); setStrengthStyle(null); setAssignDialogOpen(true); }}
-                title="Build a Programme"
+                onClick={() => { setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAiMode("programme"); setBuildMode("describe"); setGeneratedPreview(null); setDescribeText(""); setFromScratchTitle(""); setStrengthStyle(null); setQuickAddName(""); setQuickAddDesc(""); setQuickAddType("strength"); setQuickAddError(""); setAssignDialogOpen(true); }}
+                title="Build a session or programme using AI"
               >
-                <Dumbbell className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Build Programme</span>
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Build Through AI</span>
               </Button>
             </div>
           </div>
@@ -2285,19 +2317,96 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         </div>
       )}
 
-      {/* Build Programme Dialog */}
-      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); } }}>
+      {/* Build Through AI Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); } }}>
         <DialogContent className="max-w-md max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Dumbbell className="w-5 h-5 text-primary" />
-              Build Your Programme
+              <Sparkles className="w-5 h-5 text-primary" />
+              Build Through AI
             </DialogTitle>
-            <DialogDescription className="sr-only">Build a programme for {client?.name ?? "this client"}</DialogDescription>
+            <DialogDescription className="sr-only">Build a session or programme using AI for {client?.name ?? "this client"}</DialogDescription>
           </DialogHeader>
+
+          {/* Mode toggle — Session vs Programme */}
+          {!describeGenerating && !generatedPreview && (
+            <div className="flex rounded-xl overflow-hidden border border-muted p-0.5 gap-0.5 bg-muted/30 shrink-0">
+              {(["session", "programme"] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { setAiMode(m); setQuickAddError(""); }}
+                  className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition-colors ${aiMode === m ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {m === "session" ? "Single Session" : "Full Programme"}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Scrollable content — footer is pinned below, never clipped */}
           <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-1">
+
+              {/* ── SINGLE SESSION MODE ── */}
+              {aiMode === "session" && (
+                <>
+                  {/* Session type selector */}
+                  <div className="flex rounded-xl overflow-hidden border border-muted p-0.5 gap-0.5 bg-muted/30">
+                    {(["strength", "wod", "run"] as const).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setQuickAddType(t)}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition-colors ${quickAddType === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        {t === "strength" ? "Strength" : t === "wod" ? "WOD" : "Run"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Optional name */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Session name <span className="text-muted-foreground font-normal">(optional)</span></label>
+                    <Input
+                      placeholder={quickAddType === "wod" ? "e.g. Thursday Metcon" : quickAddType === "run" ? "e.g. Tuesday Tempo" : "e.g. Lower Body Day"}
+                      value={quickAddName}
+                      onChange={e => setQuickAddName(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">
+                      {quickAddType === "wod" ? "WOD description" : quickAddType === "run" ? "Run description" : "What are you working with?"}
+                    </label>
+                    <textarea
+                      className="w-full min-h-[110px] rounded-xl border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
+                      placeholder={
+                        quickAddType === "wod"
+                          ? "e.g. 30 min AMRAP: 10 burpees, 15 box jumps, 20 wall balls. I have a 24kg KB."
+                          : quickAddType === "run"
+                          ? "e.g. 45 min easy run, 4×500m with 90s rest, 5km time trial"
+                          : "e.g. I have 30 mins, 22.5kg dumbbells, and can run 500m laps. Build me a full-body circuit."
+                      }
+                      value={quickAddDesc}
+                      onChange={e => setQuickAddDesc(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void handleAiSession(); } }}
+                    />
+                    <p className="text-xs text-muted-foreground">Include available kit, duration, and any preferences. Cmd+Enter to generate.</p>
+                  </div>
+
+                  {/* Date */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Session Date</label>
+                    <Input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full" />
+                  </div>
+
+                  {quickAddError && <p className="text-sm text-red-500">{quickAddError}</p>}
+                </>
+              )}
+
+              {/* ── FULL PROGRAMME MODE ── */}
+              {aiMode === "programme" && <>
               {/* Monthly generation limit */}
               {(monthlyLimitHit || generationLimitError) && !generatedPreview && !describeGenerating ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 flex flex-col items-center text-center gap-3">
@@ -2438,12 +2547,25 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   </p>
                 </>
               )}
+              </>}
             </div>
 
           {/* Pinned footer — always visible, never clipped */}
           {!describeGenerating && (
             <DialogFooter className="shrink-0 pt-3 border-t">
-              {!generatedPreview ? (
+              {aiMode === "session" ? (
+                <>
+                  <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Close</Button>
+                  <Button
+                    onClick={() => void handleAiSession()}
+                    disabled={!quickAddDesc.trim() || !assignStartDate || aiSessionGenerating}
+                    className="gap-2"
+                  >
+                    {aiSessionGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    Generate Session
+                  </Button>
+                </>
+              ) : !generatedPreview ? (
                 <>
                   <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Close</Button>
                   {!(monthlyLimitHit || generationLimitError) && (
