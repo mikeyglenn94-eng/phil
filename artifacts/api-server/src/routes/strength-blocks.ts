@@ -377,6 +377,267 @@ const templates: StrengthBlockTemplate[] = [
       },
     ],
   },
+
+  // ── Olympic Weightlifting Block ──────────────────────────────────────────
+  {
+    id: "olympic-weightlifting-4-week",
+    name: "Olympic Weightlifting — 4 Week Block",
+    liftFocus: "snatch,clean & jerk,olympic weightlifting",
+    durationWeeks: 4,
+    sessionsPerWeek: 5,
+    level: "advanced",
+    tags: ["olympic", "weightlifting", "snatch", "clean", "jerk", "olympic lifting", "oly"],
+    description: "4-week olympic weightlifting block, 5 sessions per week (Mon–Sat). Covers snatch, clean & jerk, front squat, back squat, pulls, and accessory work. Intensity-based, coach-prescribed loading.",
+    notes: "Load by feel / coach prescription. All percentages are off 1RM unless noted. Max out noted exercises in Week 1 before starting the block.",
+    weeks: [
+      {
+        week: 1, label: "Week 1 — Establish",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Monday — Snatch Focus",
+            exercises: [
+              { name: "Front Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Hang Above Knee Snatch (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
+              { name: "Paused Jerks", sets: 3, reps: "3", percentage: "" },
+              { name: "Pulldown Behind Neck", sets: 3, reps: "10", percentage: "" },
+              { name: "Weighted Plank", sets: 3, reps: "60s", percentage: "" },
+              { name: "Weighted Good Mornings", sets: 3, reps: "8", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 2, name: "Tuesday — Clean Focus",
+            exercises: [
+              { name: "Hang Above Knee Clean (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
+              { name: "Front Squat", sets: 3, reps: "3", percentage: "" },
+              { name: "Paused Heaves", sets: 3, reps: "5", percentage: "", notes: "+10kg above 1RM" },
+              { name: "Banded Strict Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Reverse Plank", sets: 3, reps: "60s", percentage: "" },
+              { name: "GHD Abs", sets: 3, reps: "20", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 3, name: "Wednesday — Competition Lifts",
+            exercises: [
+              { name: "Snatch", sets: 3, reps: "3", percentage: "" },
+              { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "" },
+              { name: "Paused Back Squat (no shoes)", sets: 3, reps: "3", percentage: "", notes: "Max out first" },
+              { name: "Snatch Pulls + Clean Pulls", sets: 2, reps: "3 each", percentage: "", notes: "+15kg above 1RM" },
+              { name: "Back Extension", sets: 3, reps: "10", percentage: "" },
+              { name: "Banded BTN Snatch Grip Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Single Arm Row", sets: 3, reps: "10 per side", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 5, name: "Friday — Power Variations",
+            exercises: [
+              { name: "Back Squat", sets: 3, reps: "3", percentage: "" },
+              { name: "Block Power Snatch", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Power Clean + Power Jerk", sets: 3, reps: "3", percentage: "" },
+              { name: "Push Press", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Muscle Snatch", sets: 3, reps: "3", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 6, name: "Saturday — Volume Day",
+            exercises: [
+              { name: "Snatch", sets: 3, reps: "3", percentage: "" },
+              { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Snatch Pulls + Clean Pulls", sets: 2, reps: "5 each", percentage: "", notes: "+10kg above 1RM" },
+              { name: "Bulgarian Split Squat (no shoes)", sets: 3, reps: "8 per side", percentage: "" },
+              { name: "Reverse Hyper", sets: 3, reps: "10", percentage: "" },
+              { name: "Strict Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Weighted Russian Twist", sets: 3, reps: "20", percentage: "" },
+            ],
+          },
+        ],
+      },
+      {
+        week: 2, label: "Week 2 — Build",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Monday — Snatch Focus",
+            exercises: [
+              { name: "Front Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Hang Above Knee Snatch (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
+              { name: "Jerks", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Mid-Shin Snatch + Clean Pulls (5s pause)", sets: 2, reps: "5 each", percentage: "", notes: "@ 1RM" },
+              { name: "Pull Ups", sets: 3, reps: "5–10", percentage: "" },
+              { name: "Weighted Plank", sets: 3, reps: "60s", percentage: "" },
+              { name: "Single Leg RDL", sets: 3, reps: "8 per side", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 2, name: "Tuesday — Clean Focus",
+            exercises: [
+              { name: "Hang Above Knee Clean", sets: 3, reps: "3", percentage: "" },
+              { name: "Front Squat", sets: 3, reps: "3", percentage: "" },
+              { name: "Paused Heaves", sets: 3, reps: "5", percentage: "", notes: "+10kg above 1RM" },
+              { name: "Banded Strict Press", sets: 3, reps: "3", percentage: "", notes: "Max out first" },
+              { name: "Back Extension Iso Hold", sets: 3, reps: "max hold", percentage: "" },
+              { name: "Decline Abs", sets: 3, reps: "20", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 3, name: "Wednesday — Competition Lifts",
+            exercises: [
+              { name: "Snatch", sets: 2, reps: "2", percentage: "" },
+              { name: "Clean & Jerk", sets: 3, reps: "3", percentage: "" },
+              { name: "Paused Front Squat (no shoes)", sets: 3, reps: "3", percentage: "", notes: "Max out first" },
+              { name: "Snatch Pulls + Clean Pulls", sets: 2, reps: "3 each", percentage: "", notes: "+15kg above 1RM" },
+              { name: "Single Leg Back Extension", sets: 3, reps: "10", percentage: "" },
+              { name: "Banded BTN Snatch Grip Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Single Arm Row", sets: 3, reps: "10 per side", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 5, name: "Friday — Power Variations",
+            exercises: [
+              { name: "Back Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Power Snatch", sets: 3, reps: "3", percentage: "" },
+              { name: "Block Power Clean + Power Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "BTN Push Press", sets: 3, reps: "3", percentage: "" },
+              { name: "Muscle Snatch", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+            ],
+          },
+          {
+            dayOfWeek: 6, name: "Saturday — Volume Day",
+            exercises: [
+              { name: "Snatch", sets: 3, reps: "3", percentage: "" },
+              { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Snatch Pulls + Clean Pulls", sets: 2, reps: "5 each", percentage: "", notes: "+10kg above 1RM" },
+              { name: "Bulgarian Split Squat", sets: 3, reps: "8 per side", percentage: "" },
+              { name: "Reverse Hyper", sets: 3, reps: "10", percentage: "" },
+              { name: "Strict Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Weighted Russian Twist", sets: 3, reps: "20", percentage: "" },
+            ],
+          },
+        ],
+      },
+      {
+        week: 3, label: "Week 3 — Accumulate",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Monday — Snatch Focus",
+            exercises: [
+              { name: "Front Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Hang Above Knee Snatch (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
+              { name: "Paused Jerks", sets: 3, reps: "3", percentage: "" },
+              { name: "Pulldown Behind Neck", sets: 3, reps: "10", percentage: "" },
+              { name: "Weighted Plank", sets: 3, reps: "60s", percentage: "" },
+              { name: "Weighted Good Mornings", sets: 3, reps: "8", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 2, name: "Tuesday — Clean Focus",
+            exercises: [
+              { name: "Hang Above Knee Clean (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
+              { name: "Front Squat", sets: 3, reps: "3", percentage: "" },
+              { name: "Paused Heaves", sets: 3, reps: "5", percentage: "", notes: "+10kg above 1RM" },
+              { name: "Banded Strict Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Reverse Plank", sets: 3, reps: "60s", percentage: "" },
+              { name: "GHD Abs", sets: 3, reps: "20", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 3, name: "Wednesday — Competition Lifts",
+            exercises: [
+              { name: "Snatch", sets: 3, reps: "3", percentage: "" },
+              { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "" },
+              { name: "Paused Back Squat (no shoes)", sets: 3, reps: "3", percentage: "", notes: "Max out first" },
+              { name: "Snatch Pulls + Clean Pulls", sets: 2, reps: "3 each", percentage: "", notes: "+15kg above 1RM" },
+              { name: "Back Extension", sets: 3, reps: "10", percentage: "" },
+              { name: "Banded BTN Snatch Grip Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Single Arm Row", sets: 3, reps: "10 per side", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 5, name: "Friday — Power Variations",
+            exercises: [
+              { name: "Back Squat", sets: 3, reps: "3", percentage: "" },
+              { name: "Block Power Snatch", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Power Clean + Power Jerk", sets: 3, reps: "3", percentage: "" },
+              { name: "Push Press", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Muscle Snatch", sets: 3, reps: "3", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 6, name: "Saturday — Volume Day",
+            exercises: [
+              { name: "Snatch", sets: 3, reps: "3", percentage: "" },
+              { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Snatch Pulls + Clean Pulls", sets: 2, reps: "5 each", percentage: "", notes: "+10kg above 1RM" },
+              { name: "Bulgarian Split Squat (no shoes)", sets: 3, reps: "8 per side", percentage: "" },
+              { name: "Reverse Hyper", sets: 3, reps: "10", percentage: "" },
+              { name: "Strict Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Weighted Russian Twist", sets: 3, reps: "20", percentage: "" },
+            ],
+          },
+        ],
+      },
+      {
+        week: 4, label: "Week 4 — Peak",
+        sessions: [
+          {
+            dayOfWeek: 1, name: "Monday — Snatch Focus",
+            exercises: [
+              { name: "Front Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Hang Above Knee Snatch (1 high pull each rep)", sets: 3, reps: "3", percentage: "" },
+              { name: "Jerks", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Mid-Shin Snatch + Clean Pulls (5s pause)", sets: 2, reps: "5 each", percentage: "", notes: "@ 1RM" },
+              { name: "Pull Ups", sets: 3, reps: "5–10", percentage: "" },
+              { name: "Weighted Plank", sets: 3, reps: "60s", percentage: "" },
+              { name: "Single Leg RDL", sets: 3, reps: "8 per side", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 2, name: "Tuesday — Clean Focus",
+            exercises: [
+              { name: "Hang Above Knee Clean", sets: 3, reps: "3", percentage: "" },
+              { name: "Front Squat", sets: 3, reps: "3", percentage: "" },
+              { name: "Paused Heaves", sets: 3, reps: "5", percentage: "", notes: "+10kg above 1RM" },
+              { name: "Banded Strict Press", sets: 3, reps: "3", percentage: "", notes: "Max out first" },
+              { name: "Back Extension Iso Hold", sets: 3, reps: "max hold", percentage: "" },
+              { name: "Decline Abs", sets: 3, reps: "20", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 3, name: "Wednesday — Competition Lifts",
+            exercises: [
+              { name: "Snatch", sets: 2, reps: "2", percentage: "" },
+              { name: "Clean & Jerk", sets: 3, reps: "3", percentage: "" },
+              { name: "Paused Front Squat (no shoes)", sets: 3, reps: "3", percentage: "", notes: "Max out first" },
+              { name: "Snatch Pulls + Clean Pulls", sets: 2, reps: "3 each", percentage: "", notes: "+15kg above 1RM" },
+              { name: "Single Leg Back Extension", sets: 3, reps: "10", percentage: "" },
+              { name: "Banded BTN Snatch Grip Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Single Arm Row", sets: 3, reps: "10 per side", percentage: "" },
+            ],
+          },
+          {
+            dayOfWeek: 5, name: "Friday — Power Variations",
+            exercises: [
+              { name: "Back Squat", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Power Snatch", sets: 3, reps: "3", percentage: "" },
+              { name: "Block Power Clean + Power Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "BTN Push Press", sets: 3, reps: "3", percentage: "" },
+              { name: "Muscle Snatch", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+            ],
+          },
+          {
+            dayOfWeek: 6, name: "Saturday — Volume Day",
+            exercises: [
+              { name: "Snatch", sets: 3, reps: "3", percentage: "" },
+              { name: "Clean & Jerk", sets: 2, reps: "2", percentage: "", notes: "Max out first" },
+              { name: "Snatch Pulls + Clean Pulls", sets: 2, reps: "5 each", percentage: "", notes: "+10kg above 1RM" },
+              { name: "Bulgarian Split Squat", sets: 3, reps: "8 per side", percentage: "" },
+              { name: "Reverse Hyper", sets: 3, reps: "10", percentage: "" },
+              { name: "Strict Press", sets: 3, reps: "5", percentage: "", notes: "Max out first" },
+              { name: "Weighted Russian Twist", sets: 3, reps: "20", percentage: "" },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -426,6 +687,10 @@ function scoreTemplate(template: StrengthBlockTemplate, query: string): number {
   if ((q.includes("powerlifting") || q.includes("sbd") || q.includes("bench") || q.includes("deadlift") || q.includes("competition") || q.includes("meet") || q.includes("total")) && template.id === "smolov-powerlifting-split") score += 16;
   if ((q.includes("11 week") || q.includes("eleven week")) && template.durationWeeks === 11) score += 8;
   if (q.includes("all three") && template.id === "smolov-powerlifting-split") score += 8;
+
+  // Olympic weightlifting
+  if ((q.includes("olympic") || q.includes("weightlifting") || q.includes("oly") || q.includes("snatch") || q.includes("clean") || q.includes("jerk") || q.includes("clean and jerk") || q.includes("clean & jerk")) && template.id === "olympic-weightlifting-4-week") score += 25;
+  if ((q.includes("hang snatch") || q.includes("hang clean") || q.includes("power snatch") || q.includes("power clean") || q.includes("front squat") || q.includes("overhead")) && template.id === "olympic-weightlifting-4-week") score += 12;
 
   // Any match at all gets a baseline
   const nameMatch = template.name.toLowerCase().split(" ").some(w => w.length > 3 && q.includes(w));
