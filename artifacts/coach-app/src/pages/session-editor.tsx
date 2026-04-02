@@ -196,7 +196,7 @@ export default function SessionEditor() {
       setSaveStatus("saved");
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
       toast({ title: "Session saved!" });
-      setLocation(`/`);
+      window.history.back();
     } catch {
       toast({ title: "Error saving session", variant: "destructive" });
     } finally {
@@ -212,7 +212,7 @@ export default function SessionEditor() {
       await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
       queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
       toast({ title: "Session deleted" });
-      setLocation(`/`);
+      window.history.back();
     } catch {
       toast({ title: "Error deleting session", variant: "destructive" });
     }
@@ -240,7 +240,7 @@ export default function SessionEditor() {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-background z-20 gap-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Button variant="ghost" size="icon" onClick={() => setLocation('/')}>
+            <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div className="flex-1 min-w-0">
@@ -397,6 +397,71 @@ export default function SessionEditor() {
                 </Button>
               </div>
             )}
+
+            {/* Client Results — shown when client has logged data */}
+            {!isConditioningSession && existingSession && (() => {
+              const hasAnyResults = !!(existingSession as any).clientComment ||
+                (existingSession.exercises ?? []).some((ex: any) =>
+                  (ex.setReps ?? []).some((r: any) => r !== null && r !== undefined) ||
+                  (ex.setWeights ?? []).some((w: any) => w !== null && w !== undefined) ||
+                  ex.clientComment
+                );
+              if (!hasAnyResults) return null;
+              return (
+                <div className="mt-8">
+                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Client Results</h2>
+                  <div className="space-y-3">
+                    {(existingSession as any).clientComment && (
+                      <div className="bg-primary/5 border border-primary/15 rounded-xl px-4 py-3">
+                        <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider mb-1.5">Session note</p>
+                        <p className="text-sm text-foreground leading-relaxed">"{(existingSession as any).clientComment}"</p>
+                      </div>
+                    )}
+                    {(existingSession.exercises ?? []).map((ex: any, i: number) => {
+                      const hasLog = (ex.setReps ?? []).some((r: any) => r !== null && r !== undefined) ||
+                                     (ex.setWeights ?? []).some((w: any) => w !== null && w !== undefined);
+                      if (!hasLog && !ex.clientComment) return null;
+                      const numSets = ex.sets ?? Math.max((ex.setReps ?? []).length, (ex.setWeights ?? []).length, 0);
+                      return (
+                        <div key={ex.id ?? i} className="border rounded-xl overflow-hidden">
+                          <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/30">
+                            <span className="text-xs text-muted-foreground font-mono w-5 shrink-0">{i + 1}</span>
+                            <p className="text-sm font-semibold">{ex.name}</p>
+                          </div>
+                          {hasLog && numSets > 0 && (
+                            <div className="px-4 py-3 border-t space-y-1.5">
+                              {Array.from({ length: numSets }).map((_, si) => {
+                                const reps = ex.setReps?.[si];
+                                const kg = ex.setWeights?.[si];
+                                const done = reps !== null && reps !== undefined;
+                                return (
+                                  <div key={si} className={`flex items-center gap-3 text-xs ${done ? "text-foreground" : "text-muted-foreground/40"}`}>
+                                    <span className="w-12 shrink-0 font-medium">Set {si + 1}</span>
+                                    {done ? (
+                                      <>
+                                        <span className="font-semibold text-primary">{reps} reps</span>
+                                        {kg !== null && kg !== undefined && <span className="text-muted-foreground">@ {kg} kg</span>}
+                                      </>
+                                    ) : (
+                                      <span className="italic">not logged</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {ex.clientComment && (
+                            <div className="px-4 py-2.5 border-t bg-primary/5">
+                              <p className="text-xs text-foreground/70 italic">"{ex.clientComment}"</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

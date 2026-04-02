@@ -288,7 +288,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   // ── Training calendar state ──
   const [trainingWeekOffset, setTrainingWeekOffset] = useState(0);
-  const [selectedTrainingSession, setSelectedTrainingSession] = useState<Session | null>(null);
 
   // ── Quick-add single session ──
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -2142,20 +2141,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   const start = touchStartPosRef.current;
                                   const moved = start ? Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y) : 0;
                                   if (moved < 10) {
-                                    if (mode === "client" && prog) {
-                                      setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
-                                    } else {
-                                      setSelectedTrainingSession(session);
+                                    if (prog) {
+                                      if (mode === "client") {
+                                        setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
+                                      } else {
+                                        setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
+                                      }
                                     }
                                   }
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (isDragActiveRef.current) return;
-                                  if (mode === "client" && prog) {
-                                    setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
-                                  } else if (mode !== "client") {
-                                    setSelectedTrainingSession(session);
+                                  if (prog) {
+                                    if (mode === "client") {
+                                      setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
+                                    } else {
+                                      setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
+                                    }
                                   }
                                 }}
                                 className={`calendar-item relative group w-full text-left select-none transition-all cursor-pointer ${calendarView === "week" ? "!whitespace-normal !px-2.5 !py-2 !text-[11px] !bg-primary/10 !text-primary !rounded-md !overflow-visible hover:!bg-primary/20" : ""} ${isTouchPicked ? "opacity-50 scale-95 ring-2 ring-primary/50 ring-offset-1" : ""}`}
@@ -2217,143 +2220,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </div>
           </div>
 
-          {/* Session detail slide-up panel (coach mode only) */}
-          {selectedTrainingSession && (() => {
-            const panelProg = (clientProgrammes ?? []).find(p =>
-              (p.sessions as Session[]).some(s => s.id === selectedTrainingSession.id)
-            );
-            const sess = selectedTrainingSession;
-            const isConditioning = (sess as any).source === "wod_brain" || (sess as any).source === "run_brain";
-
-            // Compute completion stats for strength sessions
-            const totalSets = (sess.exercises || []).reduce((a, ex) => a + (ex.sets ?? 0), 0);
-            const loggedSets = (sess.exercises || []).reduce((a, ex) => {
-              const reps = ex.setReps ?? [];
-              return a + reps.filter(r => r !== null && r !== undefined).length;
-            }, 0);
-            const hasAnyLog = loggedSets > 0 || !!sess.clientComment || (sess.exercises || []).some(ex => ex.clientComment);
-            const isComplete = totalSets > 0 && loggedSets >= totalSets;
-
-            return (
-              <div className="absolute inset-x-0 bottom-0 bg-background border-t rounded-t-2xl shadow-2xl z-20 max-h-[80%] flex flex-col">
-                {/* Header */}
-                <div className="flex items-start justify-between px-5 py-4 border-b shrink-0">
-                  <div className="flex-1 min-w-0 pr-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="font-semibold text-base">{sess.name || "Session"}</h2>
-                      {!isConditioning && totalSets > 0 && (
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isComplete ? "bg-green-100 text-green-700" : hasAnyLog ? "bg-yellow-100 text-yellow-700" : "bg-muted text-muted-foreground"}`}>
-                          {isComplete ? "Complete" : hasAnyLog ? `${loggedSets}/${totalSets} sets` : "Not started"}
-                        </span>
-                      )}
-                      {isConditioning && sess.clientComment && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Results logged</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {format(parseISO(sess.date), "EEEE, d MMMM yyyy")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {panelProg && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs h-8 px-3 rounded-xl gap-1.5"
-                        onClick={() => setLocation(`/programmes/${panelProg.id}/sessions/${sess.id}`)}
-                      >
-                        <Pencil className="w-3 h-3" />
-                        Edit
-                      </Button>
-                    )}
-                    <button onClick={() => setSelectedTrainingSession(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Body */}
-                <div className="overflow-y-auto px-5 py-4 space-y-4">
-
-                  {/* Session-level client comment */}
-                  {sess.clientComment && (
-                    <div className="bg-primary/5 border border-primary/15 rounded-xl px-4 py-3">
-                      <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider mb-1.5">Client note</p>
-                      <p className="text-sm text-foreground leading-relaxed">"{sess.clientComment}"</p>
-                    </div>
-                  )}
-
-                  {/* WOD/Run: structure block */}
-                  {isConditioning && (sess as any).structure && (
-                    <div className="bg-muted/40 rounded-xl px-4 py-3">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Session structure</p>
-                      <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{(sess as any).structure}</p>
-                    </div>
-                  )}
-
-                  {/* Strength exercises */}
-                  {!isConditioning && (
-                    (!sess.exercises || sess.exercises.length === 0) ? (
-                      <p className="text-sm text-muted-foreground">No exercises in this session.</p>
-                    ) : (
-                      sess.exercises.map((ex, i) => {
-                        const hasLog = (ex.setReps ?? []).some(r => r !== null && r !== undefined) ||
-                                       (ex.setWeights ?? []).some(w => w !== null && w !== undefined);
-                        const numSets = ex.sets ?? Math.max((ex.setReps ?? []).length, (ex.setWeights ?? []).length, 0);
-                        return (
-                          <div key={ex.id ?? i} className="border rounded-xl overflow-hidden">
-                            {/* Exercise header */}
-                            <div className="flex items-start gap-3 px-4 py-3 bg-muted/30">
-                              <span className="text-xs text-muted-foreground font-mono w-5 shrink-0 pt-0.5">{i + 1}</span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold">{ex.name}</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  Prescribed: {ex.sets ?? "—"} × {ex.reps ?? "—"}{ex.rpe ? ` @ RPE ${ex.rpe}` : ""}{ex.weight ? ` / ${ex.weight}` : ""}
-                                </p>
-                                {ex.notes && <p className="text-xs text-muted-foreground/60 mt-0.5 italic">{ex.notes}</p>}
-                              </div>
-                            </div>
-
-                            {/* Per-set logged results */}
-                            {hasLog && numSets > 0 && (
-                              <div className="px-4 py-3 border-t space-y-1.5">
-                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Client results</p>
-                                {Array.from({ length: numSets }).map((_, si) => {
-                                  const reps = ex.setReps?.[si];
-                                  const kg = ex.setWeights?.[si];
-                                  const done = reps !== null && reps !== undefined;
-                                  return (
-                                    <div key={si} className={`flex items-center gap-3 text-xs ${done ? "text-foreground" : "text-muted-foreground/40"}`}>
-                                      <span className="w-12 shrink-0 font-medium">Set {si + 1}</span>
-                                      {done ? (
-                                        <>
-                                          <span className="font-semibold text-primary">{reps} reps</span>
-                                          {kg !== null && kg !== undefined && <span className="text-muted-foreground">@ {kg} kg</span>}
-                                        </>
-                                      ) : (
-                                        <span className="italic">not logged</span>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {/* Per-exercise client comment */}
-                            {ex.clientComment && (
-                              <div className="px-4 py-2.5 border-t bg-primary/5">
-                                <p className="text-xs text-muted-foreground italic">"{ex.clientComment}"</p>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )
-                  )}
-                </div>
-              </div>
-            );
-          })()}
         </div>
       )}
 
