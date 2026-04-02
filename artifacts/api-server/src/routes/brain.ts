@@ -10,67 +10,92 @@ import { searchEngineSync } from "./engine-builder";
 const router: IRouter = Router();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Intent detection — keyword-based routing across all libraries
+// Three buckets: wod | run | strength
+// Sessions and blocks both live inside their bucket.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Intent = "wod" | "run" | "cycle" | "strength" | "all";
+type Bucket = "wod" | "run" | "strength" | "all";
 
-const STRENGTH_KW = ["strength", "squat", "bench", "deadlift", "powerlifting", "barbell", "sbd", "smolov", "lift", "1rm", "heavy", "olympic"];
-const CYCLE_KW = ["cycle", "programme", "progressive", "weeks", "endurance cycle", "ergs", "mikko", "triangle", "emom ergs", "6 week", "engine", "vo2", "aerobic base", "threshold", "hinshaw"];
-// hyrox appears in both RUN and WOD to trigger "all" intent — catches both WODs and run blocks
-const RUN_KW = ["run", "running", "tempo", "easy run", "jog", "pace", "km", "miles", "aerobic", "threshold", "hills", "fartlek", "long run", "recovery run", "track", "intervals running", "hyrox", "run block", "run programme"];
-const WOD_KW = ["wod", "workout", "amrap", "emom", "for time", "metcon", "conditioning", "circuit", "burpee", "wall ball", "dumbbell", "hyrox", "sled", "ski erg"];
+// WOD = conditioning sessions/blocks (AMRAP, EMOM, ergs, engine, etc.)
+const WOD_KW = [
+  "wod", "workout", "amrap", "emom", "for time", "metcon", "conditioning",
+  "circuit", "burpee", "wall ball", "dumbbell", "hyrox", "sled", "ski erg",
+  "ergs", "rower", "mikko", "triangle", "engine", "vo2", "aerobic base",
+  "threshold", "hinshaw", "cycle", "progressive", "6 week",
+];
 
-function detectIntent(query: string): Intent {
+// Run = running sessions/blocks
+const RUN_KW = [
+  "run", "running", "tempo", "easy run", "jog", "pace", "km", "miles",
+  "hills", "fartlek", "long run", "recovery run", "track", "intervals",
+  "hyrox run", "run block", "run programme",
+];
+
+// Strength = weightlifting sessions/blocks (barbell, olympic, powerlifting)
+const STRENGTH_KW = [
+  "strength", "squat", "bench", "deadlift", "powerlifting", "barbell",
+  "sbd", "smolov", "lift", "1rm", "heavy", "olympic", "weightlifting",
+  "snatch", "clean", "jerk", "press", "pull",
+];
+
+function detectBucket(query: string): Bucket {
   const q = query.toLowerCase();
-  const scores: Record<Intent, number> = {
-    strength: STRENGTH_KW.filter(k => q.includes(k)).length,
-    cycle:    CYCLE_KW.filter(k => q.includes(k)).length,
-    run:      RUN_KW.filter(k => q.includes(k)).length,
+  const scores: Record<Bucket, number> = {
     wod:      WOD_KW.filter(k => q.includes(k)).length,
+    run:      RUN_KW.filter(k => q.includes(k)).length,
+    strength: STRENGTH_KW.filter(k => q.includes(k)).length,
     all:      0,
   };
-  const max = Math.max(scores.strength, scores.cycle, scores.run, scores.wod);
+  const max = Math.max(scores.wod, scores.run, scores.strength);
   if (max === 0) return "all";
-  const winners = (["strength", "cycle", "run", "wod"] as Intent[]).filter(k => scores[k] === max);
+  const winners = (["wod", "run", "strength"] as Bucket[]).filter(k => scores[k] === max);
   return winners.length === 1 ? winners[0] : "all";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Score a DB endurance_run_template against a query
+// Scoring helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function scoreRunTemplate(template: any, query: string): number {
+function scoreText(query: string, ...fields: string[]): number {
   const q = query.toLowerCase();
-  const name = (template.name ?? "").toLowerCase();
-  const desc = (template.description ?? "").toLowerCase();
-  const tags: string[] = (template.tags ?? []).map((t: string) => t.toLowerCase());
-
+  const corpus = fields.join(" ").toLowerCase();
   let score = 0;
-
-  // Exact phrase in name — highest weight
-  if (name.includes(q)) score += 20;
-
-  // Individual meaningful words
-  const words = q.split(/\s+/).filter(w => w.length > 2);
-  words.forEach(word => {
-    if (name.includes(word)) score += 10;
-    if (desc.includes(word)) score += 4;
-    if (tags.some(t => t.includes(word))) score += 7;
+  if (corpus.includes(q)) score += 20;
+  q.split(/\s+/).filter(w => w.length > 2).forEach(word => {
+    if (corpus.includes(word)) score += 8;
   });
-
   return score;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Normalisers
+// Olympic lifting detection for master programmes
 // ─────────────────────────────────────────────────────────────────────────────
 
-function normaliseWod(w: any) {
+const OLYMPIC_KW = [
+  "snatch", "clean", "jerk", "overhead squat", "ohs", "power clean",
+  "power snatch", "hang clean", "hang snatch", "split jerk",
+];
+
+function inferProgrammeType(sessions: any[]): string {
+  const corpus = sessions.flatMap((s: any) => {
+    const exs: any[] = s.exercises ?? [];
+    return [s.name ?? "", ...exs.map((e: any) => `${e.name ?? ""} ${e.rawText ?? ""}`)];
+  }).join(" ").toLowerCase();
+  const olympicHits = OLYMPIC_KW.filter(k => corpus.includes(k)).length;
+  return olympicHits >= 2 ? "olympic weightlifting" : "strength";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Normalisers — all return bucket + source for insertion routing
+// ─────────────────────────────────────────────────────────────────────────────
+
+function normaliseWodSession(w: any) {
   return {
     id: w.id,
     name: w.name,
-    category: "wod" as const,
+    bucket: "wod" as const,
+    source: "wod_session" as const,
+    isBlock: false,
     subtitle: `${w.formatLabel ?? w.format} · ${w.duration} min`,
     tags: w.tags ?? [],
     score: w.score ?? 1,
@@ -78,12 +103,14 @@ function normaliseWod(w: any) {
   };
 }
 
-function normaliseRun(r: any) {
+function normaliseRunSession(r: any) {
   const dur = r.duration ? `${r.duration} min` : r.distanceKm ? `${r.distanceKm} km` : "";
   return {
     id: r.id,
     name: r.name,
-    category: "run" as const,
+    bucket: "run" as const,
+    source: "run_session" as const,
+    isBlock: false,
     subtitle: `${r.type} · ${dur} · ${r.intensity}`,
     tags: r.tags ?? [],
     score: r.score ?? 1,
@@ -91,14 +118,16 @@ function normaliseRun(r: any) {
   };
 }
 
-function normaliseCycle(c: any) {
+function normaliseWodBlock_Cycle(c: any) {
   const dMin = c.weeks ? Math.min(...c.weeks.map((w: any) => w.durationMin)) : 0;
   const dMax = c.weeks ? Math.max(...c.weeks.map((w: any) => w.durationMin)) : 0;
   return {
     id: c.id,
     name: c.name,
-    category: "cycle" as const,
-    subtitle: `${c.weeks?.length ?? "?"} weeks · ${dMin}–${dMax} min · progressive`,
+    bucket: "wod" as const,
+    source: "wod_cycle" as const,
+    isBlock: true,
+    subtitle: `${c.weeks?.length ?? "?"}w · ${dMin}–${dMax} min · EMOM block`,
     tags: c.tags ?? [],
     totalWeeks: c.weeks?.length,
     durationRange: { min: dMin, max: dMax },
@@ -108,27 +137,30 @@ function normaliseCycle(c: any) {
   };
 }
 
-function normaliseEngine(p: any) {
+function normaliseWodBlock_Engine(p: any) {
   return {
     id: p.id,
     name: p.name,
-    category: "engine" as const,
-    subtitle: `${p.durationWeeks} weeks · ${p.sessionsPerWeek}×/wk · threshold / VO2 / aerobic`,
+    bucket: "wod" as const,
+    source: "wod_engine" as const,
+    isBlock: true,
+    subtitle: `${p.durationWeeks}w · ${p.sessionsPerWeek}×/wk · aerobic engine`,
     tags: p.tags ?? [],
     durationWeeks: p.durationWeeks,
     sessionsPerWeek: p.sessionsPerWeek,
-    goal: p.goal,
     score: p.score ?? 1,
     raw: p,
   };
 }
 
-function normaliseStrength(t: any) {
+function normaliseStrengthBlock_Template(t: any) {
   return {
     id: t.id,
     name: t.name,
-    category: "strength" as const,
-    subtitle: `${t.durationWeeks} weeks · ${t.sessionsPerWeek}×/wk · ${t.liftFocus}`,
+    bucket: "strength" as const,
+    source: "strength_template" as const,
+    isBlock: true,
+    subtitle: `${t.durationWeeks}w · ${t.sessionsPerWeek}×/wk · ${t.liftFocus}`,
     tags: t.tags ?? [],
     durationWeeks: t.durationWeeks,
     score: t.score ?? 1,
@@ -136,48 +168,26 @@ function normaliseStrength(t: any) {
   };
 }
 
-// Keywords that suggest a programme type from its session names/exercises
-const OLYMPIC_KW = ["snatch", "clean", "jerk", "clean & jerk", "clean and jerk", "overhead squat", "ohs", "power clean", "power snatch", "hang clean", "hang snatch", "split jerk", "push jerk", "muscle snatch"];
-const POWERLIFTING_KW = ["squat", "bench", "deadlift", "sbd", "powerlifting", "sumo", "pause squat", "rdl", "row"];
-
-function inferProgrammeType(sessions: any[]): string {
-  const corpus = sessions.flatMap((s: any) => {
-    const exs: any[] = s.exercises ?? [];
-    return [(s.name ?? ""), ...exs.map((e: any) => e.name ?? ""), ...exs.map((e: any) => e.rawText ?? "")];
-  }).join(" ").toLowerCase();
-
-  const olympicHits = OLYMPIC_KW.filter(k => corpus.includes(k)).length;
-  const strengthHits = POWERLIFTING_KW.filter(k => corpus.includes(k)).length;
-
-  if (olympicHits >= 2) return "olympic weightlifting";
-  if (strengthHits >= 2) return "strength";
-  return "strength";
+function normaliseRunBlock(t: any, score: number) {
+  const sessions: any[] = t.sessions ?? [];
+  const totalWeeks = sessions.length > 0 ? Math.max(...sessions.map((s: any) => s.week ?? 0)) : 0;
+  const sessionsPerWeek = totalWeeks > 0 ? Math.round(sessions.length / totalWeeks) : sessions.length;
+  return {
+    id: String(t.id),
+    name: t.name,
+    bucket: "run" as const,
+    source: "run_block" as const,
+    isBlock: true,
+    subtitle: `${totalWeeks}w · ${sessionsPerWeek} sessions/wk · run block`,
+    tags: t.tags ?? [],
+    totalWeeks,
+    sessionCount: sessions.length,
+    score,
+    raw: t,
+  };
 }
 
-function scoreMasterProgramme(prog: any, query: string): number {
-  const q = query.toLowerCase();
-  const title = (prog.title ?? "").toLowerCase();
-  const sessions: any[] = prog.sessions ?? [];
-  const sessionNames = sessions.map((s: any) => (s.name ?? "").toLowerCase()).join(" ");
-  const exerciseCorpus = sessions.flatMap((s: any) =>
-    (s.exercises ?? []).map((e: any) => `${e.name ?? ""} ${e.rawText ?? ""}`.toLowerCase())
-  ).join(" ");
-  const programmeType = inferProgrammeType(sessions);
-
-  let score = 0;
-  if (title.includes(q)) score += 30;
-
-  const words = q.split(/\s+/).filter((w: string) => w.length > 2);
-  words.forEach((word: string) => {
-    if (title.includes(word)) score += 15;
-    if (sessionNames.includes(word)) score += 5;
-    if (exerciseCorpus.includes(word)) score += 3;
-    if (programmeType.includes(word)) score += 8;
-  });
-  return score;
-}
-
-function normaliseMasterProgramme(p: any, score: number) {
+function normaliseStrengthBlock_Programme(p: any, score: number) {
   const sessions: any[] = p.sessions ?? [];
   const dates = sessions.map((s: any) => s.date).filter(Boolean).sort();
   const weeks = dates.length >= 2
@@ -187,30 +197,15 @@ function normaliseMasterProgramme(p: any, score: number) {
   return {
     id: String(p.id),
     name: p.title,
-    category: "master_programme" as const,
-    subtitle: `${weeks > 0 ? `${weeks}-week` : ""} ${programmeType} block · ${sessions.length} sessions`,
+    bucket: "strength" as const,
+    source: "strength_programme" as const,
+    isBlock: true,
+    subtitle: `${weeks > 0 ? `${weeks}w` : ""} · ${sessions.length} sessions · ${programmeType}`,
     tags: [],
     totalWeeks: weeks,
     sessionCount: sessions.length,
     score,
     raw: p,
-  };
-}
-
-function normaliseRunTemplate(t: any, score: number) {
-  const sessions: any[] = t.sessions ?? [];
-  const totalWeeks = sessions.length > 0 ? Math.max(...sessions.map((s: any) => s.week)) : 0;
-  const sessionsPerWeek = totalWeeks > 0 ? Math.round(sessions.length / totalWeeks) : sessions.length;
-  return {
-    id: String(t.id),
-    name: t.name,
-    category: "run_template" as const,
-    subtitle: `${totalWeeks}-week run block · ${sessionsPerWeek} sessions/wk`,
-    tags: t.tags ?? [],
-    totalWeeks,
-    sessionCount: sessions.length,
-    score,
-    raw: t,
   };
 }
 
@@ -222,54 +217,72 @@ router.post("/brain/search", async (req, res): Promise<void> => {
   const { query } = req.body as { query: string };
   if (!query?.trim()) { res.status(400).json({ error: "Query is required" }); return; }
 
-  const intent = detectIntent(query);
+  const bucket = detectBucket(query);
   const results: any[] = [];
 
-  if (intent === "wod" || intent === "all") {
-    searchWodsSync(query, intent === "all" ? 2 : 4).forEach(w => results.push(normaliseWod(w)));
-  }
-  if (intent === "run" || intent === "all") {
-    searchRunsSync(query, intent === "all" ? 2 : 4).forEach(r => results.push(normaliseRun(r)));
-  }
-  if (intent === "cycle" || intent === "all") {
-    searchCyclesSync(query, intent === "all" ? 2 : 3).forEach(c => results.push(normaliseCycle(c)));
-    searchEngineSync(query, intent === "all" ? 1 : 2).forEach(p => results.push(normaliseEngine(p)));
-  }
-  if (intent === "strength" || intent === "all") {
-    searchStrengthSync(query, intent === "all" ? 1 : 2).forEach(t => results.push(normaliseStrength(t)));
+  // ── WOD bucket ──────────────────────────────────────────────────
+  if (bucket === "wod" || bucket === "all") {
+    const limit = bucket === "all" ? 2 : 4;
+    searchWodsSync(query, limit).forEach(w => results.push(normaliseWodSession(w)));
+    searchCyclesSync(query, bucket === "all" ? 1 : 2).forEach(c => results.push(normaliseWodBlock_Cycle(c)));
+    searchEngineSync(query, 1).forEach(p => results.push(normaliseWodBlock_Engine(p)));
   }
 
-  // Always search endurance run templates from DB (coach-uploaded run programmes)
+  // ── Run bucket ──────────────────────────────────────────────────
+  if (bucket === "run" || bucket === "all") {
+    const limit = bucket === "all" ? 2 : 4;
+    searchRunsSync(query, limit).forEach(r => results.push(normaliseRunSession(r)));
+  }
+
+  // ── Strength bucket ──────────────────────────────────────────────
+  if (bucket === "strength" || bucket === "all") {
+    const limit = bucket === "all" ? 1 : 3;
+    searchStrengthSync(query, limit).forEach(t => results.push(normaliseStrengthBlock_Template(t)));
+  }
+
+  // ── DB: run blocks (always searched) ────────────────────────────
   try {
     const dbTemplates = await db.select().from(enduranceRunTemplatesTable);
-    const runTemplateLimit = intent === "all" ? 2 : intent === "run" ? 3 : 1;
+    const limit = bucket === "run" ? 3 : bucket === "all" ? 2 : 1;
     dbTemplates
-      .map(t => ({ t, score: scoreRunTemplate(t, query) }))
+      .map(t => ({ t, score: scoreText(query, t.name ?? "", t.description ?? "", (t.tags ?? []).join(" ")) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, runTemplateLimit)
-      .forEach(({ t, score }) => results.push(normaliseRunTemplate(t, score)));
-  } catch {
-    // DB unavailable — skip silently
-  }
+      .slice(0, limit)
+      .forEach(({ t, score }) => results.push(normaliseRunBlock(t, score)));
+  } catch { /* skip */ }
 
-  // Always search master programmes (library/coach programmes with no clientId)
+  // ── DB: master programmes / library blocks (always searched) ────
   try {
     const masterProgs = await db.select().from(programmesTable).where(isNull(programmesTable.clientId));
+    const q = query.toLowerCase();
     masterProgs
-      .map(p => ({ p, score: scoreMasterProgramme(p, query) }))
+      .map(p => {
+        const sessions: any[] = p.sessions ?? [];
+        const title = (p.title ?? "").toLowerCase();
+        const sessionNames = sessions.map((s: any) => (s.name ?? "").toLowerCase()).join(" ");
+        const exerciseCorpus = sessions.flatMap((s: any) =>
+          (s.exercises ?? []).map((e: any) => `${e.name ?? ""} ${e.rawText ?? ""}`.toLowerCase())
+        ).join(" ");
+        const programmeType = inferProgrammeType(sessions);
+        let score = 0;
+        if (title.includes(q)) score += 30;
+        q.split(/\s+/).filter((w: string) => w.length > 2).forEach((word: string) => {
+          if (title.includes(word)) score += 15;
+          if (sessionNames.includes(word)) score += 5;
+          if (exerciseCorpus.includes(word)) score += 3;
+          if (programmeType.includes(word)) score += 8;
+        });
+        return { p, score };
+      })
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
-      .forEach(({ p, score }) => results.push(normaliseMasterProgramme(p, score)));
-  } catch {
-    // DB unavailable — skip silently
-  }
+      .forEach(({ p, score }) => results.push(normaliseStrengthBlock_Programme(p, score)));
+  } catch { /* skip */ }
 
-  // Sort by score descending when mixing categories
   results.sort((a, b) => b.score - a.score);
-
-  res.json({ intent, results: results.slice(0, 8) });
+  res.json({ bucket, results: results.slice(0, 8) });
 });
 
 export default router;

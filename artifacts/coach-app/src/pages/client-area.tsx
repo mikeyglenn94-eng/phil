@@ -1121,7 +1121,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setBrainAdding(result.id);
 
     try {
-      if (result.category === "cycle") {
+      const source = result.source ?? (result.isBlock ? "strength_template" : result.bucket === "run" ? "run_session" : "wod_session");
+
+      // ── Block insertion — routed by source ──────────────────────
+      if (source === "wod_cycle") {
         const res = await fetch("/api/endurance-cycles/insert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1129,41 +1132,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         });
         if (!res.ok) throw new Error();
         await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
-        toast({ title: `${result.name} added`, description: `${result.totalWeeks}-week cycle from ${format(parseISO(date), "d MMM yyyy")}` });
-        navigateToWeekOf(date);
-        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
-        return;
+        toast({ title: `${result.name} added`, description: `${result.totalWeeks}-week block from ${format(parseISO(date), "d MMM yyyy")}` });
+        navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
       }
 
-      if (result.category === "strength") {
-        const res = await fetch("/api/strength-blocks/insert", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ templateId: result.id, clientId, startDate: date }),
-        });
-        if (!res.ok) throw new Error();
-        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
-        toast({ title: `${result.name} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
-        navigateToWeekOf(date);
-        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
-        return;
-      }
-
-      if (result.category === "run_template") {
-        const res = await fetch("/api/endurance-run-templates/insert", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ templateId: result.id, clientId, startDate: date }),
-        });
-        if (!res.ok) throw new Error();
-        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
-        toast({ title: `${result.name} added`, description: `${result.totalWeeks}-week run block from ${format(parseISO(date), "d MMM yyyy")}` });
-        navigateToWeekOf(date);
-        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
-        return;
-      }
-
-      if (result.category === "engine") {
+      if (source === "wod_engine") {
         const res = await fetch("/api/engine-builder/insert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1172,18 +1145,38 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         if (!res.ok) throw new Error();
         await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
         toast({ title: `${result.name} added`, description: `${result.durationWeeks}-week block from ${format(parseISO(date), "d MMM yyyy")}` });
-        navigateToWeekOf(date);
-        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
-        return;
+        navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
       }
 
-      if (result.category === "master_programme") {
+      if (source === "strength_template") {
+        const res = await fetch("/api/strength-blocks/insert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: result.id, clientId, startDate: date }),
+        });
+        if (!res.ok) throw new Error();
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        toast({ title: `${result.name} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
+        navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
+      }
+
+      if (source === "run_block") {
+        const res = await fetch("/api/endurance-run-templates/insert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: result.id, clientId, startDate: date }),
+        });
+        if (!res.ok) throw new Error();
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        toast({ title: `${result.name} added`, description: `${result.totalWeeks}-week run block from ${format(parseISO(date), "d MMM yyyy")}` });
+        navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
+      }
+
+      if (source === "strength_programme") {
         const raw = result.raw ?? {};
         const sessions: any[] = (raw.sessions ?? []).slice().sort((a: any, b: any) => (a.date ?? "").localeCompare(b.date ?? ""));
         const firstDate = sessions.find((s: any) => s.date)?.date;
-        const offsetDays = firstDate
-          ? Math.round((new Date(date).getTime() - new Date(firstDate).getTime()) / 86400000)
-          : 0;
+        const offsetDays = firstDate ? Math.round((new Date(date).getTime() - new Date(firstDate).getTime()) / 86400000) : 0;
         const rescheduled = sessions.map((s: any) => {
           if (!s.date) return s;
           const shifted = new Date(new Date(s.date).getTime() + offsetDays * 86400000);
@@ -1197,12 +1190,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         if (!res.ok) throw new Error();
         await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
         toast({ title: `${raw.title} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
-        navigateToWeekOf(date);
-        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
-        return;
+        navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
       }
 
-      // wod or run — single session
+      // ── Session insertion (wod_session / run_session) ───────────
       const raw = result.raw ?? {};
       const newSession = result.category === "run"
         ? {
@@ -3046,42 +3037,35 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             {brainResults.length > 0 && (
               <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                 {brainResults.map((result) => {
+                  const bucket = result.bucket ?? result.category ?? "wod";
                   const catColor: Record<string, string> = {
-                    wod: "border-purple-100 bg-purple-50/40",
-                    run: "border-green-100 bg-green-50/40",
-                    cycle: "border-blue-100 bg-blue-50/40",
+                    wod:      "border-purple-100 bg-purple-50/40",
+                    run:      "border-green-100 bg-green-50/40",
                     strength: "border-orange-100 bg-orange-50/40",
-                    run_template: "border-teal-100 bg-teal-50/40",
-                    engine: "border-red-100 bg-red-50/40",
-                    master_programme: "border-orange-100 bg-orange-50/40",
                   };
                   const badgeColor: Record<string, string> = {
-                    wod: "bg-purple-100 text-purple-700",
-                    run: "bg-green-100 text-green-700",
-                    cycle: "bg-blue-100 text-blue-700",
+                    wod:      "bg-purple-100 text-purple-700",
+                    run:      "bg-green-100 text-green-700",
                     strength: "bg-orange-100 text-orange-700",
-                    run_template: "bg-teal-100 text-teal-700",
-                    engine: "bg-red-100 text-red-700",
-                    master_programme: "bg-orange-100 text-orange-700",
                   };
                   const btnColor: Record<string, string> = {
-                    wod: "bg-purple-600 hover:bg-purple-700",
-                    run: "bg-green-600 hover:bg-green-700",
-                    cycle: "bg-blue-600 hover:bg-blue-700",
+                    wod:      "bg-purple-600 hover:bg-purple-700",
+                    run:      "bg-green-600 hover:bg-green-700",
                     strength: "bg-orange-600 hover:bg-orange-700",
-                    run_template: "bg-teal-600 hover:bg-teal-700",
-                    engine: "bg-red-600 hover:bg-red-700",
-                    master_programme: "bg-orange-600 hover:bg-orange-700",
                   };
-                  const catLabel: Record<string, string> = { wod: "WOD", run: "Run", cycle: "Endurance Cycle", strength: "Strength Block", run_template: "Run Block", engine: "Engine Programme", master_programme: "Block" };
+                  const bucketLabel: Record<string, string> = {
+                    wod:      result.isBlock ? "WOD Block" : "WOD",
+                    run:      result.isBlock ? "Run Block" : "Run",
+                    strength: result.isBlock ? "Strength Block" : "Strength",
+                  };
 
                   return (
-                    <div key={result.id} className={`rounded-xl border p-4 space-y-2 ${catColor[result.category] ?? ""}`}>
+                    <div key={result.id} className={`rounded-xl border p-4 space-y-2 ${catColor[bucket] ?? ""}`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeColor[result.category]}`}>
-                              {catLabel[result.category]}
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeColor[bucket] ?? ""}`}>
+                              {bucketLabel[bucket] ?? bucket}
                             </span>
                             <span className="text-xs text-muted-foreground truncate">{result.subtitle}</span>
                           </div>
@@ -3104,12 +3088,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                         />
                         <Button
                           size="sm"
-                          className={`shrink-0 gap-1.5 rounded-lg text-white ${btnColor[result.category]}`}
+                          className={`shrink-0 gap-1.5 rounded-lg text-white ${btnColor[bucket] ?? "bg-primary hover:bg-primary/90"}`}
                           onClick={() => brainAddItem(result)}
                           disabled={!brainDates[result.id] || brainAdding === result.id}
                         >
                           {brainAdding === result.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                          {result.category === "cycle" ? "Insert Cycle" : result.category === "engine" ? "Insert Programme" : result.category === "strength" || result.category === "run_template" || result.category === "master_programme" ? "Insert Block" : "Add Session"}
+                          {result.isBlock ? "Insert Block" : "Add Session"}
                         </Button>
                       </div>
                     </div>
