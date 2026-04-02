@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Brain, Zap, Plus, Trash2, BookOpen, Loader2, ChevronDown, ChevronUp, ArrowLeft, Dumbbell, Calendar, Clock } from "lucide-react";
+import { Brain, Zap, Plus, BookOpen, Loader2, ChevronDown, ChevronUp, ArrowLeft, Dumbbell, Calendar, Clock, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -20,9 +20,12 @@ const INTENSITY_LABELS: Record<string, string> = { easy: "Easy", moderate: "Mode
 const UNITS = ["reps", "m", "km", "cal", "seconds", "minutes"];
 const TERRAINS = ["flat", "hill", "rolling", "track"];
 
-type Tab = "wods" | "runs" | "strength";
+type Tab = "blocks" | "sessions";
+type SessionFilter = "all" | "wods" | "runs";
 
 function typeLabel(t: string) { return TYPE_LABELS[t] ?? t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
+
+// ── Session cards ──────────────────────────────────────────────────────────────
 
 function WodCard({ wod, expanded, onToggle }: { wod: any; expanded: boolean; onToggle: () => void }) {
   const blocks = Array.isArray(wod.blocks) ? wod.blocks : [];
@@ -31,6 +34,7 @@ function WodCard({ wod, expanded, onToggle }: { wod: any; expanded: boolean; onT
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted rounded px-1.5 py-0.5">Session</span>
             <span className="text-xs font-bold text-purple-700 bg-purple-100 rounded px-2 py-0.5">{FORMAT_LABELS[wod.format] ?? wod.format}</span>
             <span className="text-xs text-muted-foreground">{wod.duration} min</span>
             {wod.rounds && <span className="text-xs text-muted-foreground">{wod.rounds} rounds</span>}
@@ -81,6 +85,7 @@ function RunCard({ run, expanded, onToggle }: { run: any; expanded: boolean; onT
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted rounded px-1.5 py-0.5">Session</span>
             <span className="text-xs font-bold text-green-700 bg-green-100 rounded px-2 py-0.5">{typeLabel(run.type)}</span>
             {meta.length > 0 && <span className="text-xs text-muted-foreground">{meta.join(" · ")}</span>}
             <span className="text-xs bg-white border rounded-full px-2 py-0.5 text-foreground">{INTENSITY_LABELS[run.intensity] ?? run.intensity}</span>
@@ -113,6 +118,8 @@ function RunCard({ run, expanded, onToggle }: { run: any; expanded: boolean; onT
   );
 }
 
+// ── Block/Programme cards ──────────────────────────────────────────────────────
+
 const LIFT_ICONS: Record<string, string> = { squat: "🏋️", bench: "💪", deadlift: "⛓️", olympic: "🥇" };
 const LEVEL_COLORS: Record<string, string> = {
   beginner: "bg-green-100 text-green-700",
@@ -120,7 +127,7 @@ const LEVEL_COLORS: Record<string, string> = {
   advanced: "bg-red-100 text-red-700",
 };
 
-function StrengthCard({ template, expanded, onToggle }: { template: any; expanded: boolean; onToggle: () => void }) {
+function StrengthBlockCard({ template, expanded, onToggle }: { template: any; expanded: boolean; onToggle: () => void }) {
   const lifts = (template.liftFocus ?? "").split(",").map((l: string) => l.trim());
   const icons = lifts.map((l: string) => LIFT_ICONS[l] ?? "🏋️").join(" ");
   return (
@@ -130,6 +137,7 @@ function StrengthCard({ template, expanded, onToggle }: { template: any; expande
           <span className="text-xl leading-none mt-0.5 shrink-0">{icons}</span>
           <div>
             <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted rounded px-1.5 py-0.5">Block</span>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${LEVEL_COLORS[template.level] ?? "bg-muted text-muted-foreground"}`}>
                 {template.level}
               </span>
@@ -173,13 +181,13 @@ function ProgrammeCard({ programme, expanded, onToggle }: { programme: any; expa
   const weeks = dates.length >= 2
     ? Math.ceil((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / (7 * 86400000)) + 1
     : Math.ceil(sessionCount / 5);
-  const sessionNames = [...new Set(sessions.map((s: any) => s.name).filter(Boolean))].slice(0, 5);
+  const sessionNames = [...new Set(sessions.map((s: any) => s.name).filter(Boolean))].slice(0, 6);
   return (
     <div className="rounded-xl border bg-card p-4 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Programme</span>
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted rounded px-1.5 py-0.5">Block</span>
             {sessionCount > 0 && (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Calendar className="w-3 h-3" />{sessionCount} sessions
@@ -200,26 +208,31 @@ function ProgrammeCard({ programme, expanded, onToggle }: { programme: any; expa
         )}
       </div>
       {expanded && sessionNames.length > 0 && (
-        <div className="pt-1 space-y-1">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Session types</p>
+        <div className="pt-1 space-y-1.5">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Sessions</p>
           <div className="flex flex-wrap gap-1">
             {sessionNames.map((name: string) => (
               <span key={name} className="text-xs bg-muted rounded-full px-2 py-0.5 text-foreground">{name}</span>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground pt-1">
-            {dates[0] && `Starts ${new Date(dates[0]).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
-          </p>
+          {dates[0] && (
+            <p className="text-xs text-muted-foreground">
+              Starts {new Date(dates[0]).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
+          )}
         </div>
       )}
     </div>
   );
 }
 
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export default function Library() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<Tab>("wods");
+  const [tab, setTab] = useState<Tab>("blocks");
+  const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
   const [search, setSearch] = useState("");
   const [wods, setWods] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
@@ -266,6 +279,9 @@ export default function Library() {
     r.type.includes(search.toLowerCase()) ||
     (r.tags ?? []).some((t: string) => t.includes(search.toLowerCase()))
   );
+
+  const totalBlocks = masterProgrammes.length + strengthTemplates.length;
+  const totalSessions = wods.length + runs.length;
 
   const saveWod = async () => {
     if (!wodForm.name.trim() || !wodForm.format || !wodForm.duration || !wodForm.structure) return;
@@ -330,60 +346,58 @@ export default function Library() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <BookOpen className="w-5 h-5 text-primary" />
-          <h1 className="font-bold text-xl">Session Library</h1>
+          <h1 className="font-bold text-xl">Library</h1>
         </div>
-        {tab !== "strength" && (
-          <Button
-            size="sm"
-            className="gap-2 rounded-lg"
-            onClick={() => tab === "wods" ? setAddWodOpen(true) : setAddRunOpen(true)}
-          >
-            <Plus className="w-4 h-4" />
-            {tab === "wods" ? "Add WOD" : "Add Run"}
+        {tab === "sessions" && sessionFilter !== "runs" && (
+          <Button size="sm" className="gap-2 rounded-lg" onClick={() => setAddWodOpen(true)}>
+            <Plus className="w-4 h-4" /> Add WOD
           </Button>
         )}
-        {tab === "strength" && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-2 rounded-lg border-orange-200 text-orange-700 hover:bg-orange-50"
-            onClick={() => setLocation("/strength-blocks")}
-          >
-            <Dumbbell className="w-4 h-4" />
-            View Blocks
+        {tab === "sessions" && sessionFilter === "runs" && (
+          <Button size="sm" className="gap-2 rounded-lg" onClick={() => setAddRunOpen(true)}>
+            <Plus className="w-4 h-4" /> Add Run
           </Button>
         )}
       </div>
 
-      {/* Tabs + Search */}
+      {/* Tabs */}
       <div className="shrink-0 border-b px-4 sm:px-6 pt-3 pb-0 bg-background space-y-3">
         <div className="flex gap-1">
           <button
-            onClick={() => { setTab("wods"); setSearch(""); }}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${tab === "wods" ? "border-purple-600 text-purple-700 bg-purple-50" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            onClick={() => { setTab("blocks"); setSearch(""); }}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${tab === "blocks" ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            <Brain className="w-4 h-4" /> WODs <span className="text-xs font-normal">({wods.length})</span>
+            <Layers className="w-4 h-4" /> Blocks <span className="text-xs font-normal">({totalBlocks})</span>
           </button>
           <button
-            onClick={() => { setTab("runs"); setSearch(""); }}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${tab === "runs" ? "border-green-600 text-green-700 bg-green-50" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            onClick={() => { setTab("sessions"); setSearch(""); setSessionFilter("all"); }}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${tab === "sessions" ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            <Zap className="w-4 h-4" /> Runs <span className="text-xs font-normal">({runs.length})</span>
-          </button>
-          <button
-            onClick={() => { setTab("strength"); setSearch(""); }}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${tab === "strength" ? "border-orange-600 text-orange-700 bg-orange-50" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            <Dumbbell className="w-4 h-4" /> Strength <span className="text-xs font-normal">({strengthTemplates.length + masterProgrammes.length})</span>
+            <Dumbbell className="w-4 h-4" /> Sessions <span className="text-xs font-normal">({totalSessions})</span>
           </button>
         </div>
-        {tab !== "strength" && (
-          <Input
-            placeholder={tab === "wods" ? "Search WODs by name, format, or tag…" : "Search runs by name, type, or tag…"}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="max-w-sm rounded-lg mb-3"
-          />
+
+        {/* Sessions sub-filter + search */}
+        {tab === "sessions" && (
+          <div className="flex items-center gap-3 pb-3">
+            <div className="flex gap-1 rounded-lg bg-muted p-1">
+              {(["all", "wods", "runs"] as SessionFilter[]).map(f => (
+                <button
+                  key={f}
+                  onClick={() => { setSessionFilter(f); setSearch(""); }}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${sessionFilter === f ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {f === "all" ? `All (${totalSessions})` : f === "wods" ? `WODs (${wods.length})` : `Runs (${runs.length})`}
+                </button>
+              ))}
+            </div>
+            <Input
+              placeholder={sessionFilter === "runs" ? "Search runs…" : "Search WODs…"}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="max-w-xs rounded-lg h-8 text-sm"
+            />
+          </div>
         )}
       </div>
 
@@ -393,32 +407,14 @@ export default function Library() {
           <div className="flex items-center justify-center h-40 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading library…
           </div>
-        ) : tab === "wods" ? (
-          filteredWods.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-10">No WODs found.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredWods.map(w => (
-                <WodCard key={w.id} wod={w} expanded={expandedId === w.id} onToggle={() => setExpandedId(expandedId === w.id ? null : w.id)} />
-              ))}
-            </div>
-          )
-        ) : tab === "runs" ? (
-          filteredRuns.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-10">No runs found.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredRuns.map(r => (
-                <RunCard key={r.id} run={r} expanded={expandedId === r.id} onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)} />
-              ))}
-            </div>
-          )
-        ) : (
+        ) : tab === "blocks" ? (
           <div className="space-y-8">
-            {/* Coaching Programmes (master programmes from DB) */}
+            {/* Master programmes */}
             {masterProgrammes.length > 0 && (
               <div>
-                <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Coaching Programmes</h2>
+                {strengthTemplates.length > 0 && (
+                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Programmes</h2>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {masterProgrammes.map((p: any) => (
                     <ProgrammeCard
@@ -432,15 +428,15 @@ export default function Library() {
               </div>
             )}
 
-            {/* Strength Block Templates */}
+            {/* Strength block templates */}
             {strengthTemplates.length > 0 && (
               <div>
                 {masterProgrammes.length > 0 && (
-                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Strength Blocks</h2>
+                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Strength Cycles</h2>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {strengthTemplates.map((t: any) => (
-                    <StrengthCard
+                    <StrengthBlockCard
                       key={t.id}
                       template={t}
                       expanded={expandedId === t.id}
@@ -451,14 +447,58 @@ export default function Library() {
               </div>
             )}
 
-            {strengthTemplates.length === 0 && masterProgrammes.length === 0 && (
+            {totalBlocks === 0 && (
               <div className="text-center py-16 text-muted-foreground">
-                <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                <p className="text-sm font-medium">No strength programmes yet</p>
-                <p className="text-xs mt-1 opacity-60">Programmes you add will appear here</p>
+                <Layers className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="text-sm font-medium">No blocks yet</p>
+                <p className="text-xs mt-1 opacity-60">Multi-week programmes and cycles will appear here</p>
               </div>
             )}
           </div>
+        ) : (
+          /* Sessions tab */
+          (() => {
+            const showWods = sessionFilter !== "runs";
+            const showRuns = sessionFilter !== "wods";
+            const visibleWods = showWods ? filteredWods : [];
+            const visibleRuns = showRuns ? filteredRuns : [];
+            const isEmpty = visibleWods.length === 0 && visibleRuns.length === 0;
+
+            return isEmpty ? (
+              <p className="text-sm text-muted-foreground text-center py-10">No sessions found.</p>
+            ) : (
+              <div className="space-y-8">
+                {visibleWods.length > 0 && (
+                  <div>
+                    {sessionFilter === "all" && (
+                      <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1 flex items-center gap-2">
+                        <Brain className="w-3.5 h-3.5 text-purple-500" /> WODs
+                      </h2>
+                    )}
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {visibleWods.map(w => (
+                        <WodCard key={w.id} wod={w} expanded={expandedId === w.id} onToggle={() => setExpandedId(expandedId === w.id ? null : w.id)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {visibleRuns.length > 0 && (
+                  <div>
+                    {sessionFilter === "all" && (
+                      <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1 flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-green-500" /> Runs
+                      </h2>
+                    )}
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {visibleRuns.map(r => (
+                        <RunCard key={r.id} run={r} expanded={expandedId === r.id} onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()
         )}
       </div>
 
@@ -481,35 +521,29 @@ export default function Library() {
               </Select>
               <Input placeholder="Duration (min)" type="number" value={wodForm.duration} onChange={e => setWodForm(f => ({ ...f, duration: e.target.value }))} />
             </div>
-            <Input placeholder="Structure description (e.g. AMRAP 10: 200m run, 15 wall balls)" value={wodForm.structure} onChange={e => setWodForm(f => ({ ...f, structure: e.target.value }))} />
             <Input placeholder="Rounds (optional)" type="number" value={wodForm.rounds} onChange={e => setWodForm(f => ({ ...f, rounds: e.target.value }))} />
-
+            <Input placeholder="Structure description (e.g. AMRAP 10: 200m run, 15 wall balls)" value={wodForm.structure} onChange={e => setWodForm(f => ({ ...f, structure: e.target.value }))} />
             <div className="space-y-2">
-              <p className="text-sm font-medium">Movement Blocks</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Movements</p>
               {wodBlocks.map((block, i) => (
                 <div key={i} className="flex gap-2 items-center">
-                  <Input className="flex-1" placeholder="Movement (e.g. burpees)" value={block.movement} onChange={e => setWodBlocks(b => b.map((x, j) => j === i ? { ...x, movement: e.target.value } : x))} />
-                  <Input className="w-20" placeholder="Amt" type="number" value={block.amount} onChange={e => setWodBlocks(b => b.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))} />
-                  <Select value={block.unit} onValueChange={v => setWodBlocks(b => b.map((x, j) => j === i ? { ...x, unit: v } : x))}>
-                    <SelectTrigger className="w-24 rounded-lg"><SelectValue /></SelectTrigger>
+                  <Input placeholder="Movement" value={block.movement} onChange={e => setWodBlocks(bs => bs.map((b, j) => j === i ? { ...b, movement: e.target.value } : b))} className="flex-1" />
+                  <Input placeholder="Amount" type="number" value={block.amount} onChange={e => setWodBlocks(bs => bs.map((b, j) => j === i ? { ...b, amount: e.target.value } : b))} className="w-20" />
+                  <Select value={block.unit} onValueChange={v => setWodBlocks(bs => bs.map((b, j) => j === i ? { ...b, unit: v } : b))}>
+                    <SelectTrigger className="w-28 rounded-lg"><SelectValue /></SelectTrigger>
                     <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                   </Select>
-                  {wodBlocks.length > 1 && (
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive shrink-0" onClick={() => setWodBlocks(b => b.filter((_, j) => j !== i))}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
                 </div>
               ))}
-              <Button variant="outline" size="sm" className="gap-1.5 rounded-lg" onClick={() => setWodBlocks(b => [...b, { movement: "", amount: "", unit: "reps" }])}>
-                <Plus className="w-3.5 h-3.5" /> Add Movement
+              <Button variant="outline" size="sm" className="w-full rounded-lg" onClick={() => setWodBlocks(bs => [...bs, { movement: "", amount: "", unit: "reps" }])}>
+                <Plus className="w-3.5 h-3.5 mr-1" /> Add Movement
               </Button>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddWodOpen(false)}>Cancel</Button>
-            <Button onClick={saveWod} disabled={savingWod || !wodForm.name.trim() || !wodForm.duration || !wodForm.structure} className="bg-purple-600 hover:bg-purple-700">
-              {savingWod ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} Save WOD
+            <Button variant="ghost" onClick={() => setAddWodOpen(false)}>Cancel</Button>
+            <Button onClick={saveWod} disabled={savingWod} className="rounded-lg">
+              {savingWod ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Save WOD
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -524,7 +558,7 @@ export default function Library() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <Input placeholder="Session name" value={runForm.name} onChange={e => setRunForm(f => ({ ...f, name: e.target.value }))} />
+            <Input placeholder="Run name" value={runForm.name} onChange={e => setRunForm(f => ({ ...f, name: e.target.value }))} />
             <div className="grid grid-cols-2 gap-2">
               <Select value={runForm.type} onValueChange={v => setRunForm(f => ({ ...f, type: v }))}>
                 <SelectTrigger className="rounded-lg"><SelectValue /></SelectTrigger>
@@ -532,33 +566,35 @@ export default function Library() {
               </Select>
               <Select value={runForm.intensity} onValueChange={v => setRunForm(f => ({ ...f, intensity: v }))}>
                 <SelectTrigger className="rounded-lg"><SelectValue /></SelectTrigger>
-                <SelectContent>{INTENSITIES.map(i => <SelectItem key={i} value={i}>{INTENSITY_LABELS[i]}</SelectItem>)}</SelectContent>
+                <SelectContent>{INTENSITIES.map(i => <SelectItem key={i} value={i}>{INTENSITY_LABELS[i] ?? i}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Input placeholder="Duration (min, optional)" type="number" value={runForm.duration} onChange={e => setRunForm(f => ({ ...f, duration: e.target.value }))} />
-              <Input placeholder="Distance km (optional)" type="number" value={runForm.distanceKm} onChange={e => setRunForm(f => ({ ...f, distanceKm: e.target.value }))} />
+              <Input placeholder="Duration (min)" type="number" value={runForm.duration} onChange={e => setRunForm(f => ({ ...f, duration: e.target.value }))} />
+              <Input placeholder="Distance (km)" type="number" value={runForm.distanceKm} onChange={e => setRunForm(f => ({ ...f, distanceKm: e.target.value }))} />
             </div>
-            <Input placeholder="Structure (e.g. 10 min easy, 20 min threshold, 10 min easy)" value={runForm.structure} onChange={e => setRunForm(f => ({ ...f, structure: e.target.value }))} />
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Terrain</p>
+            <Input placeholder="Structure / description" value={runForm.structure} onChange={e => setRunForm(f => ({ ...f, structure: e.target.value }))} />
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Terrain</p>
               <div className="flex gap-2 flex-wrap">
                 {TERRAINS.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setRunForm(f => ({ ...f, terrain: f.terrain.includes(t) ? f.terrain.filter(x => x !== t) : [...f.terrain, t] }))}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${runForm.terrain.includes(t) ? "bg-green-100 border-green-300 text-green-700" : "bg-background border-border text-muted-foreground hover:bg-muted"}`}
-                  >
+                  <label key={t} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={runForm.terrain.includes(t)}
+                      onChange={e => setRunForm(f => ({ ...f, terrain: e.target.checked ? [...f.terrain, t] : f.terrain.filter(x => x !== t) }))}
+                      className="rounded"
+                    />
                     {t}
-                  </button>
+                  </label>
                 ))}
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddRunOpen(false)}>Cancel</Button>
-            <Button onClick={saveRun} disabled={savingRun || !runForm.name.trim() || !runForm.structure} className="bg-green-600 hover:bg-green-700">
-              {savingRun ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} Save Run
+            <Button variant="ghost" onClick={() => setAddRunOpen(false)}>Cancel</Button>
+            <Button onClick={saveRun} disabled={savingRun} className="rounded-lg">
+              {savingRun ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Save Run
             </Button>
           </DialogFooter>
         </DialogContent>
