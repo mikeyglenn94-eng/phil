@@ -1065,10 +1065,34 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (!strengthStartDate) { toast({ title: "Pick a start date first" }); return; }
     setStrengthInserting(templateId);
     try {
-      const res = await fetch("/api/strength-blocks/insert", {
+      const preview = await fetch("/api/strength-blocks/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId, clientId, startDate: strengthStartDate }),
+        body: JSON.stringify({ templateId, startDate: strengthStartDate }),
+      });
+      if (!preview.ok) throw new Error();
+      const { sessions: rawSessions } = await preview.json();
+      const ts = Date.now();
+      const sessions = (rawSessions ?? []).map((s: any, si: number) => ({
+        ...s,
+        id: `session-${ts}-${si}`,
+        exercises: (s.exercises ?? []).map((ex: any, ei: number) => ({
+          ...ex,
+          id: `ex-${ts}-${si}-${ei}`,
+          rpe: ex.rpe ?? null,
+          rest: ex.rest ?? null,
+          tempo: ex.tempo ?? null,
+          rawText: ex.rawText ?? ex.name ?? "",
+          clientComment: ex.clientComment ?? null,
+          setReps: Array.isArray(ex.setReps) ? ex.setReps : Array(ex.sets ?? 0).fill(null),
+          setWeights: Array.isArray(ex.setWeights) ? ex.setWeights : Array(ex.sets ?? 0).fill(null),
+          weekProgression: ex.weekProgression ?? [],
+        })),
+      }));
+      const res = await fetch("/api/programmes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: templateName, clientId, sessions }),
       });
       if (!res.ok) throw new Error();
       await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
@@ -1180,18 +1204,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
       }
 
-      if (source === "strength_template") {
-        const res = await fetch("/api/strength-blocks/insert", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ templateId: result.id, clientId, startDate: date }),
-        });
-        if (!res.ok) throw new Error();
-        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
-        toast({ title: `${result.name} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
-        navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
-      }
-
       if (source === "run_block") {
         const res = await fetch("/api/endurance-run-templates/insert", {
           method: "POST",
@@ -1204,17 +1216,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
       }
 
-      if (source === "strength_programme") {
-        const raw = result.raw ?? {};
-        const sessions: any[] = (raw.sessions ?? []).slice().sort((a: any, b: any) => (a.date ?? "").localeCompare(b.date ?? ""));
-        const firstDate = sessions.find((s: any) => s.date)?.date;
-        const offsetDays = firstDate ? Math.round((new Date(date).getTime() - new Date(firstDate).getTime()) / 86400000) : 0;
-
-        // Normalize each exercise so it has the tracking fields the client UI expects
-        const normalizeExercise = (ex: any) => {
+      if (source === "strength_template" || source === "strength_programme") {
+        const normalizeExercise = (ex: any, idx: number, sessionIdx: number) => {
           const sets = ex.sets ?? 0;
           return {
             ...ex,
+            id: `ex-${Date.now()}-${sessionIdx}-${idx}`,
             rpe: ex.rpe ?? null,
             rest: ex.rest ?? null,
             tempo: ex.tempo ?? null,
@@ -1226,31 +1233,46 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           };
         };
 
-        const ts = Date.now();
-        const rescheduled = sessions.map((s: any, si: number) => {
-          const newSessionId = `session-${ts}-${si}`;
-          const shifted = s.date
-            ? new Date(new Date(s.date).getTime() + offsetDays * 86400000).toISOString().slice(0, 10)
-            : undefined;
-          return {
+        let title = result.name;
+        let sessions: any[] = [];
+
+        if (source === "strength_template") {
+          // Get sessions from the preview endpoint — sessions already start on the chosen date
+          const preview = await fetch("/api/strength-blocks/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ templateId: result.id, startDate: date }),
+          });
+          if (!preview.ok) throw new Error();
+          const previewData = await preview.json();
+          sessions = (previewData.sessions ?? []).map((s: any, si: number) => ({
             ...s,
-            id: newSessionId,
-            source: "strength_programme",
-            ...(shifted ? { date: shifted } : {}),
-            exercises: (s.exercises ?? []).map((ex: any, ei: number) =>
-              normalizeExercise({ ...ex, id: `ex-${ts}-${si}-${ei}` })
-            ),
-          };
-        });
+            id: `session-${Date.now()}-${si}`,
+            exercises: (s.exercises ?? []).map((ex: any, ei: number) => normalizeExercise(ex, ei, si)),
+          }));
+        } else {
+          // strength_programme: shift existing sessions to start on chosen date
+          const raw = result.raw ?? {};
+          title = raw.title ?? result.name;
+          const rawSessions: any[] = (raw.sessions ?? []).slice().sort((a: any, b: any) => (a.date ?? "").localeCompare(b.date ?? ""));
+          const firstDate = rawSessions.find((s: any) => s.date)?.date;
+          const offsetDays = firstDate ? Math.round((new Date(date).getTime() - new Date(firstDate).getTime()) / 86400000) : 0;
+          sessions = rawSessions.map((s: any, si: number) => ({
+            ...s,
+            id: `session-${Date.now()}-${si}`,
+            date: s.date ? new Date(new Date(s.date).getTime() + offsetDays * 86400000).toISOString().slice(0, 10) : s.date,
+            exercises: (s.exercises ?? []).map((ex: any, ei: number) => normalizeExercise(ex, ei, si)),
+          }));
+        }
 
         const res = await fetch("/api/programmes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: raw.title, clientId, sessions: rescheduled }),
+          body: JSON.stringify({ title, clientId, sessions }),
         });
         if (!res.ok) throw new Error();
         await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
-        toast({ title: `${raw.title} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
+        toast({ title: `${title} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
         navigateToWeekOf(date); setBrainOpen(false); setBrainResults([]); setBrainQuery(""); return;
       }
 
