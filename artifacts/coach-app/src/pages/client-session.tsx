@@ -680,31 +680,18 @@ export default function ClientSession() {
     const src = (session as any).source as string | undefined;
     const isCondition = src === "wod_brain" || src === "run_brain" || src === "endurance_cycle";
 
-    // ── Collect metrics ───────────────────────────────────────────────────────
+    // ── Collect metrics — actual logged data only ─────────────────────────────
     const allExercises = [...(session.exercises || []), ...addedExercises];
-    let totalKg = 0, totalReps = 0, totalSets = 0;
+    let totalKg = 0;
     if (!isCondition) {
       for (const ex of allExercises) {
-        // Pull from logs first, then fall back to exercise plan data
-        const exSets = logs[ex.id]?.length
-          ? logs[ex.id]
-          : Array.from({ length: ex.sets || 0 }, (_, i) => ({
-              weight: ex.setWeights?.[i] ?? null,
-              reps: ex.setReps?.[i] ?? null,
-            }));
-        for (const set of exSets) {
-          const r = set.reps ?? 0;
-          const w = set.weight ?? null;
-          if (r > 0) {
-            totalReps += r;
-            totalSets++;
-            if (w !== null) totalKg += w * r;
+        for (const set of (logs[ex.id] || [])) {
+          if (set.weight !== null && set.reps !== null && set.weight > 0 && set.reps > 0) {
+            totalKg += set.weight * set.reps;
           }
         }
       }
     }
-    const hasWeight = totalKg > 0;
-    const avgReps = totalSets > 0 ? +(totalReps / totalSets).toFixed(1) : 0;
 
     const dateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM").toUpperCase();
     const name = session.name || "Session";
@@ -776,98 +763,64 @@ export default function ClientSession() {
     cy += 72;
 
     if (!isCondition) {
-      // ── STRENGTH — two big stats + exercise list ───────────────────────────
+      // ── STRENGTH — exercise names + total weight at bottom ─────────────────
 
-      // Left stat: total kg (if available) or total reps
-      // Right stat: avg reps per set
-      const statColW = Math.floor((cardW - 120 - 60) / 2); // 60px gap between cols
-      const leftX = cx;
-      const rightX = cx + statColW + 60;
-
-      const leftVal  = hasWeight ? Math.round(totalKg).toLocaleString() : (totalReps > 0 ? `${totalReps}` : "—");
-      const leftUnit = hasWeight ? "kg" : "reps";
-      const leftLbl  = hasWeight ? "TOTAL LIFTED" : "TOTAL REPS";
-      const rightVal = avgReps > 0 ? `${avgReps}` : (totalSets > 0 ? `${totalSets}` : "—");
-      const rightLbl = avgReps > 0 ? "AVG REPS / SET" : "TOTAL SETS";
-
-      // ── Helper: draw one big stat ─────────────────────────────────────────
-      function drawBigStat(
-        x: number, baseY: number,
-        val: string, unit: string, lbl: string,
-        numColor: string, glowColor: string, unitColor: string
-      ) {
-        // Auto-shrink font if value is wide
-        let fs = 120;
-        ctx!.font = `800 ${fs}px 'Inter', system-ui, sans-serif`;
-        while (ctx!.measureText(val).width > statColW - 20 && fs > 60) {
-          fs -= 8;
-          ctx!.font = `800 ${fs}px 'Inter', system-ui, sans-serif`;
-        }
-        const numW = ctx!.measureText(val).width;
-
-        ctx!.shadowColor = glowColor;
-        ctx!.shadowBlur = 44;
-        ctx!.fillStyle = numColor;
-        ctx!.fillText(val, x, baseY);
-        ctx!.shadowBlur = 0;
-
-        // unit tag
-        if (unit) {
-          ctx!.fillStyle = unitColor;
-          ctx!.font = `600 ${Math.round(fs * 0.38)}px 'Inter', system-ui, sans-serif`;
-          ctx!.fillText(unit, x + numW + 8, baseY - Math.round(fs * 0.06));
-        }
-
-        // label below
-        ctx!.fillStyle = "rgba(255,255,255,0.28)";
-        ctx!.font = "600 26px 'Inter', system-ui, sans-serif";
-        ctx!.fillText(lbl, x, baseY + 40);
-      }
-
-      drawBigStat(
-        leftX, cy,
-        leftVal, leftUnit, leftLbl,
-        "rgba(165, 180, 252, 1)", "rgba(99, 102, 241, 0.5)", "rgba(165,180,252,0.55)"
-      );
-      drawBigStat(
-        rightX, cy,
-        rightVal, "", rightLbl,
-        "rgba(250, 204, 21, 1)", "rgba(250, 204, 21, 0.4)", ""
-      );
-
-      cy += 40 + 60; // label row + gap
-
-      // ── Divider ───────────────────────────────────────────────────────────
-      ctx.strokeStyle = "rgba(255,255,255,0.08)";
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(right, cy); ctx.stroke();
-      cy += 52;
-
-      // ── Exercise list ─────────────────────────────────────────────────────
-      const exFont = 48;
+      // ── Exercise list (names only, no set/rep details) ────────────────────
+      const exFont = 52;
+      const exLineH = exFont + 24;
       ctx.font = `500 ${exFont}px 'Inter', system-ui, sans-serif`;
-      for (const ex of allExercises.slice(0, 6)) {
-        if (cy > cardTop + cardH - 60) break;
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+
+      // Reserve space at bottom for the weight callout (≈260px)
+      const weightBlockH = 260;
+      const listBottom = cardTop + cardH - weightBlockH - 40;
+
+      for (const ex of allExercises.slice(0, 8)) {
+        if (cy + exLineH > listBottom) break;
         const exName = nameOverrides[ex.id] || ex.name;
-        const setInfo = ex.sets ? `  ${ex.sets}×${ex.setReps?.[0] ?? "?"}` : "";
         let line = `· ${exName}`;
-        // truncate name to fit, then append set info right-aligned
-        while (ctx.measureText(line + setInfo).width > cardW - 120 && line.length > 2)
+        while (ctx.measureText(line).width > cardW - 120 && line.length > 2)
           line = line.slice(0, -1);
         if (line !== `· ${exName}`) line += "…";
-
-        ctx.fillStyle = "rgba(255,255,255,0.80)";
         ctx.fillText(line, cx, cy);
-
-        // set/rep info right-aligned in muted colour
-        if (setInfo) {
-          ctx.fillStyle = "rgba(255,255,255,0.35)";
-          ctx.textAlign = "right";
-          ctx.fillText(setInfo.trim(), right, cy);
-          ctx.textAlign = "left";
-        }
-        cy += exFont + 20;
+        cy += exLineH;
       }
+
+      // ── Divider above weight callout ──────────────────────────────────────
+      const divY = cardTop + cardH - weightBlockH - 20;
+      ctx.strokeStyle = "rgba(255,255,255,0.10)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx, divY); ctx.lineTo(right, divY); ctx.stroke();
+
+      // ── Total weight callout — always shown ───────────────────────────────
+      const kgStr = Math.round(totalKg).toLocaleString();
+      const calloutY = cardTop + cardH - 60; // baseline near card bottom
+
+      // Auto-size font so number + "kg" fits
+      let kgFs = 148;
+      ctx.font = `800 ${kgFs}px 'Inter', system-ui, sans-serif`;
+      while (ctx.measureText(kgStr + "  kg").width > cardW - 120 && kgFs > 72) {
+        kgFs -= 8;
+        ctx.font = `800 ${kgFs}px 'Inter', system-ui, sans-serif`;
+      }
+      const kgNumW = ctx.measureText(kgStr).width;
+
+      // Indigo glow + number
+      ctx.shadowColor = "rgba(99, 102, 241, 0.65)";
+      ctx.shadowBlur = 60;
+      ctx.fillStyle = "rgba(165, 180, 252, 1)";
+      ctx.fillText(kgStr, cx, calloutY);
+      ctx.shadowBlur = 0;
+
+      // "kg" unit
+      ctx.fillStyle = "rgba(165, 180, 252, 0.55)";
+      ctx.font = `600 ${Math.round(kgFs * 0.40)}px 'Inter', system-ui, sans-serif`;
+      ctx.fillText("kg", cx + kgNumW + 12, calloutY - Math.round(kgFs * 0.08));
+
+      // "TOTAL WEIGHT LIFTED" label above the number
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.font = "600 28px 'Inter', system-ui, sans-serif";
+      ctx.fillText("TOTAL WEIGHT LIFTED", cx, divY + 36);
 
     } else {
       // ── WOD / Run ─────────────────────────────────────────────────────────
