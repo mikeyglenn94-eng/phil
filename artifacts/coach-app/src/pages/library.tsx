@@ -22,6 +22,7 @@ const TERRAINS = ["flat", "hill", "rolling", "track"];
 
 type Tab = "blocks" | "sessions";
 type SessionFilter = "all" | "wods" | "runs";
+type BlockFilter = "all" | "wod" | "run" | "strength";
 
 function typeLabel(t: string) { return TYPE_LABELS[t] ?? t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
 
@@ -174,6 +175,85 @@ function StrengthBlockCard({ template, expanded, onToggle }: { template: any; ex
   );
 }
 
+function EnduranceCycleCard({ cycle, expanded, onToggle }: { cycle: any; expanded: boolean; onToggle: () => void }) {
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted rounded px-1.5 py-0.5">Block</span>
+            <span className="text-xs font-bold text-purple-700 bg-purple-100 rounded px-2 py-0.5">WOD</span>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Clock className="w-3 h-3" />{cycle.totalWeeks}w
+            </span>
+            <span className="text-xs text-muted-foreground">{cycle.durationRange?.min}–{cycle.durationRange?.max} min</span>
+          </div>
+          <p className="font-semibold text-sm">{cycle.name}</p>
+        </div>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground" onClick={onToggle}>
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </div>
+      {expanded && (
+        <div className="space-y-2 pt-1">
+          <p className="text-xs text-muted-foreground italic">{cycle.description}</p>
+          {cycle.equipment?.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {cycle.equipment.map((e: string) => (
+                <span key={e} className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground capitalize">{e}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1">
+        {(cycle.tags ?? []).slice(0, 5).map((tag: string) => (
+          <span key={tag} className="text-[10px] text-purple-600 uppercase tracking-wide font-semibold">{tag}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RunTemplateCard({ template, expanded, onToggle }: { template: any; expanded: boolean; onToggle: () => void }) {
+  const sessions: any[] = template.sessions ?? [];
+  const weekCount = sessions.length > 0 ? Math.max(...sessions.map((s: any) => s.week ?? 0)) : 0;
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted rounded px-1.5 py-0.5">Block</span>
+            <span className="text-xs font-bold text-green-700 bg-green-100 rounded px-2 py-0.5">Run</span>
+            {weekCount > 0 && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" />{weekCount}w
+              </span>
+            )}
+            {sessions.length > 0 && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Calendar className="w-3 h-3" />{sessions.length} sessions
+              </span>
+            )}
+          </div>
+          <p className="font-semibold text-sm">{template.name}</p>
+        </div>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground" onClick={onToggle}>
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </div>
+      {expanded && (
+        <p className="text-xs text-muted-foreground italic pt-1">{template.description}</p>
+      )}
+      <div className="flex flex-wrap gap-1">
+        {(template.tags ?? []).slice(0, 5).map((tag: string) => (
+          <span key={tag} className="text-[10px] text-green-600 uppercase tracking-wide font-semibold">{tag.replace(/_/g, " ")}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ProgrammeCard({ programme, expanded, onToggle }: { programme: any; expanded: boolean; onToggle: () => void }) {
   const sessions: any[] = programme.sessions ?? [];
   const sessionCount = sessions.length;
@@ -233,11 +313,14 @@ export default function Library() {
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<Tab>("blocks");
   const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
+  const [blockFilter, setBlockFilter] = useState<BlockFilter>("all");
   const [search, setSearch] = useState("");
   const [wods, setWods] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
   const [strengthTemplates, setStrengthTemplates] = useState<any[]>([]);
   const [masterProgrammes, setMasterProgrammes] = useState<any[]>([]);
+  const [enduranceCycles, setEnduranceCycles] = useState<any[]>([]);
+  const [runTemplates, setRunTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -259,11 +342,15 @@ export default function Library() {
       fetch("/api/run-brain/workouts").then(r => r.json()),
       fetch("/api/strength-blocks/templates").then(r => r.json()),
       fetch("/api/programmes").then(r => r.json()),
-    ]).then(([wodData, runData, strengthData, progData]) => {
+      fetch("/api/endurance-cycles/templates").then(r => r.json()),
+      fetch("/api/endurance-run-templates").then(r => r.json()),
+    ]).then(([wodData, runData, strengthData, progData, cycleData, runTplData]) => {
       setWods(wodData.workouts ?? []);
       setRuns(runData.workouts ?? []);
       setStrengthTemplates(strengthData.templates ?? []);
       setMasterProgrammes((Array.isArray(progData) ? progData : []).filter((p: any) => (p.sessions ?? []).length > 0));
+      setEnduranceCycles(cycleData.cycles ?? []);
+      setRunTemplates(runTplData.templates ?? []);
     }).catch(() => toast({ title: "Failed to load library", variant: "destructive" }))
       .finally(() => setLoading(false));
   }, []);
@@ -280,7 +367,7 @@ export default function Library() {
     (r.tags ?? []).some((t: string) => t.includes(search.toLowerCase()))
   );
 
-  const totalBlocks = masterProgrammes.length + strengthTemplates.length;
+  const totalBlocks = masterProgrammes.length + strengthTemplates.length + enduranceCycles.length + runTemplates.length;
   const totalSessions = wods.length + runs.length;
 
   const saveWod = async () => {
@@ -377,6 +464,28 @@ export default function Library() {
           </button>
         </div>
 
+        {/* Blocks sub-filter */}
+        {tab === "blocks" && totalBlocks > 0 && (
+          <div className="flex items-center gap-2 pb-3">
+            <div className="flex gap-1 rounded-lg bg-muted p-1">
+              {([
+                { key: "all", label: `All (${totalBlocks})` },
+                { key: "wod", label: `WOD (${masterProgrammes.length + enduranceCycles.length})` },
+                { key: "run", label: `Run (${runTemplates.length})` },
+                { key: "strength", label: `Strength (${strengthTemplates.length})` },
+              ] as { key: BlockFilter; label: string }[]).map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setBlockFilter(f.key)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${blockFilter === f.key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Sessions sub-filter + search */}
         {tab === "sessions" && (
           <div className="flex items-center gap-3 pb-3">
@@ -409,12 +518,12 @@ export default function Library() {
           </div>
         ) : tab === "blocks" ? (
           <div className="space-y-8">
-            {/* Master programmes */}
-            {masterProgrammes.length > 0 && (
+            {/* WOD blocks: master programmes + endurance cycles */}
+            {(blockFilter === "all" || blockFilter === "wod") && (masterProgrammes.length > 0 || enduranceCycles.length > 0) && (
               <div>
-                {strengthTemplates.length > 0 && (
-                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Programmes</h2>
-                )}
+                <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1 flex items-center gap-2">
+                  <Brain className="w-3.5 h-3.5 text-purple-500" /> WOD Blocks
+                </h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {masterProgrammes.map((p: any) => (
                     <ProgrammeCard
@@ -424,16 +533,43 @@ export default function Library() {
                       onToggle={() => setExpandedId(expandedId === String(p.id) ? null : String(p.id))}
                     />
                   ))}
+                  {enduranceCycles.map((c: any) => (
+                    <EnduranceCycleCard
+                      key={c.id}
+                      cycle={c}
+                      expanded={expandedId === c.id}
+                      onToggle={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                    />
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Strength block templates */}
-            {strengthTemplates.length > 0 && (
+            {/* Run blocks */}
+            {(blockFilter === "all" || blockFilter === "run") && runTemplates.length > 0 && (
               <div>
-                {masterProgrammes.length > 0 && (
-                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Strength Cycles</h2>
-                )}
+                <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1 flex items-center gap-2">
+                  <Zap className="w-3.5 h-3.5 text-green-500" /> Run Blocks
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {runTemplates.map((t: any) => (
+                    <RunTemplateCard
+                      key={t.id}
+                      template={t}
+                      expanded={expandedId === String(t.id)}
+                      onToggle={() => setExpandedId(expandedId === String(t.id) ? null : String(t.id))}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Strength cycles */}
+            {(blockFilter === "all" || blockFilter === "strength") && strengthTemplates.length > 0 && (
+              <div>
+                <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1 flex items-center gap-2">
+                  <Dumbbell className="w-3.5 h-3.5 text-orange-500" /> Strength Cycles
+                </h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {strengthTemplates.map((t: any) => (
                     <StrengthBlockCard
