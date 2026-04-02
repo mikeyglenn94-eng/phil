@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, enduranceRunTemplatesTable } from "@workspace/db";
+import { db, enduranceRunTemplatesTable, programmesTable } from "@workspace/db";
+import { isNull } from "drizzle-orm";
 import { searchWodsSync } from "./wod-brain";
 import { searchRunsSync } from "./run-brain";
 import { searchCyclesSync } from "./endurance-cycles";
@@ -135,6 +136,41 @@ function normaliseStrength(t: any) {
   };
 }
 
+function scoreMasterProgramme(prog: any, query: string): number {
+  const q = query.toLowerCase();
+  const title = (prog.title ?? "").toLowerCase();
+  const sessions: any[] = prog.sessions ?? [];
+  const sessionNames = sessions.map((s: any) => (s.name ?? "").toLowerCase()).join(" ");
+
+  let score = 0;
+  if (title.includes(q)) score += 30;
+  const words = q.split(/\s+/).filter((w: string) => w.length > 2);
+  words.forEach((word: string) => {
+    if (title.includes(word)) score += 15;
+    if (sessionNames.includes(word)) score += 3;
+  });
+  return score;
+}
+
+function normaliseMasterProgramme(p: any, score: number) {
+  const sessions: any[] = p.sessions ?? [];
+  const dates = sessions.map((s: any) => s.date).filter(Boolean).sort();
+  const weeks = dates.length >= 2
+    ? Math.ceil((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / (7 * 86400000)) + 1
+    : Math.ceil(sessions.length / 5);
+  return {
+    id: String(p.id),
+    name: p.title,
+    category: "master_programme" as const,
+    subtitle: `${weeks > 0 ? `${weeks}-week` : ""} strength block · ${sessions.length} sessions`,
+    tags: [],
+    totalWeeks: weeks,
+    sessionCount: sessions.length,
+    score,
+    raw: p,
+  };
+}
+
 function normaliseRunTemplate(t: any, score: number) {
   const sessions: any[] = t.sessions ?? [];
   const totalWeeks = sessions.length > 0 ? Math.max(...sessions.map((s: any) => s.week)) : 0;
@@ -187,6 +223,19 @@ router.post("/brain/search", async (req, res): Promise<void> => {
       .sort((a, b) => b.score - a.score)
       .slice(0, runTemplateLimit)
       .forEach(({ t, score }) => results.push(normaliseRunTemplate(t, score)));
+  } catch {
+    // DB unavailable — skip silently
+  }
+
+  // Always search master programmes (library/coach programmes with no clientId)
+  try {
+    const masterProgs = await db.select().from(programmesTable).where(isNull(programmesTable.clientId));
+    masterProgs
+      .map(p => ({ p, score: scoreMasterProgramme(p, query) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .forEach(({ p, score }) => results.push(normaliseMasterProgramme(p, score)));
   } catch {
     // DB unavailable — skip silently
   }

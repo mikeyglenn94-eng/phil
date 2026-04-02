@@ -1177,6 +1177,31 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         return;
       }
 
+      if (result.category === "master_programme") {
+        const raw = result.raw ?? {};
+        const sessions: any[] = (raw.sessions ?? []).slice().sort((a: any, b: any) => (a.date ?? "").localeCompare(b.date ?? ""));
+        const firstDate = sessions.find((s: any) => s.date)?.date;
+        const offsetDays = firstDate
+          ? Math.round((new Date(date).getTime() - new Date(firstDate).getTime()) / 86400000)
+          : 0;
+        const rescheduled = sessions.map((s: any) => {
+          if (!s.date) return s;
+          const shifted = new Date(new Date(s.date).getTime() + offsetDays * 86400000);
+          return { ...s, date: shifted.toISOString().slice(0, 10) };
+        });
+        const res = await fetch("/api/programmes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: raw.title, clientId, sessions: rescheduled }),
+        });
+        if (!res.ok) throw new Error();
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        toast({ title: `${raw.title} added to calendar`, description: `Starting ${format(parseISO(date), "d MMM yyyy")}` });
+        navigateToWeekOf(date);
+        setBrainOpen(false); setBrainResults([]); setBrainQuery("");
+        return;
+      }
+
       // wod or run — single session
       const raw = result.raw ?? {};
       const newSession = result.category === "run"
@@ -3028,6 +3053,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     strength: "border-orange-100 bg-orange-50/40",
                     run_template: "border-teal-100 bg-teal-50/40",
                     engine: "border-red-100 bg-red-50/40",
+                    master_programme: "border-orange-100 bg-orange-50/40",
                   };
                   const badgeColor: Record<string, string> = {
                     wod: "bg-purple-100 text-purple-700",
@@ -3036,6 +3062,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     strength: "bg-orange-100 text-orange-700",
                     run_template: "bg-teal-100 text-teal-700",
                     engine: "bg-red-100 text-red-700",
+                    master_programme: "bg-orange-100 text-orange-700",
                   };
                   const btnColor: Record<string, string> = {
                     wod: "bg-purple-600 hover:bg-purple-700",
@@ -3044,8 +3071,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     strength: "bg-orange-600 hover:bg-orange-700",
                     run_template: "bg-teal-600 hover:bg-teal-700",
                     engine: "bg-red-600 hover:bg-red-700",
+                    master_programme: "bg-orange-600 hover:bg-orange-700",
                   };
-                  const catLabel: Record<string, string> = { wod: "WOD", run: "Run", cycle: "Endurance Cycle", strength: "Strength Block", run_template: "Run Block", engine: "Engine Programme" };
+                  const catLabel: Record<string, string> = { wod: "WOD", run: "Run", cycle: "Endurance Cycle", strength: "Strength Block", run_template: "Run Block", engine: "Engine Programme", master_programme: "Block" };
 
                   return (
                     <div key={result.id} className={`rounded-xl border p-4 space-y-2 ${catColor[result.category] ?? ""}`}>
@@ -3081,7 +3109,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           disabled={!brainDates[result.id] || brainAdding === result.id}
                         >
                           {brainAdding === result.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                          {result.category === "cycle" ? "Insert Cycle" : result.category === "engine" ? "Insert Programme" : result.category === "strength" || result.category === "run_template" ? "Insert Block" : "Add Session"}
+                          {result.category === "cycle" ? "Insert Cycle" : result.category === "engine" ? "Insert Programme" : result.category === "strength" || result.category === "run_template" || result.category === "master_programme" ? "Insert Block" : "Add Session"}
                         </Button>
                       </div>
                     </div>
