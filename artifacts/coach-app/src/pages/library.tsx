@@ -166,6 +166,56 @@ function StrengthCard({ template, expanded, onToggle }: { template: any; expande
   );
 }
 
+function ProgrammeCard({ programme, expanded, onToggle }: { programme: any; expanded: boolean; onToggle: () => void }) {
+  const sessions: any[] = programme.sessions ?? [];
+  const sessionCount = sessions.length;
+  const dates = sessions.map((s: any) => s.date).filter(Boolean).sort();
+  const weeks = dates.length >= 2
+    ? Math.ceil((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / (7 * 86400000)) + 1
+    : Math.ceil(sessionCount / 5);
+  const sessionNames = [...new Set(sessions.map((s: any) => s.name).filter(Boolean))].slice(0, 5);
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Programme</span>
+            {sessionCount > 0 && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Calendar className="w-3 h-3" />{sessionCount} sessions
+              </span>
+            )}
+            {weeks > 0 && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" />{weeks}w
+              </span>
+            )}
+          </div>
+          <p className="font-semibold text-sm">{programme.title}</p>
+        </div>
+        {sessionCount > 0 && (
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground" onClick={onToggle}>
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        )}
+      </div>
+      {expanded && sessionNames.length > 0 && (
+        <div className="pt-1 space-y-1">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Session types</p>
+          <div className="flex flex-wrap gap-1">
+            {sessionNames.map((name: string) => (
+              <span key={name} className="text-xs bg-muted rounded-full px-2 py-0.5 text-foreground">{name}</span>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground pt-1">
+            {dates[0] && `Starts ${new Date(dates[0]).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Library() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -174,6 +224,7 @@ export default function Library() {
   const [wods, setWods] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
   const [strengthTemplates, setStrengthTemplates] = useState<any[]>([]);
+  const [masterProgrammes, setMasterProgrammes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -194,10 +245,12 @@ export default function Library() {
       fetch("/api/wod-brain/workouts").then(r => r.json()),
       fetch("/api/run-brain/workouts").then(r => r.json()),
       fetch("/api/strength-blocks/templates").then(r => r.json()),
-    ]).then(([wodData, runData, strengthData]) => {
+      fetch("/api/programmes").then(r => r.json()),
+    ]).then(([wodData, runData, strengthData, progData]) => {
       setWods(wodData.workouts ?? []);
       setRuns(runData.workouts ?? []);
       setStrengthTemplates(strengthData.templates ?? []);
+      setMasterProgrammes((Array.isArray(progData) ? progData : []).filter((p: any) => (p.sessions ?? []).length > 0));
     }).catch(() => toast({ title: "Failed to load library", variant: "destructive" }))
       .finally(() => setLoading(false));
   }, []);
@@ -321,7 +374,7 @@ export default function Library() {
             onClick={() => { setTab("strength"); setSearch(""); }}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${tab === "strength" ? "border-orange-600 text-orange-700 bg-orange-50" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            <Dumbbell className="w-4 h-4" /> Strength <span className="text-xs font-normal">({strengthTemplates.length})</span>
+            <Dumbbell className="w-4 h-4" /> Strength <span className="text-xs font-normal">({strengthTemplates.length + masterProgrammes.length})</span>
           </button>
         </div>
         {tab !== "strength" && (
@@ -361,24 +414,51 @@ export default function Library() {
             </div>
           )
         ) : (
-          strengthTemplates.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-20" />
-              <p className="text-sm font-medium">No strength programmes yet</p>
-              <p className="text-xs mt-1 opacity-60">Programmes you upload will appear here</p>
-            </div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {strengthTemplates.map((t: any) => (
-                <StrengthCard
-                  key={t.id}
-                  template={t}
-                  expanded={expandedId === t.id}
-                  onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)}
-                />
-              ))}
-            </div>
-          )
+          <div className="space-y-8">
+            {/* Coaching Programmes (master programmes from DB) */}
+            {masterProgrammes.length > 0 && (
+              <div>
+                <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Coaching Programmes</h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {masterProgrammes.map((p: any) => (
+                    <ProgrammeCard
+                      key={p.id}
+                      programme={p}
+                      expanded={expandedId === String(p.id)}
+                      onToggle={() => setExpandedId(expandedId === String(p.id) ? null : String(p.id))}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Strength Block Templates */}
+            {strengthTemplates.length > 0 && (
+              <div>
+                {masterProgrammes.length > 0 && (
+                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3 px-1">Strength Blocks</h2>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {strengthTemplates.map((t: any) => (
+                    <StrengthCard
+                      key={t.id}
+                      template={t}
+                      expanded={expandedId === t.id}
+                      onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {strengthTemplates.length === 0 && masterProgrammes.length === 0 && (
+              <div className="text-center py-16 text-muted-foreground">
+                <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="text-sm font-medium">No strength programmes yet</p>
+                <p className="text-xs mt-1 opacity-60">Programmes you add will appear here</p>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
