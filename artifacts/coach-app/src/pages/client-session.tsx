@@ -1087,8 +1087,8 @@ export default function ClientSession() {
         );
       })()}
 
-      {/* Exercises (strength sessions — no source, or source = strength_block) */}
-      {(!(session as any).source || (session as any).source === "strength_block") && (
+      {/* Exercises (strength sessions — no source, strength_block, or strength_programme) */}
+      {(!(session as any).source || (session as any).source === "strength_block" || (session as any).source === "strength_programme") && (
       <div className="max-w-lg mx-auto px-4 pt-4">
         {(session.exercises || []).map((ex, exIdx) => {
           const setsCount = ex.sets || 0;
