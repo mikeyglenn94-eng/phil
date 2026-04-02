@@ -19,16 +19,9 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r-0 bg-sidebar text-sidebar-foreground">
       <SidebarHeader className="p-4 pt-6">
-        <div className="flex items-center gap-3 px-2 mb-6">
-          <div className="bg-primary/20 p-2 rounded-xl">
-            <Dumbbell className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="font-display font-bold text-xl tracking-tight leading-none text-sidebar-foreground">
-              Axis
-            </h1>
-            <p className="text-xs text-sidebar-foreground/50 font-medium">Coach Dashboard</p>
-          </div>
+        <div className="flex flex-col px-2 mb-6">
+          <img src="/logo.png" alt="Logo" className="h-12 w-auto mb-0.5" />
+          <p className="text-xs text-sidebar-foreground/50 font-medium">Coach Dashboard</p>
         </div>
       </SidebarHeader>
 

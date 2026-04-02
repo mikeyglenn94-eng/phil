@@ -29,9 +29,7 @@ export function ClientSidebar({ open, onClose }: ClientSidebarProps) {
             <Dumbbell className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-base leading-none text-sidebar-foreground">
-              Axis
-            </h1>
+            <img src="/logo.png" alt="Logo" className="h-9 w-auto" />
             <p className="text-[10px] text-sidebar-foreground/50 font-medium mt-0.5">Client Portal</p>
           </div>
         </div>

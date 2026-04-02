@@ -732,11 +732,20 @@ export default function ClientSession() {
 
     let cy = cardTop + 72;
 
-    // ── AXIS brand + date ─────────────────────────────────────────────────────
-    ctx.fillStyle = "rgba(99, 102, 241, 1)";
-    ctx.font = "800 38px 'Inter', system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("AXIS", cx, cy);
+    // ── Logo + date ───────────────────────────────────────────────────────────
+    try {
+      const logoImg = await new Promise<HTMLImageElement>((res, rej) => {
+        const img = new window.Image();
+        img.onload = () => res(img);
+        img.onerror = rej;
+        img.src = "/logo.png";
+      });
+      const logoH = 64;
+      const logoW = (logoImg.naturalWidth / logoImg.naturalHeight) * logoH;
+      ctx.drawImage(logoImg, cx, cy - logoH * 0.82, logoW, logoH);
+    } catch {
+      // fallback: nothing — no AXIS text
+    }
 
     ctx.fillStyle = "rgba(255,255,255,0.40)";
     ctx.font = "500 32px 'Inter', system-ui, sans-serif";

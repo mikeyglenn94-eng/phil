@@ -67,16 +67,9 @@ export default function ClientPicker() {
     c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
 
   const Logo = () => (
-    <div className="flex items-center justify-center gap-3 mb-10">
-      <div className="bg-primary/15 p-2.5 rounded-2xl">
-        <Dumbbell className="w-7 h-7 text-primary" />
-      </div>
-      <div>
-        <h1 className="font-display font-bold text-2xl leading-none">
-          Axis
-        </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Client Portal</p>
-      </div>
+    <div className="flex flex-col items-center mb-10">
+      <img src="/logo.png" alt="Logo" className="h-16 w-auto mb-1" />
+      <p className="text-xs text-muted-foreground">Client Portal</p>
     </div>
   );
 

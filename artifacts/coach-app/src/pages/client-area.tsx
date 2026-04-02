@@ -1605,11 +1605,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           )}
           {mode === "client" && (
             <Link href="/clients">
-              <div className="flex items-center gap-2 mr-1 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" title="Coach dashboard">
-                <div className="bg-primary/15 p-1.5 rounded-lg">
-                  <Dumbbell className="w-4 h-4 text-primary" />
-                </div>
-                <span className="font-display font-bold text-sm leading-none text-foreground/70">Axis</span>
+              <div className="flex items-center mr-1 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" title="Coach dashboard">
+                <img src="/logo.png" alt="Logo" className="h-9 w-auto" />
               </div>
             </Link>
           )}
