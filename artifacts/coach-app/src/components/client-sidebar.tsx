@@ -25,13 +25,10 @@ export function ClientSidebar({ open, onClose }: ClientSidebarProps) {
       {/* Logo + close button (mobile only) */}
       <div className="px-5 pt-6 pb-3 flex items-start justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="bg-primary/20 p-1.5 rounded-lg">
-            <Dumbbell className="w-5 h-5 text-primary" />
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
+            <span className="text-white font-black text-xl leading-none" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>M</span>
           </div>
-          <div>
-            <img src="/logo.png" alt="Logo" className="h-9 w-auto" />
-            <p className="text-[10px] text-sidebar-foreground/50 font-medium mt-0.5">Client Portal</p>
-          </div>
+          <p className="text-[10px] text-sidebar-foreground/50 font-medium">Client Portal</p>
         </div>
         <button
           onClick={onClose}

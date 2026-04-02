@@ -19,8 +19,10 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r-0 bg-sidebar text-sidebar-foreground">
       <SidebarHeader className="p-4 pt-6">
-        <div className="flex flex-col px-2 mb-6">
-          <img src="/logo.png" alt="Logo" className="h-12 w-auto mb-0.5" />
+        <div className="flex items-center gap-3 px-2 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+            <span className="text-white font-black text-2xl leading-none" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>M</span>
+          </div>
           <p className="text-xs text-sidebar-foreground/50 font-medium">Coach Dashboard</p>
         </div>
       </SidebarHeader>

@@ -1606,7 +1606,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           {mode === "client" && (
             <Link href="/clients">
               <div className="flex items-center mr-1 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" title="Coach dashboard">
-                <img src="/logo.png" alt="Logo" className="h-9 w-auto" />
+                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                  <span className="text-white font-black text-lg leading-none" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>M</span>
+                </div>
               </div>
             </Link>
           )}

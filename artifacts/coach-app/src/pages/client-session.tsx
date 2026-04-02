@@ -732,20 +732,22 @@ export default function ClientSession() {
 
     let cy = cardTop + 72;
 
-    // ── Logo + date ───────────────────────────────────────────────────────────
-    try {
-      const logoImg = await new Promise<HTMLImageElement>((res, rej) => {
-        const img = new window.Image();
-        img.onload = () => res(img);
-        img.onerror = rej;
-        img.src = "/logo.png";
-      });
-      const logoH = 64;
-      const logoW = (logoImg.naturalWidth / logoImg.naturalHeight) * logoH;
-      ctx.drawImage(logoImg, cx, cy - logoH * 0.82, logoW, logoH);
-    } catch {
-      // fallback: nothing — no AXIS text
-    }
+    // ── M monogram + date ────────────────────────────────────────────────────
+    const logoSize = 72;
+    const logoX = cx;
+    const logoY = cy - logoSize * 0.78;
+
+    // Rounded square background
+    rr(logoX, logoY, logoSize, logoSize, 18);
+    ctx.fillStyle = "rgba(99, 102, 241, 1)";
+    ctx.fill();
+
+    // "M" letter centred inside
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `900 ${Math.round(logoSize * 0.62)}px Georgia, 'Times New Roman', serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("M", logoX + logoSize / 2, logoY + logoSize * 0.72);
+    ctx.textAlign = "left";
 
     ctx.fillStyle = "rgba(255,255,255,0.40)";
     ctx.font = "500 32px 'Inter', system-ui, sans-serif";

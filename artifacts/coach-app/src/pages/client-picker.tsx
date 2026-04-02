@@ -68,7 +68,9 @@ export default function ClientPicker() {
 
   const Logo = () => (
     <div className="flex flex-col items-center mb-10">
-      <img src="/logo.png" alt="Logo" className="h-16 w-auto mb-1" />
+      <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-2 shadow-lg">
+        <span className="text-white font-black text-4xl leading-none" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>M</span>
+      </div>
       <p className="text-xs text-muted-foreground">Client Portal</p>
     </div>
   );
