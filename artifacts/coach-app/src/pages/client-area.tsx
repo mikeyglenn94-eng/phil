@@ -1952,10 +1952,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 variant="outline"
                 className="rounded-xl text-xs h-8 px-2.5 gap-1 border-violet-300 text-violet-700 hover:bg-violet-50"
                 onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
-                title="Ask the Brain — search WODs, runs & templates"
+                title="Build From Library — search curated programmes, WODs & runs"
               >
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Brain</span>
+                <span className="hidden sm:inline">Build From Library</span>
               </Button>
               <Button
                 size="sm"
@@ -2995,10 +2995,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-violet-600" />
-              Ask Daddy
+              Build From Library
             </DialogTitle>
             <DialogDescription>
-              Search WODs, runs, endurance cycles, and strength blocks in one place
+              Search our curated library of programmes, sessions, and blocks — WODs, runs, and strength. Pick one and drop it straight into your calendar.
             </DialogDescription>
           </DialogHeader>
 
@@ -3006,7 +3006,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             {/* Search input */}
             <div className="flex gap-2">
               <Input
-                placeholder='e.g. "30 min EMOM" or "easy 10k" or "6 week squat cycle"'
+                placeholder='e.g. "olympic lifting block" or "easy 10k" or "6 week squat cycle"'
                 value={brainListening ? (brainInterim || "Listening…") : brainQuery}
                 onChange={e => setBrainQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") searchBrain(brainQuery); }}
@@ -3033,31 +3033,40 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
             {/* Quick suggestion chips */}
             {!brainResults.length && !brainSearching && (
-              <div className="flex flex-wrap gap-2">
-                {["30 min conditioning", "long run", "easy aerobic run", "Mikko's cycle", "squat strength block"].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => { setBrainQuery(s); searchBrain(s); }}
-                    className="text-xs rounded-full border border-violet-200 bg-violet-50 text-violet-700 px-3 py-1 hover:bg-violet-100 transition-colors"
-                  >
-                    {s}
-                  </button>
-                ))}
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium">Browse the library:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    "olympic weightlifting",
+                    "squat strength block",
+                    "Mikko's cycle",
+                    "Hyrox run block",
+                    "30 min conditioning",
+                    "easy aerobic run",
+                  ].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => { setBrainQuery(s); searchBrain(s); }}
+                      className="text-xs rounded-full border border-violet-200 bg-violet-50 text-violet-700 px-3 py-1 hover:bg-violet-100 transition-colors"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Intent badge */}
+            {/* Bucket badge */}
             {brainIntent && (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Searching:</span>
+                <span className="text-xs text-muted-foreground">Library section:</span>
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                   brainIntent === "wod" ? "bg-purple-100 text-purple-700" :
                   brainIntent === "run" ? "bg-green-100 text-green-700" :
-                  brainIntent === "cycle" ? "bg-blue-100 text-blue-700" :
                   brainIntent === "strength" ? "bg-orange-100 text-orange-700" :
                   "bg-gray-100 text-gray-700"
-                } capitalize`}>
-                  {brainIntent === "all" ? "All libraries" : brainIntent === "cycle" ? "Endurance Cycles" : brainIntent === "wod" ? "WODs" : brainIntent === "run" ? "Runs" : "Strength Blocks"}
+                }`}>
+                  {brainIntent === "all" ? "All sections" : brainIntent === "wod" ? "WODs" : brainIntent === "run" ? "Runs" : "Strength"}
                 </span>
               </div>
             )}
