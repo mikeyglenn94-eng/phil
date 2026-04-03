@@ -369,7 +369,7 @@ export default function Library() {
       const res = await fetch("/api/programmes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "Untitled Programme", sessions: [], clientId: null }),
+        body: JSON.stringify({ title: "Untitled Programme", sessions: [] }),
       });
       if (!res.ok) throw new Error();
       const programme = await res.json();

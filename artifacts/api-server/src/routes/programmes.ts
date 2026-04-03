@@ -46,7 +46,7 @@ router.post("/programmes", async (req, res): Promise<void> => {
   }
 
   // Safety-net: enforce monthly limit at save time too (respects creditResetAt)
-  if (clientId !== undefined && !isNaN(Number(clientId))) {
+  if (clientId !== undefined && clientId !== null && !isNaN(Number(clientId))) {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
@@ -66,7 +66,7 @@ router.post("/programmes", async (req, res): Promise<void> => {
   }
 
   const values: { title: string; sessions: Session[]; clientId?: number } = { title, sessions: sessions ?? [] };
-  if (clientId !== undefined && !isNaN(Number(clientId))) values.clientId = Number(clientId);
+  if (clientId !== undefined && clientId !== null && !isNaN(Number(clientId))) values.clientId = Number(clientId);
   const [programme] = await db
     .insert(programmesTable)
     .values(values)
