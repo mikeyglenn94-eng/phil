@@ -1,10 +1,21 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2, Rows3, Minus, PlayCircle } from "lucide-react";
+import { GripVertical, Trash2, Rows3, Minus, PlayCircle, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import type { Exercise } from "@workspace/api-client-react";
 
 interface ExerciseCardProps {
@@ -60,6 +71,16 @@ export function ExerciseCard({ exercise, onChange, onDelete }: ExerciseCardProps
     onChange(exercise.id, { [key]: current.slice(0, setCount) });
   };
 
+  const addSet = () => {
+    const newCount = setCount + 1;
+    const updates: Partial<Exercise> = { sets: newCount };
+    if (isVariableMode) {
+      updates.perSetReps = [...(exercise.perSetReps ?? Array(setCount).fill("")), exercise.reps ?? ""];
+      updates.perSetRpe = [...(exercise.perSetRpe ?? Array(setCount).fill("")), exercise.rpe ?? ""];
+    }
+    onChange(exercise.id, updates);
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -98,27 +119,59 @@ export function ExerciseCard({ exercise, onChange, onDelete }: ExerciseCardProps
               </a>
             )}
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onDelete(exercise.id)}
-            className="text-muted-foreground hover:text-destructive shrink-0"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-destructive shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove exercise?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  "{exercise.name || "This exercise"}" will be removed from the session. This can't be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => onDelete(exercise.id)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Remove
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         {/* Uniform fields — Sets always shown; Reps + RPE hidden in variable mode */}
         <div className={`grid gap-3 mb-4 ${isVariableMode ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-5"}`}>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground px-1 uppercase tracking-wider font-semibold">Sets</Label>
-            <Input
-              type="number"
-              value={exercise.sets || ""}
-              onChange={(e) => handleUpdate("sets", e.target.value ? parseInt(e.target.value) : null)}
-              className="bg-muted/50 border-transparent focus:bg-background h-9 rounded-lg"
-              placeholder="e.g. 3"
-            />
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="number"
+                value={exercise.sets || ""}
+                onChange={(e) => handleUpdate("sets", e.target.value ? parseInt(e.target.value) : null)}
+                className="bg-muted/50 border-transparent focus:bg-background h-9 rounded-lg"
+                placeholder="e.g. 3"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={addSet}
+                className="h-9 w-9 shrink-0 rounded-lg border-dashed text-muted-foreground hover:text-foreground hover:border-primary"
+                title="Add a set"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </Button>
+            </div>
           </div>
 
           {!isVariableMode && (
