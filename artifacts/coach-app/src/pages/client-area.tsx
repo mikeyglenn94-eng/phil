@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2 } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -436,6 +436,50 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     changes: { programmeId: number; sessions: Session[] }[];
   } | null>(null);
   const [calendarView, setCalendarView] = useState<"month" | "week">("month");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+
+  const toggleSelectSession = (id: string) => {
+    setSelectedSessionIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedSessionIds(new Set());
+  };
+
+  const shiftSelectedSessions = async (deltaWeeks: number) => {
+    if (selectedSessionIds.size === 0) return;
+    const byProg = new Map<number, Session[]>();
+    for (const prog of (clientProgrammes ?? [])) {
+      const sessions = prog.sessions as Session[];
+      if (sessions.some(s => selectedSessionIds.has(s.id))) {
+        byProg.set(prog.id, sessions);
+      }
+    }
+    await Promise.all(
+      Array.from(byProg.entries()).map(async ([progId, sessions]) => {
+        const updated = sessions.map(s =>
+          selectedSessionIds.has(s.id) && s.date
+            ? { ...s, date: format(addDays(parseISO(s.date), deltaWeeks * 7), "yyyy-MM-dd") }
+            : s
+        );
+        await fetch(`/api/programmes/${progId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessions: updated }),
+        });
+      })
+    );
+    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+    const n = selectedSessionIds.size;
+    toast({ title: `${n} session${n > 1 ? "s" : ""} shifted ${deltaWeeks > 0 ? "forward" : "back"} 1 week` });
+    exitSelectionMode();
+  };
 
   const trainingWeeks = useMemo(() => {
     const weekStart = startOfWeek(addWeeks(new Date(), trainingWeekOffset), { weekStartsOn: 1 });
@@ -1998,6 +2042,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 <button onClick={() => setCalendarView("month")} className={`tab${calendarView === "month" ? " active" : ""}`}>Month</button>
                 <button onClick={() => setCalendarView("week")} className={`tab${calendarView === "week" ? " active" : ""}`}>Week</button>
               </div>
+              <Button
+                size="sm"
+                variant={selectionMode ? "default" : "outline"}
+                className={`h-7 px-2.5 text-xs rounded-lg gap-1 ${selectionMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
+                title="Select sessions to shift by week"
+              >
+                <MousePointer2 className="w-3 h-3" />
+                <span className="hidden sm:inline">{selectionMode ? "Cancel" : "Select"}</span>
+              </Button>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <Button
@@ -2169,15 +2223,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             );
                             const isTouchPicked = touchDraggingActive && touchDragRef.current?.sessionId === session.id;
                             const highlight = getSessionHighlight(session);
+                            const isSelected = selectedSessionIds.has(session.id);
                             return (
                               <div
                                 key={session.id}
-                                draggable
+                                draggable={!selectionMode}
                                 onDragStart={() => {
+                                  if (selectionMode) return;
                                   if (prog) draggedItemRef.current = { sessionId: session.id, programmeId: prog.id };
                                 }}
                                 onDragEnd={() => { draggedItemRef.current = null; setDragOverDate(null); }}
                                 onTouchStart={e => {
+                                  if (selectionMode) return;
                                   const touch = e.touches[0];
                                   touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
                                   // Clear any stale long-press timer
@@ -2195,6 +2252,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   }
                                 }}
                                 onTouchMove={e => {
+                                  if (selectionMode) return;
                                   const t = e.touches[0];
                                   const start = touchStartPosRef.current;
                                   if (!start) return;
@@ -2214,6 +2272,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   setTouchDragOverDate(cell?.dataset.date ?? null);
                                 }}
                                 onTouchEnd={e => {
+                                  if (selectionMode) {
+                                    // In selection mode — short tap toggles
+                                    const t = e.changedTouches[0];
+                                    const start = touchStartPosRef.current;
+                                    const moved = start ? Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y) : 0;
+                                    if (moved < 10) toggleSelectSession(session.id);
+                                    return;
+                                  }
                                   // Cancel any pending long-press
                                   if (longPressTimerRef.current) {
                                     clearTimeout(longPressTimerRef.current);
@@ -2250,6 +2316,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (selectionMode) {
+                                    toggleSelectSession(session.id);
+                                    return;
+                                  }
                                   if (isDragActiveRef.current) return;
                                   if (prog) {
                                     if (mode === "client") {
@@ -2259,13 +2329,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     }
                                   }
                                 }}
-                                className={`calendar-item relative group w-full text-left select-none transition-all cursor-pointer ${calendarView === "week" ? "!whitespace-normal !px-2.5 !py-2 !text-[11px] !bg-primary/10 !text-primary !rounded-md !overflow-visible hover:!bg-primary/20" : ""} ${isTouchPicked ? "opacity-50 scale-95 ring-2 ring-primary/50 ring-offset-1" : ""}`}
+                                className={`calendar-item relative group w-full text-left select-none transition-all cursor-pointer ${calendarView === "week" ? "!whitespace-normal !px-2.5 !py-2 !text-[11px] !bg-primary/10 !text-primary !rounded-md !overflow-visible hover:!bg-primary/20" : ""} ${isTouchPicked ? "opacity-50 scale-95 ring-2 ring-primary/50 ring-offset-1" : ""} ${isSelected ? "!ring-2 !ring-primary !ring-offset-1 !bg-primary/20" : ""}`}
                               >
+                                {selectionMode && (
+                                  <span className="absolute top-0.5 left-0.5 z-10 pointer-events-none">
+                                    {isSelected
+                                      ? <CheckSquare className="w-3 h-3 text-primary" />
+                                      : <Square className="w-3 h-3 text-primary/40" />
+                                    }
+                                  </span>
+                                )}
                                 {calendarView === "month" ? (
                                   <>
-                                    <span className="block truncate pr-3 font-medium">{session.name || "Session"}</span>
+                                    <span className={`block truncate font-medium ${selectionMode ? "pl-4" : "pr-3"}`}>{session.name || "Session"}</span>
                                     {highlight && (
-                                      <span className={`block truncate text-[9px] leading-tight mt-0.5 font-normal ${isTouchPicked ? "opacity-80" : "opacity-60"}`}>{highlight}</span>
+                                      <span className={`block truncate text-[9px] leading-tight mt-0.5 font-normal ${selectionMode ? "pl-4" : ""} ${isTouchPicked ? "opacity-80" : "opacity-60"}`}>{highlight}</span>
                                     )}
                                   </>
                                 ) : (
@@ -2288,14 +2366,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     )}
                                   </>
                                 )}
-                                <button
-                                  onTouchStart={e => e.stopPropagation()}
-                                  onClick={e => { e.stopPropagation(); deleteSession(session.id, prog?.id); }}
-                                  className={`absolute top-0.5 right-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${isTouchPicked ? "text-primary-foreground hover:bg-white/20" : "text-primary hover:bg-primary/30"}`}
-                                  title="Delete session"
-                                >
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
+                                {!selectionMode && (
+                                  <button
+                                    onTouchStart={e => e.stopPropagation()}
+                                    onClick={e => { e.stopPropagation(); deleteSession(session.id, prog?.id); }}
+                                    className={`absolute top-0.5 right-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${isTouchPicked ? "text-primary-foreground hover:bg-white/20" : "text-primary hover:bg-primary/30"}`}
+                                    title="Delete session"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
                               </div>
                             );
                           })}
@@ -2318,6 +2398,50 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* Multi-select action bar — fixed bottom */}
+      {selectionMode && (
+        <div className="fixed bottom-0 inset-x-0 z-50 bg-card border-t shadow-xl px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <CheckSquare className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm font-medium truncate">
+              {selectedSessionIds.size === 0
+                ? "Tap sessions to select"
+                : `${selectedSessionIds.size} session${selectedSessionIds.size > 1 ? "s" : ""} selected`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3 text-xs rounded-lg gap-1.5"
+              disabled={selectedSessionIds.size === 0}
+              onClick={() => shiftSelectedSessions(-1)}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              1 week
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3 text-xs rounded-lg gap-1.5"
+              disabled={selectedSessionIds.size === 0}
+              onClick={() => shiftSelectedSessions(1)}
+            >
+              1 week
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 px-3 text-xs rounded-lg text-muted-foreground"
+              onClick={exitSelectionMode}
+            >
+              Done
+            </Button>
+          </div>
         </div>
       )}
 
