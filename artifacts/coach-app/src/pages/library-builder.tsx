@@ -546,7 +546,7 @@ export default function LibraryBuilder() {
                 return (
                   <div
                     key={di}
-                    className={`calendar-cell cursor-pointer transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${calView === "week" ? "!min-h-[calc(100vh-380px)]" : ""}`}
+                    className={`calendar-cell cursor-pointer transition-colors ${calView === "week" ? "!min-h-[calc(100vh-380px)]" : ""}`}
                     onClick={() => { setQuickAddDate(dateStr); setQuickAddName(""); setQuickAddOpen(true); }}
                   >
                     {calView === "month" && (
