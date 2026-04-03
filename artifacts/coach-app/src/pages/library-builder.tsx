@@ -115,6 +115,7 @@ export default function LibraryBuilder() {
   const [descText, setDescText] = useState("");
   const [descStartDate, setDescStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [generating, setGenerating] = useState(false);
+  const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety" | null>(null);
 
   // Calendar
   const [weekOffset, setWeekOffset] = useState(0);
@@ -175,14 +176,23 @@ export default function LibraryBuilder() {
   };
 
   // Generate from AI
+  function isStrengthDescription(text: string) {
+    const lower = text.toLowerCase();
+    const hyrox = /hyrox/i.test(lower);
+    const oly = /weightlifting|olympic|snatch|clean.?jerk|oly\b/i.test(lower);
+    const runOnly = /^[\s\w,]+run(ning|s)?\s*(only|focused|block|programme)?$/i.test(lower.trim());
+    return !hyrox && !oly && !runOnly;
+  }
+
   const generateSessions = async () => {
     if (!descText.trim() || !descStartDate) { toast({ title: "Add a description and start date" }); return; }
+    if (isStrengthDescription(descText) && strengthStyle === null) { toast({ title: "Choose a session style first" }); return; }
     setGenerating(true);
     try {
       const res = await fetch("/api/generate-programme", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: descText.trim(), startDate: descStartDate, strengthStyle: "variety" }),
+        body: JSON.stringify({ description: descText.trim(), startDate: descStartDate, strengthStyle: strengthStyle ?? "variety" }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
@@ -414,6 +424,23 @@ export default function LibraryBuilder() {
               value={descText}
               onChange={e => setDescText(e.target.value)}
             />
+            {descText.trim() && isStrengthDescription(descText) && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Session style</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setStrengthStyle("straight")}
+                    className={`rounded-xl border px-3 py-2.5 text-left text-sm transition-all ${strengthStyle === "straight" ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/50"}`}>
+                    <p className="font-semibold">Straight Sets</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Consistent sets &amp; reps, clean progressive overload</p>
+                  </button>
+                  <button type="button" onClick={() => setStrengthStyle("variety")}
+                    className={`rounded-xl border px-3 py-2.5 text-left text-sm transition-all ${strengthStyle === "variety" ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/50"}`}>
+                    <p className="font-semibold">Variety</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Wave loading, pyramids, drop sets, AMRAP finishers</p>
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground whitespace-nowrap">Start</label>
@@ -425,7 +452,7 @@ export default function LibraryBuilder() {
                 />
               </div>
               <Button size="sm" className="gap-2 rounded-lg ml-auto" onClick={generateSessions}
-                disabled={generating || !descText.trim() || !descStartDate}>
+                disabled={generating || !descText.trim() || !descStartDate || (isStrengthDescription(descText) && strengthStyle === null)}>
                 {generating
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</>
                   : <><Sparkles className="w-3.5 h-3.5" /> {sessions.length > 0 ? "Re-generate" : "Generate"}</>
