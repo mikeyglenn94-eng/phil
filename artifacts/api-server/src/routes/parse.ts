@@ -21,6 +21,17 @@ function selectModel(description: string): string {
     "5 session", "6 session",
     // Multi-modal complexity
     "triathlon", "crossfit games",
+    // Multi-week programmes
+    "4 week", "4-week", "four week", "3 week", "3-week", "three week",
+    "5 week", "5-week", "6 week", "6-week", "8 week", "8-week",
+    "week programme", "week program", "weekly progression", "progress over",
+    // Complex bodybuilding / periodisation signals
+    "superset", "super set",
+    "max reps", "amrap", "failure",
+    "rpe", "@rpe", "rpe8", "rpe9", "rpe 8", "rpe 9", "rpe 10",
+    "periodis", "periodiz",
+    "bulgarian", "pause squat", "paused", "deficit",
+    "bodybuilding", "hypertrophy",
   ];
   // Multi-modal: mentions 3+ distinct training types
   const modalities = [
@@ -761,7 +772,7 @@ Use clean, consistent straight sets throughout. Every exercise should have a def
   try {
     const completion = await openai.chat.completions.create({
       model: chosenModel,
-      max_completion_tokens: 32768,
+      max_completion_tokens: chosenModel === "gpt-4o" ? 16384 : 32768,
       messages: [
         { role: "system", content: systemPrompt + styleSection },
         { role: "user", content: `Start date: ${startDate}\n\nDescription: "${description}"` },
