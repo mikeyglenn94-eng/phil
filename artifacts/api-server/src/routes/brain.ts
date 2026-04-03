@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, enduranceRunTemplatesTable, programmesTable } from "@workspace/db";
-import { isNull } from "drizzle-orm";
+import { db, enduranceRunTemplatesTable, programmesTable, sessionLibraryTable } from "@workspace/db";
+import { isNull, or, eq } from "drizzle-orm";
 import { searchWodsSync } from "./wod-brain";
 import { searchRunsSync } from "./run-brain";
 import { searchCyclesSync } from "./endurance-cycles";
 import { searchStrengthSync } from "./strength-blocks";
 import { searchEngineSync } from "./engine-builder";
+import { searchSessionLibrarySync } from "./session-library";
 
 const router: IRouter = Router();
 
@@ -214,7 +215,7 @@ function normaliseStrengthBlock_Programme(p: any, score: number) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.post("/brain/search", async (req, res): Promise<void> => {
-  const { query } = req.body as { query: string };
+  const { query, clientId } = req.body as { query: string; clientId?: number | null };
   if (!query?.trim()) { res.status(400).json({ error: "Query is required" }); return; }
 
   const bucket = detectBucket(query);
@@ -250,6 +251,17 @@ router.post("/brain/search", async (req, res): Promise<void> => {
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .forEach(({ t, score }) => results.push(normaliseRunBlock(t, score)));
+  } catch { /* skip */ }
+
+  // ── DB: saved session library (private + public) ──────────────────
+  try {
+    const whereClause = clientId != null
+      ? or(isNull(sessionLibraryTable.clientId), eq(sessionLibraryTable.clientId, clientId))
+      : isNull(sessionLibraryTable.clientId);
+    const savedSessions = await db.select().from(sessionLibraryTable).where(whereClause);
+    const limit = bucket === "all" ? 3 : 4;
+    searchSessionLibrarySync(savedSessions, query, clientId, limit)
+      .forEach(r => results.push(r));
   } catch { /* skip */ }
 
   // ── DB: master programmes / library blocks (always searched) ────

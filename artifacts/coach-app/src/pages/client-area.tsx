@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2 } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -302,6 +302,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [quickAddInterim, setQuickAddInterim] = useState("");
   // ── AI session generation from Build Through AI dialog ──
   const [aiSessionGenerating, setAiSessionGenerating] = useState(false);
+  const [parsedAiSession, setParsedAiSession] = useState<any | null>(null);
+  const [savingAiSession, setSavingAiSession] = useState<"private" | "public" | "calendar" | null>(null);
   const quickAddInterimRef = useRef("");
   const quickAddRecRef = useRef<any>(null);
 
@@ -371,11 +373,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     }
   }
 
-  /** Build Through AI — single session mode: uses assignStartDate as the date */
+  /** Build Through AI — single session mode: parses and shows preview with save options */
   async function handleAiSession() {
     if (!quickAddDesc.trim() || !assignStartDate) return;
     setAiSessionGenerating(true);
     setQuickAddError("");
+    setParsedAiSession(null);
     try {
       const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
       const res = await fetch(endpoint, {
@@ -385,18 +388,50 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       });
       if (!res.ok) throw new Error();
       const session = await res.json();
-      const newSession = { ...session, id: `session-${Date.now()}`, date: assignStartDate };
-      await addSessionToClientCalendar(assignStartDate, newSession, () => {}, newSession.id, () => {
-        setAssignDialogOpen(false);
-        setQuickAddName("");
-        setQuickAddDesc("");
-        setQuickAddType("strength");
-        navigateToWeekOf(assignStartDate);
-      }, session.name);
+      setParsedAiSession(session);
     } catch {
       setQuickAddError(quickAddType === "wod" ? "Couldn't parse your WOD — please try again." : "Couldn't parse your session — please try again.");
     } finally {
       setAiSessionGenerating(false);
+    }
+  }
+
+  /** Confirm generated session: add to calendar + optionally save to library */
+  async function confirmAiSession(dest: "calendar" | "private" | "public") {
+    if (!parsedAiSession || !assignStartDate) return;
+    setSavingAiSession(dest);
+    try {
+      const newSession = { ...parsedAiSession, id: `session-${Date.now()}`, date: assignStartDate };
+
+      // Save to library if requested
+      if (dest === "private" || dest === "public") {
+        await fetch("/api/session-library", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: parsedAiSession.name || quickAddName || "Saved Session",
+            type: quickAddType,
+            sessionData: parsedAiSession,
+            clientId: dest === "private" ? clientId : null,
+          }),
+        });
+      }
+
+      // Always add to calendar
+      await addSessionToClientCalendar(assignStartDate, newSession, () => {}, newSession.id, () => {
+        setAssignDialogOpen(false);
+        setParsedAiSession(null);
+        setQuickAddName("");
+        setQuickAddDesc("");
+        setQuickAddType("strength");
+        navigateToWeekOf(assignStartDate);
+        if (dest === "private") toast({ title: "Saved to your sessions", description: "Find it in Build From Library." });
+        if (dest === "public") toast({ title: "Added to public library", description: "Visible to all coaches and clients." });
+      }, parsedAiSession.name);
+    } catch {
+      setQuickAddError("Something went wrong — please try again.");
+    } finally {
+      setSavingAiSession(null);
     }
   }
 
@@ -1194,7 +1229,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       const res = await fetch("/api/brain/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, clientId: clientId || null }),
       });
       const data = await res.json();
       setBrainResults(data.results ?? []);
@@ -1222,6 +1257,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
     try {
       const source = result.source ?? (result.isBlock ? "strength_template" : result.bucket === "run" ? "run_session" : "wod_session");
+
+      // ── Saved session from session library ───────────────────────
+      if (source === "saved_session") {
+        const sessionData = result.raw ?? {};
+        const newSession = { ...sessionData, id: `session-${Date.now()}`, date };
+        await addSessionToClientCalendar(date, newSession, () => {}, newSession.id, () => {
+          navigateToWeekOf(date);
+          setBrainOpen(false);
+          setBrainResults([]);
+          setBrainQuery("");
+          toast({ title: `${result.name} added to calendar` });
+        }, result.name);
+        return;
+      }
 
       // ── Block insertion — routed by source ──────────────────────
       if (source === "wod_cycle") {
@@ -2463,7 +2512,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       )}
 
       {/* Build Through AI Dialog */}
-      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); } }}>
+      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setSavingAiSession(null); } }}>
         <DialogContent className="max-w-md max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2718,17 +2767,74 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           {!describeGenerating && (
             <DialogFooter className="shrink-0 pt-3 border-t">
               {aiMode === "session" ? (
-                <>
-                  <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Close</Button>
-                  <Button
-                    onClick={() => void handleAiSession()}
-                    disabled={!quickAddDesc.trim() || !assignStartDate || aiSessionGenerating}
-                    className="gap-2"
-                  >
-                    {aiSessionGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    Generate Session
-                  </Button>
-                </>
+                parsedAiSession ? (
+                  /* Preview step — choose where to save */
+                  <div className="w-full space-y-3">
+                    <div className="rounded-xl border bg-primary/5 border-primary/20 px-4 py-3">
+                      <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider mb-1">Generated</p>
+                      <p className="text-sm font-bold">{parsedAiSession.name || "Session"}</p>
+                      {(parsedAiSession.exercises ?? []).length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {(parsedAiSession.exercises as any[]).slice(0, 3).map((e: any) => e.name).join(" · ")}
+                          {(parsedAiSession.exercises as any[]).length > 3 ? " …" : ""}
+                        </p>
+                      )}
+                      {parsedAiSession.structure && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{parsedAiSession.structure}</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground text-center font-medium">Where would you like to save this?</p>
+                    <div className="grid grid-cols-1 gap-2">
+                      <Button
+                        onClick={() => void confirmAiSession("private")}
+                        disabled={!!savingAiSession}
+                        className="gap-2 justify-start w-full"
+                        variant="default"
+                      >
+                        {savingAiSession === "private" ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookMarked className="w-4 h-4" />}
+                        Save to My Sessions
+                        <span className="ml-auto text-xs opacity-70 font-normal">+ add to calendar</span>
+                      </Button>
+                      <Button
+                        onClick={() => void confirmAiSession("public")}
+                        disabled={!!savingAiSession}
+                        variant="outline"
+                        className="gap-2 justify-start w-full border-violet-300 text-violet-700 hover:bg-violet-50"
+                      >
+                        {savingAiSession === "public" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                        Save to Public Library
+                        <span className="ml-auto text-xs opacity-70 font-normal">+ add to calendar</span>
+                      </Button>
+                      <Button
+                        onClick={() => void confirmAiSession("calendar")}
+                        disabled={!!savingAiSession}
+                        variant="ghost"
+                        className="gap-2 justify-start w-full text-muted-foreground"
+                      >
+                        {savingAiSession === "calendar" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarPlus className="w-4 h-4" />}
+                        Just add to calendar
+                      </Button>
+                    </div>
+                    <button
+                      className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
+                      onClick={() => setParsedAiSession(null)}
+                    >
+                      ← Edit description
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Close</Button>
+                    <Button
+                      onClick={() => void handleAiSession()}
+                      disabled={!quickAddDesc.trim() || !assignStartDate || aiSessionGenerating}
+                      className="gap-2"
+                    >
+                      {aiSessionGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      Generate Session
+                    </Button>
+                  </>
+                )
               ) : !generatedPreview ? (
                 <>
                   <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Close</Button>

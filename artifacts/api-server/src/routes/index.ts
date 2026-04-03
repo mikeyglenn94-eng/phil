@@ -12,6 +12,7 @@ import runSessionsRouter from "./run-sessions";
 import engineBuilderRouter from "./engine-builder";
 import xlsUploadRouter from "./xls-upload";
 import calendarCommandRouter from "./calendar-command";
+import sessionLibraryRouter from "./session-library";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(xlsUploadRouter);
 router.use(calendarCommandRouter);
 router.use(brainRouter);
 router.use(runSessionsRouter);
+router.use(sessionLibraryRouter);
 
 export default router;

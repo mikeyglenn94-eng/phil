@@ -35,3 +35,20 @@ export const runLibraryTable = pgTable("run_library", {
 export const insertRunLibrarySchema = createInsertSchema(runLibraryTable).omit({ id: true, createdAt: true });
 export type InsertRunLibrary = z.infer<typeof insertRunLibrarySchema>;
 export type RunLibraryEntry = typeof runLibraryTable.$inferSelect;
+
+// ── Saved Session Library ───────────────────────────────────────────────────
+// clientId = null  → public (visible to everyone via Build From Library)
+// clientId = <id> → private (visible only to that client)
+export const sessionLibraryTable = pgTable("session_library", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type").notNull(), // "strength" | "wod" | "run"
+  sessionData: jsonb("session_data").notNull(),
+  clientId: integer("client_id"),
+  tags: jsonb("tags").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertSessionLibrarySchema = createInsertSchema(sessionLibraryTable).omit({ id: true, createdAt: true });
+export type InsertSessionLibrary = z.infer<typeof insertSessionLibrarySchema>;
+export type SessionLibraryEntry = typeof sessionLibraryTable.$inferSelect;
