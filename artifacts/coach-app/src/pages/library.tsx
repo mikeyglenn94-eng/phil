@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Brain, Zap, Plus, BookOpen, Loader2, ChevronDown, ChevronUp, ArrowLeft, Dumbbell, Calendar, Clock, Layers, Sparkles, Save, X, Pencil, Check } from "lucide-react";
+import { Brain, Zap, Plus, BookOpen, Loader2, ChevronDown, ChevronUp, ArrowLeft, Dumbbell, Calendar, Clock, Layers, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -361,74 +361,22 @@ export default function Library() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // ── Programme Builder ──────────────────────────────────────────────────────
-  const [builderOpen, setBuilderOpen] = useState(false);
-  const [builderName, setBuilderName] = useState("");
-  const [builderStartDate, setBuilderStartDate] = useState("");
-  const [builderDescription, setBuilderDescription] = useState("");
-  const [builderSessions, setBuilderSessions] = useState<any[]>([]);
-  const [builderGenerating, setBuilderGenerating] = useState(false);
-  const [builderSaving, setBuilderSaving] = useState(false);
-  const [builderGenerated, setBuilderGenerated] = useState(false);
-  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
-  const [editingSessionName, setEditingSessionName] = useState("");
+  const [creatingBuilder, setCreatingBuilder] = useState(false);
 
-  const generateBuilderProgramme = async () => {
-    if (!builderDescription.trim() || !builderStartDate) {
-      toast({ title: "Enter a description and start date first" }); return;
-    }
-    setBuilderGenerating(true);
-    setBuilderGenerated(false);
-    try {
-      const res = await fetch("/api/generate-programme", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: builderDescription.trim(), startDate: builderStartDate, strengthStyle: "variety" }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      const ts = Date.now();
-      const sessions = (data.sessions ?? []).map((s: any, i: number) => ({
-        ...s,
-        id: s.id ?? `builder-session-${ts}-${i}`,
-      }));
-      setBuilderSessions(sessions);
-      if (!builderName && data.title) setBuilderName(data.title);
-      setBuilderGenerated(true);
-    } catch {
-      toast({ title: "Failed to generate programme", description: "Try rephrasing your description.", variant: "destructive" });
-    } finally {
-      setBuilderGenerating(false);
-    }
-  };
-
-  const saveBuilderToLibrary = async () => {
-    if (!builderName.trim()) { toast({ title: "Give the programme a name first" }); return; }
-    if (!builderSessions.length) { toast({ title: "Generate sessions first" }); return; }
-    setBuilderSaving(true);
+  const openBuilder = async () => {
+    setCreatingBuilder(true);
     try {
       const res = await fetch("/api/programmes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: builderName.trim(), sessions: builderSessions, clientId: null }),
+        body: JSON.stringify({ title: "Untitled Programme", sessions: [], clientId: null }),
       });
       if (!res.ok) throw new Error();
-      setMasterProgrammes(prev => [...prev, { title: builderName.trim(), sessions: builderSessions }]);
-      toast({ title: `"${builderName.trim()}" saved to Library` });
-      setBuilderOpen(false);
-      setBuilderName(""); setBuilderDescription(""); setBuilderStartDate(""); setBuilderSessions([]); setBuilderGenerated(false);
+      const programme = await res.json();
+      setLocation(`/library/builder/${programme.id}`);
     } catch {
-      toast({ title: "Failed to save to library", variant: "destructive" });
-    } finally { setBuilderSaving(false); }
-  };
-
-  const removeBuilderSession = (id: string) => setBuilderSessions(prev => prev.filter(s => s.id !== id));
-
-  const startEditSession = (s: any) => { setEditingSessionId(s.id); setEditingSessionName(s.name ?? ""); };
-  const commitEditSession = () => {
-    if (editingSessionId) {
-      setBuilderSessions(prev => prev.map(s => s.id === editingSessionId ? { ...s, name: editingSessionName } : s));
-      setEditingSessionId(null); setEditingSessionName("");
-    }
+      toast({ title: "Failed to create programme", variant: "destructive" });
+    } finally { setCreatingBuilder(false); }
   };
 
   // ── Add WOD dialog ─────────────────────────────────────────────────────────
@@ -531,172 +479,6 @@ export default function Library() {
     } finally { setSavingRun(false); }
   };
 
-  // ── Builder full-screen view ──────────────────────────────────────────────
-  if (builderOpen) {
-    const sortedSessions = [...builderSessions].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
-    const weekMap = groupIntoWeeks(sortedSessions);
-    const weekKeys = [...weekMap.keys()].sort();
-
-    return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
-        {/* Builder header */}
-        <div className="shrink-0 border-b px-4 sm:px-6 py-3 bg-background flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8 -ml-1 shrink-0"
-              onClick={() => { setBuilderOpen(false); setBuilderSessions([]); setBuilderGenerated(false); }}>
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <Input
-              placeholder="Programme name…"
-              value={builderName}
-              onChange={e => setBuilderName(e.target.value)}
-              className="h-8 text-sm font-semibold border-0 border-b rounded-none bg-transparent px-0 focus-visible:ring-0 w-full max-w-xs"
-            />
-          </div>
-          <Button
-            size="sm"
-            className="gap-2 rounded-lg shrink-0"
-            onClick={saveBuilderToLibrary}
-            disabled={builderSaving || !builderSessions.length || !builderName.trim()}
-          >
-            {builderSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Save to Library
-          </Button>
-        </div>
-
-        {/* Builder body */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Describe + generate panel */}
-          <div className="border-b bg-muted/30 px-4 sm:px-6 py-4 space-y-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Describe the programme</p>
-            <textarea
-              rows={3}
-              className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="E.g. Wedding Dress Bodybuilding — 8 weeks, 4 sessions/week, upper body hypertrophy focus, light legs, aesthetics-driven, glutes and shoulders priority, no barbell back squat…"
-              value={builderDescription}
-              onChange={e => setBuilderDescription(e.target.value)}
-            />
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">Start date</label>
-                <input
-                  type="date"
-                  className="rounded-lg border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  value={builderStartDate}
-                  onChange={e => setBuilderStartDate(e.target.value)}
-                />
-              </div>
-              <Button
-                size="sm"
-                className="gap-2 rounded-lg ml-auto"
-                onClick={generateBuilderProgramme}
-                disabled={builderGenerating || !builderDescription.trim() || !builderStartDate}
-              >
-                {builderGenerating
-                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</>
-                  : <><Sparkles className="w-3.5 h-3.5" /> {builderGenerated ? "Re-generate" : "Generate"}</>
-                }
-              </Button>
-            </div>
-            {builderGenerating && (
-              <p className="text-xs text-muted-foreground animate-pulse">Building your programme — this takes 15–30 seconds…</p>
-            )}
-          </div>
-
-          {/* Calendar view */}
-          {builderGenerated && sortedSessions.length > 0 && (
-            <div className="px-4 sm:px-6 py-5 space-y-6">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                  {sortedSessions.length} sessions across {weekKeys.length} week{weekKeys.length !== 1 ? "s" : ""}
-                </p>
-              </div>
-
-              {/* Week-by-week grid */}
-              <div className="space-y-6">
-                {weekKeys.map((weekMon, wi) => {
-                  const weekSessions = weekMap.get(weekMon) ?? [];
-                  return (
-                    <div key={weekMon} className="space-y-2">
-                      <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Week {wi + 1} <span className="font-normal normal-case">· w/c {formatDateShort(weekMon)}</span>
-                      </p>
-                      <div className="grid grid-cols-7 gap-1.5">
-                        {DAY_LABELS.map((dayLabel, dayIdx) => {
-                          const dayISO = addDaysISO(weekMon, dayIdx);
-                          const daySessions = weekSessions.filter(s => s.date === dayISO);
-                          return (
-                            <div key={dayIdx} className="min-h-[64px]">
-                              <p className="text-[10px] font-semibold text-muted-foreground text-center mb-1">{dayLabel}</p>
-                              <div className="space-y-1">
-                                {daySessions.map(s => (
-                                  <div key={s.id} className="rounded-lg bg-primary/8 border border-primary/15 px-2 py-1.5 group relative">
-                                    {editingSessionId === s.id ? (
-                                      <div className="flex items-center gap-1">
-                                        <input
-                                          autoFocus
-                                          className="text-[11px] font-medium bg-transparent border-b border-primary w-full focus:outline-none"
-                                          value={editingSessionName}
-                                          onChange={e => setEditingSessionName(e.target.value)}
-                                          onKeyDown={e => { if (e.key === "Enter") commitEditSession(); if (e.key === "Escape") setEditingSessionId(null); }}
-                                        />
-                                        <button onClick={commitEditSession} className="text-primary shrink-0">
-                                          <Check className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <>
-                                        <p className="text-[11px] font-semibold leading-tight pr-4 truncate">{s.name || "Session"}</p>
-                                        <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button onClick={() => startEditSession(s)} className="text-muted-foreground hover:text-primary">
-                                            <Pencil className="w-2.5 h-2.5" />
-                                          </button>
-                                          <button onClick={() => removeBuilderSession(s.id)} className="text-muted-foreground hover:text-destructive">
-                                            <X className="w-2.5 h-2.5" />
-                                          </button>
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-                                ))}
-                                {daySessions.length === 0 && (
-                                  <div className="h-12 rounded-lg border border-dashed border-border/40" />
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="pt-2 pb-6">
-                <Button
-                  className="w-full gap-2 rounded-xl"
-                  onClick={saveBuilderToLibrary}
-                  disabled={builderSaving || !builderName.trim()}
-                >
-                  {builderSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Save "{builderName || "Programme"}" to Library
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {!builderGenerated && !builderGenerating && (
-            <div className="flex flex-col items-center justify-center py-24 text-center text-muted-foreground px-8">
-              <Sparkles className="w-10 h-10 mb-4 opacity-20" />
-              <p className="text-sm font-medium">Describe your programme above</p>
-              <p className="text-xs mt-1 opacity-60 max-w-xs">The AI will generate a full multi-week session calendar. You can then rename or remove individual sessions before saving.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
       {/* Header */}
@@ -719,8 +501,9 @@ export default function Library() {
           </Button>
         )}
         {tab === "blocks" && (
-          <Button size="sm" variant="outline" className="gap-2 rounded-lg" onClick={() => setBuilderOpen(true)}>
-            <Sparkles className="w-4 h-4" /> Build Programme
+          <Button size="sm" variant="outline" className="gap-2 rounded-lg" onClick={openBuilder} disabled={creatingBuilder}>
+            {creatingBuilder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Build Programme
           </Button>
         )}
       </div>

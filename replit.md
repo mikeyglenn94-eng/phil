@@ -41,6 +41,11 @@ artifacts-monorepo/
 
 - `/` — **Calendar home** — multi-week Mon-Sun grid, programme selector in header, sessions shown per day. Click empty day → new session editor. Click session → edit session.
 - `/programmes/:programmeId/sessions/:sessionId` — **Session editor** — full-screen, voice input + exercise list (DnD reorder) + live preview panel. `sessionId=new` for new sessions (pass `?date=YYYY-MM-DD`).
+- `/clients/:clientId` — **Client area** — full calendar + scheduling command bar + AI programme generation for a specific client.
+- `/library` — **Library** — curated WODs, runs, and strength blocks/programme tabs. "Build Programme" button creates a draft and navigates to the builder.
+- `/library/builder/:programmeId` — **Library Builder** — full calendar builder for a master (library) programme. Same scheduling command bar as client area (voice + text, copy/expand, reschedule, delete). Collapsible AI Generate panel at top. Sessions auto-save to DB on every change. "Done" navigates back to Library. Clicking a session opens the session editor.
+- `/client` — **Client portal** — full client view (training + nutrition). Same feature set as coach view.
+- `/clients/:clientId/programmes/:programmeId` — **Coach client calendar** — per-programme week view for the coach.
 
 ## Key Features
 
