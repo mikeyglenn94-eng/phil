@@ -538,7 +538,7 @@ export default function LibraryBuilder() {
           </div>
 
           {trainingWeeks.map((week, wi) => (
-            <div key={wi} className={`calendar-grid grid-cols-7 border-b ${calView === "week" ? "min-h-[calc(100vh-380px)]" : ""}`}>
+            <div key={wi} className="calendar-grid grid-cols-7 border-b">
               {week.map((day, di) => {
                 const dateStr = format(day, "yyyy-MM-dd");
                 const daySessions = sessions.filter(s => { try { return isSameDay(parseISO(s.date), day); } catch { return false; } });
@@ -546,7 +546,7 @@ export default function LibraryBuilder() {
                 return (
                   <div
                     key={di}
-                    className={`calendar-cell ${di >= 5 ? "bg-muted/20" : ""}`}
+                    className={`calendar-cell cursor-pointer transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${calView === "week" ? "!min-h-[calc(100vh-380px)]" : ""}`}
                     onClick={() => { setQuickAddDate(dateStr); setQuickAddName(""); setQuickAddOpen(true); }}
                   >
                     {calView === "month" && (
