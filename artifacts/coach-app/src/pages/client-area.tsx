@@ -2802,17 +2802,26 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 parsedAiSession ? (
                   /* Preview step — choose where to save */
                   <div className="w-full space-y-3">
-                    <div className="rounded-xl border bg-primary/5 border-primary/20 px-4 py-3">
-                      <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider mb-1">Generated</p>
-                      <p className="text-sm font-bold">{parsedAiSession.name || "Session"}</p>
+                    <div className="rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider">AI generated</p>
+                        <p className="text-xs text-emerald-600 font-medium">✓ Ready to add</p>
+                      </div>
+                      <p className="text-sm font-bold leading-snug">{parsedAiSession.name || "Session"}</p>
                       {(parsedAiSession.exercises ?? []).length > 0 && (
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                          {(parsedAiSession.exercises as any[]).slice(0, 3).map((e: any) => e.name).join(" · ")}
-                          {(parsedAiSession.exercises as any[]).length > 3 ? " …" : ""}
-                        </p>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {(parsedAiSession.exercises as any[]).map((e: any, i: number) => (
+                            <div key={i} className="flex items-baseline justify-between gap-2">
+                              <span className="text-xs text-foreground/80 truncate">{e.name}</span>
+                              <span className="text-xs text-muted-foreground shrink-0 font-mono">
+                                {[e.sets && e.reps ? `${e.sets}×${e.reps}` : e.sets ? `${e.sets} sets` : null, e.weight, e.rpe ? `@RPE ${e.rpe}` : null].filter(Boolean).join(" ")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       )}
-                      {parsedAiSession.structure && (
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{parsedAiSession.structure}</p>
+                      {parsedAiSession.structure && !(parsedAiSession.exercises ?? []).length && (
+                        <p className="text-xs text-muted-foreground leading-relaxed">{parsedAiSession.structure}</p>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground text-center font-medium">Where would you like to save this?</p>
@@ -2982,17 +2991,26 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           </div>
           {parsedQuickSession ? (
             <div className="space-y-3 pt-1">
-              <div className="rounded-xl border bg-primary/5 border-primary/20 px-4 py-3">
-                <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider mb-1">Parsed session</p>
-                <p className="text-sm font-bold">{parsedQuickSession.name || "Session"}</p>
+              <div className="rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5">
+                <div className="flex items-center justify-between mb-0.5">
+                  <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider">AI generated</p>
+                  <p className="text-xs text-emerald-600 font-medium">✓ Ready to add</p>
+                </div>
+                <p className="text-sm font-bold leading-snug">{parsedQuickSession.name || "Session"}</p>
                 {(parsedQuickSession.exercises ?? []).length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {(parsedQuickSession.exercises as any[]).slice(0, 3).map((e: any) => e.name).join(" · ")}
-                    {(parsedQuickSession.exercises as any[]).length > 3 ? " …" : ""}
-                  </p>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {(parsedQuickSession.exercises as any[]).map((e: any, i: number) => (
+                      <div key={i} className="flex items-baseline justify-between gap-2">
+                        <span className="text-xs text-foreground/80 truncate">{e.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0 font-mono">
+                          {[e.sets && e.reps ? `${e.sets}×${e.reps}` : e.sets ? `${e.sets} sets` : null, e.weight, e.rpe ? `@RPE ${e.rpe}` : null].filter(Boolean).join(" ")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
-                {parsedQuickSession.structure && (
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{parsedQuickSession.structure}</p>
+                {parsedQuickSession.structure && !(parsedQuickSession.exercises ?? []).length && (
+                  <p className="text-xs text-muted-foreground leading-relaxed">{parsedQuickSession.structure}</p>
                 )}
               </div>
               <p className="text-xs text-muted-foreground text-center font-medium">Where would you like to save this?</p>
