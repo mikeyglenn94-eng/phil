@@ -304,6 +304,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [aiSessionGenerating, setAiSessionGenerating] = useState(false);
   const [parsedAiSession, setParsedAiSession] = useState<any | null>(null);
   const [savingAiSession, setSavingAiSession] = useState<"private" | "public" | "calendar" | null>(null);
+  const [parsedQuickSession, setParsedQuickSession] = useState<any | null>(null);
+  const [savingQuickSession, setSavingQuickSession] = useState<"private" | "public" | "calendar" | null>(null);
   const quickAddInterimRef = useRef("");
   const quickAddRecRef = useRef<any>(null);
 
@@ -349,6 +351,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (!quickAddDesc.trim()) return;
     setQuickAddParsing(true);
     setQuickAddError("");
+    setParsedQuickSession(null);
     try {
       const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
       const res = await fetch(endpoint, {
@@ -358,18 +361,47 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       });
       if (!res.ok) throw new Error();
       const session = await res.json();
-      const newSession = { ...session, id: `session-${Date.now()}`, date: quickAddDate };
-      await addSessionToClientCalendar(quickAddDate, newSession, () => {}, newSession.id, () => {
-        setQuickAddOpen(false);
-        setQuickAddName("");
-        setQuickAddDesc("");
-        setQuickAddType("strength");
-        navigateToWeekOf(quickAddDate);
-      }, session.name);
+      setParsedQuickSession(session);
     } catch {
       setQuickAddError(quickAddType === "wod" ? "Couldn't parse your WOD — please try again." : "Couldn't parse your session — please try again.");
     } finally {
       setQuickAddParsing(false);
+    }
+  }
+
+  async function confirmQuickAdd(dest: "calendar" | "private" | "public") {
+    if (!parsedQuickSession || !quickAddDate) return;
+    setSavingQuickSession(dest);
+    try {
+      const newSession = { ...parsedQuickSession, id: `session-${Date.now()}`, date: quickAddDate };
+
+      if (dest === "private" || dest === "public") {
+        await fetch("/api/session-library", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: parsedQuickSession.name || quickAddName || "Saved Session",
+            type: quickAddType,
+            sessionData: parsedQuickSession,
+            clientId: dest === "private" ? clientId : null,
+          }),
+        });
+      }
+
+      await addSessionToClientCalendar(quickAddDate, newSession, () => {}, newSession.id, () => {
+        setQuickAddOpen(false);
+        setParsedQuickSession(null);
+        setQuickAddName("");
+        setQuickAddDesc("");
+        setQuickAddType("strength");
+        navigateToWeekOf(quickAddDate);
+        if (dest === "private") toast({ title: "Saved to your sessions", description: "Find it in Build From Library." });
+        if (dest === "public") toast({ title: "Added to public library", description: "Visible to all coaches and clients." });
+      }, parsedQuickSession.name);
+    } catch {
+      setQuickAddError("Something went wrong — please try again.");
+    } finally {
+      setSavingQuickSession(null);
     }
   }
 
@@ -2863,7 +2895,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       </Dialog>
 
       {/* Quick-add single session dialog */}
-      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); } }}>
+      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); setParsedQuickSession(null); setSavingQuickSession(null); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Add Session — {quickAddDate ? format(parseISO(quickAddDate), "EEE d MMM") : ""}</DialogTitle>
@@ -2948,14 +2980,70 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </div>
             {quickAddError && <p className="text-sm text-red-500">{quickAddError}</p>}
           </div>
-          <div className="flex gap-2 pt-1">
-            <Button variant="outline" className="flex-1" onClick={() => setQuickAddOpen(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={() => void handleQuickAdd()} disabled={!quickAddDesc.trim() || quickAddParsing}>
-              {quickAddParsing
-                ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" />Parsing…</>
-                : quickAddType === "wod" ? "Add WOD" : quickAddType === "run" ? "Add Run" : "Add Session"}
-            </Button>
-          </div>
+          {parsedQuickSession ? (
+            <div className="space-y-3 pt-1">
+              <div className="rounded-xl border bg-primary/5 border-primary/20 px-4 py-3">
+                <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider mb-1">Parsed session</p>
+                <p className="text-sm font-bold">{parsedQuickSession.name || "Session"}</p>
+                {(parsedQuickSession.exercises ?? []).length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {(parsedQuickSession.exercises as any[]).slice(0, 3).map((e: any) => e.name).join(" · ")}
+                    {(parsedQuickSession.exercises as any[]).length > 3 ? " …" : ""}
+                  </p>
+                )}
+                {parsedQuickSession.structure && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{parsedQuickSession.structure}</p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground text-center font-medium">Where would you like to save this?</p>
+              <div className="grid grid-cols-1 gap-2">
+                <Button
+                  onClick={() => void confirmQuickAdd("private")}
+                  disabled={!!savingQuickSession}
+                  className="gap-2 justify-start w-full"
+                  variant="default"
+                >
+                  {savingQuickSession === "private" ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookMarked className="w-4 h-4" />}
+                  Save to My Sessions
+                  <span className="ml-auto text-xs opacity-70 font-normal">+ add to calendar</span>
+                </Button>
+                <Button
+                  onClick={() => void confirmQuickAdd("public")}
+                  disabled={!!savingQuickSession}
+                  variant="outline"
+                  className="gap-2 justify-start w-full border-violet-300 text-violet-700 hover:bg-violet-50"
+                >
+                  {savingQuickSession === "public" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                  Save to Public Library
+                  <span className="ml-auto text-xs opacity-70 font-normal">+ add to calendar</span>
+                </Button>
+                <Button
+                  onClick={() => void confirmQuickAdd("calendar")}
+                  disabled={!!savingQuickSession}
+                  variant="ghost"
+                  className="gap-2 justify-start w-full text-muted-foreground"
+                >
+                  {savingQuickSession === "calendar" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarPlus className="w-4 h-4" />}
+                  Just add to calendar
+                </Button>
+              </div>
+              <button
+                className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
+                onClick={() => setParsedQuickSession(null)}
+              >
+                ← Edit description
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setQuickAddOpen(false)}>Cancel</Button>
+              <Button className="flex-1" onClick={() => void handleQuickAdd()} disabled={!quickAddDesc.trim() || quickAddParsing}>
+                {quickAddParsing
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" />Parsing…</>
+                  : quickAddType === "wod" ? "Add WOD" : quickAddType === "run" ? "Add Run" : "Add Session"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
