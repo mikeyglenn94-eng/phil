@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2, Rows3, Minus, PlayCircle, Plus } from "lucide-react";
@@ -14,7 +15,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { Exercise } from "@workspace/api-client-react";
 
@@ -25,6 +25,8 @@ interface ExerciseCardProps {
 }
 
 export function ExerciseCard({ exercise, onChange, onDelete }: ExerciseCardProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const {
     attributes,
     listeners,
@@ -119,34 +121,15 @@ export function ExerciseCard({ exercise, onChange, onDelete }: ExerciseCardProps
               </a>
             )}
           </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:text-destructive shrink-0"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Remove exercise?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  "{exercise.name || "This exercise"}" will be removed from the session. This can't be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => onDelete(exercise.id)}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Remove
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setConfirmDelete(true)}
+            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+            title="Remove exercise"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Uniform fields — Sets always shown; Reps + RPE hidden in variable mode */}
@@ -283,6 +266,26 @@ export function ExerciseCard({ exercise, onChange, onDelete }: ExerciseCardProps
           />
         </div>
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove exercise?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{exercise.name || "This exercise"}" will be removed from the session. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => onDelete(exercise.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
