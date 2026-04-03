@@ -4,8 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
-  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy,
+  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   useGetProgramme,
   useUpdateProgramme,
@@ -119,6 +129,11 @@ export default function ClientSession() {
   const [swapListening, setSwapListening] = useState(false);
   const [swapInterim, setSwapInterim] = useState("");
   const swapRecRef = useRef<any>(null);
+
+  // Delete / set-count state
+  const [deletedExIds, setDeletedExIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteExId, setConfirmDeleteExId] = useState<string | null>(null);
+  const [setCountOverrides, setSetCountOverrides] = useState<Record<string, number>>({});
 
   // Add exercise state
   const [addedExercises, setAddedExercises] = useState<Exercise[]>([]);
@@ -622,6 +637,14 @@ export default function ClientSession() {
     autosaveTimerRef_cs.current = setTimeout(() => { handleSaveRef.current?.(true); }, 1500);
   };
 
+  const addSetToExercise = (exId: string, currentSets: number) => {
+    const newCount = currentSets + 1;
+    setSetCountOverrides(prev => ({ ...prev, [exId]: newCount }));
+    setLogs(prev => ({ ...prev, [exId]: [...(prev[exId] || []), { weight: null, reps: null }] }));
+    setSaved(false);
+    scheduleClientAutosave();
+  };
+
   const handleSave = async (silent = false) => {
     if (!programme || !session) return;
     setIsSaving(true);
@@ -632,19 +655,25 @@ export default function ClientSession() {
         if (isConditioningSession) {
           return { ...s, clientComment: sessionComment.trim() || null };
         }
-        const originalExercises = (s.exercises || []).map((ex: Exercise) => ({
-          ...ex,
-          name: nameOverrides[ex.id] || ex.name,
-          setWeights: (logs[ex.id] || []).map(l => l.weight),
-          setReps: (logs[ex.id] || []).map(l => l.reps),
-          clientComment: comments[ex.id] || null,
-        }));
-        const extraExercises = addedExercises.map(ex => ({
-          ...ex,
-          setWeights: (logs[ex.id] || []).map(l => l.weight),
-          setReps: (logs[ex.id] || []).map(l => l.reps),
-          clientComment: comments[ex.id] || null,
-        }));
+        const originalExercises = (s.exercises || [])
+          .filter((ex: Exercise) => !deletedExIds.has(ex.id))
+          .map((ex: Exercise) => ({
+            ...ex,
+            name: nameOverrides[ex.id] || ex.name,
+            sets: setCountOverrides[ex.id] ?? ex.sets,
+            setWeights: (logs[ex.id] || []).map(l => l.weight),
+            setReps: (logs[ex.id] || []).map(l => l.reps),
+            clientComment: comments[ex.id] || null,
+          }));
+        const extraExercises = addedExercises
+          .filter(ex => !deletedExIds.has(ex.id))
+          .map(ex => ({
+            ...ex,
+            sets: setCountOverrides[ex.id] ?? ex.sets,
+            setWeights: (logs[ex.id] || []).map(l => l.weight),
+            setReps: (logs[ex.id] || []).map(l => l.reps),
+            clientComment: comments[ex.id] || null,
+          }));
         return { ...s, exercises: [...originalExercises, ...extraExercises] };
       });
       await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
@@ -1159,8 +1188,8 @@ export default function ClientSession() {
       {/* Exercises (strength sessions — no source, strength_block, or strength_programme) */}
       {(!(session as any).source || (session as any).source === "strength_block" || (session as any).source === "strength_programme") && (
       <div className="max-w-lg mx-auto px-4 pt-4">
-        {(session.exercises || []).map((ex, exIdx) => {
-          const setsCount = ex.sets || 0;
+        {(session.exercises || []).filter(ex => !deletedExIds.has(ex.id)).map((ex, exIdx) => {
+          const setsCount = setCountOverrides[ex.id] ?? ex.sets ?? 0;
           const exLogs = logs[ex.id] || [];
           const isListening = listeningFor === ex.id;
           const isParsing = parsingFor === ex.id;
@@ -1216,6 +1245,17 @@ export default function ClientSession() {
                       {isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
                         isListening ? <><Square className="w-3 h-3 fill-current" /> Stop</> :
                         <><Mic className="w-3.5 h-3.5" /> Log</>}
+                    </Button>
+                  )}
+                  {!isSwapping && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="rounded-xl h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setConfirmDeleteExId(ex.id)}
+                      title="Remove exercise"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   )}
                 </div>
@@ -1315,7 +1355,16 @@ export default function ClientSession() {
                     <Loader2 className="w-4 h-4 animate-spin text-primary" />Parsing your log...
                   </div>
                 ) : setsCount === 0 ? (
+                  <>
                   <p className="text-xs text-muted-foreground italic text-center py-2">No sets defined</p>
+                  <button
+                    type="button"
+                    onClick={() => addSetToExercise(ex.id, setsCount)}
+                    className="mt-1 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-primary/30 text-primary/60 hover:text-primary hover:bg-primary/8 hover:border-primary/50 text-xs font-medium transition-colors"
+                  >
+                    <Plus className="w-3 h-3" /> Add set
+                  </button>
+                  </>
                 ) : (
                   <>
                     <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-2 mb-1">
@@ -1365,6 +1414,13 @@ export default function ClientSession() {
                         </div>
                       );
                     })}
+                    <button
+                      type="button"
+                      onClick={() => addSetToExercise(ex.id, setsCount)}
+                      className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-primary/30 text-primary/60 hover:text-primary hover:bg-primary/8 hover:border-primary/50 text-xs font-medium transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> Add set
+                    </button>
                   </>
                 )}
               </div>
@@ -1401,8 +1457,8 @@ export default function ClientSession() {
         )}
 
         {/* Added exercises (client-added) */}
-        {addedExercises.map((ex, exIdx) => {
-          const setsCount = ex.sets || 0;
+        {addedExercises.filter(ex => !deletedExIds.has(ex.id)).map((ex, exIdx) => {
+          const setsCount = setCountOverrides[ex.id] ?? ex.sets ?? 0;
           const exLogs = logs[ex.id] || [];
           const loggedCount = exLogs.filter(l => l.weight !== null || l.reps !== null).length;
           const allLogged = setsCount > 0 && loggedCount === setsCount;
@@ -1484,6 +1540,13 @@ export default function ClientSession() {
                         </div>
                       );
                     })}
+                    <button
+                      type="button"
+                      onClick={() => addSetToExercise(ex.id, setsCount)}
+                      className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-primary/30 text-primary/60 hover:text-primary hover:bg-primary/8 hover:border-primary/50 text-xs font-medium transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> Add set
+                    </button>
                   </>
                 )}
               </div>
@@ -1715,6 +1778,37 @@ export default function ClientSession() {
           </div>
         </div>
       )}
+
+      {/* Delete exercise confirmation */}
+      <AlertDialog open={!!confirmDeleteExId} onOpenChange={open => { if (!open) setConfirmDeleteExId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove exercise?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{confirmDeleteExId
+                ? (session.exercises?.find(e => e.id === confirmDeleteExId)?.name
+                  || addedExercises.find(e => e.id === confirmDeleteExId)?.name
+                  || "This exercise")
+                : "This exercise"}" will be removed from the session. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!confirmDeleteExId) return;
+                setDeletedExIds(prev => new Set([...prev, confirmDeleteExId]));
+                setConfirmDeleteExId(null);
+                setSaved(false);
+                scheduleClientAutosave();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
