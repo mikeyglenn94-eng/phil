@@ -157,7 +157,7 @@ export default function Builder({ isNew = false }: { isNew?: boolean }) {
         {/* Editor Header */}
         <div className="flex items-center justify-between p-4 border-b bg-background z-20">
           <div className="flex items-center gap-2 flex-1">
-            <Button variant="ghost" size="icon" onClick={() => setLocation('/')} className="mr-2">
+            <Button variant="ghost" size="icon" onClick={() => window.history.back()} className="mr-2">
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <Input 
