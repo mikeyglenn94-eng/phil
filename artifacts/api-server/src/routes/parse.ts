@@ -465,7 +465,7 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - Example (4-day, 3-week programme): dayNumbers would be 1,2,4,6, 8,9,11,13, 15,16,18,20
 - NEVER use weekday names (Mon/Tue/Thu/Sat) to compute dates — use dayNumber integers only.
 - Spread sessions sensibly — avoid consecutive days where possible.
-- Schedule for the number of weeks requested, with a hard maximum of 6 weeks.
+- Schedule for the number of weeks requested. **If no specific duration is mentioned, default to 6 weeks.** Hard maximum of 6 weeks. Never generate only 1 week of sessions unless the user explicitly asks for 1 week.
 - Generate varied sessions week to week — rotate movements, vary rep ranges, increase load (periodisation).
 - Each session must have a unique id: "session-gen-{unique 8 chars}"
 
@@ -749,8 +749,9 @@ Return ONLY valid JSON (no markdown):
 }
 
 IMPORTANT:
-- "blockLength": integer number of weeks in the programme (e.g. 4, 6)
-- "sessionsPerWeek": integer number of training days per week (e.g. 3, 4, 5)
+- "blockLength": integer number of weeks in the programme (e.g. 4, 6). **Default is 6 if the user didn't specify a duration.**
+- "sessionsPerWeek": integer number of training days per week (e.g. 3, 4, 5). Default is 4 if not specified.
+- You MUST generate sessions for ALL weeks — if blockLength is 6 and sessionsPerWeek is 4, the output must contain exactly 24 sessions.
 - Use "dayNumber" (integer), NOT "date" (string). The server computes the actual calendar date.`;
 
   const styleSection = strengthStyle === "variety" ? `
