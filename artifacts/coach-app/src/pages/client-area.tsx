@@ -184,14 +184,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   // Proactive client-side limit check from loaded programmes
   const monthlyLimitHit = useMemo(() => {
     if (!clientProgrammes) return false;
-    const start = new Date();
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    // Mirror server logic: if creditResetAt is set and is later than start of month, use it as cutoff
+    const creditResetAt = (client as any)?.creditResetAt ? new Date((client as any).creditResetAt) : null;
+    const cutoff = creditResetAt && creditResetAt > startOfMonth ? creditResetAt : startOfMonth;
     return clientProgrammes.filter(p => {
       const created = (p as any).createdAt ? new Date((p as any).createdAt) : null;
-      return created && created >= start;
+      return created && created >= cutoff;
     }).length >= 2;
-  }, [clientProgrammes]);
+  }, [clientProgrammes, client]);
 
   function isStrengthDescription(text: string) {
     const lower = text.toLowerCase();
