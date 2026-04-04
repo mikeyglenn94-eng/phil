@@ -454,11 +454,15 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - exercises: the run broken into segments as exercises (e.g. {name:"5km Easy Run", sets:1, reps:"5km", rest:null, ...})
 
 ## Scheduling rules
-- Start from the provided startDate
-- Week starts on Monday
+- Session 1 always falls on the provided startDate — no exceptions.
+- Use **relative day offsets** from startDate, not fixed weekday names. The day-name patterns below describe the GAP structure only:
+  - 3 sessions/week → gaps of +0, +2, +4 days (every other day)
+  - 4 sessions/week → gaps of +0, +1, +3, +5 days (e.g. Mon-Tue-Thu-Sat spacing)
+  - 5 sessions/week → gaps of +0, +1, +2, +3, +5 days
+  - 6 sessions/week → gaps of +0, +1, +2, +3, +4, +5 days
+- Apply these same gaps in week 2 onwards, anchored to startDate + 7 days, +14 days, etc.
+- NEVER skip forward to find a specific weekday name — always use the numeric gap from startDate.
 - Spread sessions sensibly — avoid consecutive days where possible (aim for rest days between hard sessions)
-- Typical pattern: Mon/Wed/Fri for 3x strength, add Tue or Thu for run/WOD
-- For 5+ sessions/week, days like Mon/Tue/Thu/Fri/Sat are reasonable
 - Schedule for the number of weeks requested, with a hard maximum of 6 weeks. If more than 6 weeks are requested, cap at 6 weeks.
 - Generate varied sessions week to week — don't repeat identical exercises every week. Rotate movements, vary rep ranges, increase load week to week (periodisation). Use different exercise variations across weeks.
 - Each session must have a unique id: "session-gen-{unique 8 chars}"
@@ -546,11 +550,11 @@ When programming running, reference and develop these specific time domains:
 
 When the programme is Olympic Weightlifting-focused, apply the following principles from coach Greg Everett:
 
-### Day selection by frequency
-- 3 days/week: Mon – Wed – Fri (every other day, all days can be similar intensity since each follows a rest day)
-- 4 days/week: Mon – Tue – Thu – Sat (back-to-back early in week when freshest; Tuesday is a lighter day after tough Monday)
-- 5 days/week: Mon – Tue – Wed – Thu – Sat (preferred) or Mon – Tue – Wed – Fri – Sat
-- 6 days/week: Mon – Tue – Wed – Thu – Fri – Sat (Sunday off)
+### Day selection by frequency (these describe GAP patterns — always apply as offsets from startDate, never anchor to weekday names)
+- 3 days/week: gaps +0, +2, +4 (every other day — Mon/Wed/Fri spacing)
+- 4 days/week: gaps +0, +1, +3, +5 (Mon/Tue/Thu/Sat spacing — back-to-back early, lighter on +1 day)
+- 5 days/week: gaps +0, +1, +2, +3, +5 (Mon/Tue/Wed/Thu/Sat preferred)
+- 6 days/week: gaps +0, +1, +2, +3, +4, +5 (one rest day per week)
 
 ### Big vs Little days (for 4+ days/week)
 Strictly alternate big and little days. Never schedule two big days back-to-back unless separated by a rest day.
