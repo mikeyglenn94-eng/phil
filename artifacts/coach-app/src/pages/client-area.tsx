@@ -2401,7 +2401,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     const t = e.changedTouches[0];
                                     const start = touchStartPosRef.current;
                                     const moved = start ? Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y) : 0;
-                                    if (moved < 10) toggleSelectSession(session.id);
+                                    if (moved < 10) {
+                                      e.preventDefault(); // suppress the synthetic onClick so toggleSelect only fires once
+                                      toggleSelectSession(session.id);
+                                    }
                                     return;
                                   }
                                   // Cancel any pending long-press
