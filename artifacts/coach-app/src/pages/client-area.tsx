@@ -523,6 +523,26 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setSessionClipboard(null);
   };
 
+  const deleteSelectedSessions = async () => {
+    if (selectedSessionIds.size === 0) return;
+    const byProg = new Map<number, Session[]>();
+    for (const prog of (clientProgrammes ?? [])) {
+      const sessions = prog.sessions as Session[];
+      if (sessions.some(s => selectedSessionIds.has(s.id))) {
+        byProg.set(prog.id, sessions.filter(s => !selectedSessionIds.has(s.id)));
+      }
+    }
+    await Promise.all(
+      Array.from(byProg.entries()).map(([progId, sessions]) =>
+        fetch(`/api/programmes/${progId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions }) })
+      )
+    );
+    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+    const n = selectedSessionIds.size;
+    toast({ title: `${n} session${n > 1 ? "s" : ""} deleted` });
+    exitSelectionMode();
+  };
+
   const copySelectedSessions = () => {
     const allSessions: Session[] = (clientProgrammes ?? []).flatMap(p => p.sessions as Session[]);
     const selected = allSessions.filter(s => selectedSessionIds.has(s.id));
@@ -2497,16 +2517,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     )}
                                   </>
                                 )}
-                                {!selectionMode && (
-                                  <button
-                                    onTouchStart={e => e.stopPropagation()}
-                                    onClick={e => { e.stopPropagation(); deleteSession(session.id, prog?.id); }}
-                                    className={`absolute top-0.5 right-0.5 rounded p-0.5 opacity-30 group-hover:opacity-100 active:opacity-100 transition-opacity cursor-pointer ${isTouchPicked ? "text-primary-foreground hover:bg-white/20" : "text-primary hover:bg-primary/30"}`}
-                                    title="Delete session"
-                                  >
-                                    <X className="w-2.5 h-2.5" />
-                                  </button>
-                                )}
                               </div>
                             );
                           })}
@@ -2584,6 +2594,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 >
                   <Copy className="w-3.5 h-3.5" />
                   Copy
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-3 text-xs rounded-lg gap-1.5 border-red-300 text-red-600 hover:bg-red-50"
+                  disabled={selectedSessionIds.size === 0}
+                  onClick={() => void deleteSelectedSessions()}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
                 </Button>
                 <Button
                   size="sm"
