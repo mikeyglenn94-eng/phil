@@ -1438,18 +1438,54 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             exercises: (s.exercises ?? []).map((ex: any, ei: number) => normalizeExercise(ex, ei, si)),
           }));
         } else {
-          // strength_programme: shift existing sessions to start on chosen date
+          // strength_programme: re-date sessions from the chosen start date
           const raw = result.raw ?? {};
           title = raw.title ?? result.name;
-          const rawSessions: any[] = (raw.sessions ?? []).slice().sort((a: any, b: any) => (a.date ?? "").localeCompare(b.date ?? ""));
-          const firstDate = rawSessions.find((s: any) => s.date)?.date;
-          const offsetDays = firstDate ? Math.round((new Date(date).getTime() - new Date(firstDate).getTime()) / 86400000) : 0;
-          sessions = rawSessions.map((s: any, si: number) => ({
-            ...s,
-            id: `session-${Date.now()}-${si}`,
-            date: s.date ? new Date(new Date(s.date).getTime() + offsetDays * 86400000).toISOString().slice(0, 10) : s.date,
-            exercises: (s.exercises ?? []).map((ex: any, ei: number) => normalizeExercise(ex, ei, si)),
-          }));
+          const rawSessions: any[] = (raw.sessions ?? []).slice().sort((a: any, b: any) => {
+            if (a.dayNumber != null && b.dayNumber != null) return a.dayNumber - b.dayNumber;
+            return (a.date ?? "").localeCompare(b.date ?? "");
+          });
+          const hasDayNumbers = rawSessions.length > 0 && rawSessions.every((s: any) => s.dayNumber != null);
+
+          if (hasDayNumbers) {
+            // New-style: use stored dayNumber directly
+            sessions = rawSessions.map((s: any, si: number) => ({
+              ...s,
+              id: `session-${Date.now()}-${si}`,
+              date: format(addDays(parseISO(date), s.dayNumber - 1), "yyyy-MM-dd"),
+              exercises: (s.exercises ?? []).map((ex: any, ei: number) => normalizeExercise(ex, ei, si)),
+            }));
+          } else {
+            // Old-style: no dayNumber stored — infer correct weekly gap pattern from session count
+            const totalSessions = rawSessions.length;
+            const firstDateStr = rawSessions.find((s: any) => s.date)?.date;
+            const lastDateStr = [...rawSessions].reverse().find((s: any) => s.date)?.date;
+            const totalWeeks = firstDateStr && lastDateStr
+              ? Math.max(1, Math.round((new Date(lastDateStr).getTime() - new Date(firstDateStr).getTime()) / (7 * 86400000)) + 1)
+              : Math.ceil(totalSessions / 4);
+            const sessionsPerWeek = Math.max(1, Math.round(totalSessions / totalWeeks));
+            // Gap offsets within each 7-day week by frequency
+            const gapPatterns: Record<number, number[]> = {
+              2: [0, 3],
+              3: [0, 2, 4],
+              4: [0, 1, 3, 5],
+              5: [0, 1, 2, 3, 5],
+              6: [0, 1, 2, 3, 4, 5],
+            };
+            const gaps = gapPatterns[sessionsPerWeek] ?? gapPatterns[4];
+            sessions = rawSessions.map((s: any, si: number) => {
+              const weekIdx = Math.floor(si / sessionsPerWeek);
+              const dayIdx = si % sessionsPerWeek;
+              const dayOffset = weekIdx * 7 + (gaps[dayIdx] ?? dayIdx);
+              return {
+                ...s,
+                id: `session-${Date.now()}-${si}`,
+                dayNumber: dayOffset + 1,
+                date: format(addDays(parseISO(date), dayOffset), "yyyy-MM-dd"),
+                exercises: (s.exercises ?? []).map((ex: any, ei: number) => normalizeExercise(ex, ei, si)),
+              };
+            });
+          }
         }
 
         const res = await fetch("/api/programmes", {
