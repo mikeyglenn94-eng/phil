@@ -1106,74 +1106,93 @@ router.post("/parse-wod-session", async (req, res): Promise<void> => {
   const { description, name } = req.body as { description?: string; name?: string };
   if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
 
-  const systemPrompt = `You are a conditioning coach assistant. Parse the user's WOD/conditioning description into structured JSON.
+  const systemPrompt = `You are an expert conditioning coach. Design TWO different WOD workout options from the user's movements and constraints.
 
 Rules:
-- Identify the workout FORMAT: "amrap", "emom", "for_time", "interval", "ladder", or "other"
-- Extract DURATION in minutes (integer). If not stated, infer from context (amrap usually has a stated duration; default to 20 if unclear)
-- Extract each movement/exercise as a BLOCK with: movement (lowercase name), amount (number), unit ("reps","m","km","cal","seconds","minutes")
-- For distances: convert miles to km, keep metres as "m"
-- Generate a concise workout NAME if not provided (e.g. "30 Min AMRAP", "EMOM 12", "Mixed Conditioning")
-- Write a human-readable STRUCTURE string (e.g. "AMRAP 30: 15 press ups, 1 km bike erg, 500 m run")
+- Design SPECIFIC workouts — decide the reps, distances, and timing yourself based on the movements and duration given
+- Option 1: AMRAP format (as many rounds as possible in the stated time, or 20 min if unspecified)
+- Option 2: EMOM format (every minute on the minute — design appropriate minute structure and total duration)
+- For each option write a concise human-readable STRUCTURE string that a coach would write on a whiteboard (e.g. "AMRAP 20: 15 Wall Balls (9kg), 200m Run, 10 Burpees")
+- Choose sensible rep/distance counts that fit within the time domain — AMRAP rounds should take 60-90s per round; EMOM minutes should be achievable in ~35-45s
+- Each option gets a list of BLOCKS (movements with amounts) for the exercise list
 - Return ONLY valid JSON, no markdown fences
 
 Response format:
 {
-  "format": "amrap",
-  "duration": 30,
-  "name": "Mixed AMRAP",
-  "structure": "AMRAP 30: 15 press ups, 1 km bike erg, 500 m run",
-  "blocks": [
-    { "movement": "press ups", "amount": 15, "unit": "reps" },
-    { "movement": "bike erg", "amount": 1, "unit": "km" },
-    { "movement": "running", "amount": 500, "unit": "m" }
+  "options": [
+    {
+      "format": "amrap",
+      "name": "AMRAP 20",
+      "structure": "AMRAP 20: 15 Wall Balls (9kg), 200m Run, 10 Burpees",
+      "blocks": [
+        { "movement": "Wall Balls", "amount": 15, "unit": "reps" },
+        { "movement": "Run", "amount": 200, "unit": "m" },
+        { "movement": "Burpees", "amount": 10, "unit": "reps" }
+      ]
+    },
+    {
+      "format": "emom",
+      "name": "EMOM 18",
+      "structure": "EMOM 18 (3-movement rotation): Min 1: 12 Wall Balls / Min 2: 200m Run / Min 3: 8 Burpees",
+      "blocks": [
+        { "movement": "Wall Balls", "amount": 12, "unit": "reps" },
+        { "movement": "Run", "amount": 200, "unit": "m" },
+        { "movement": "Burpees", "amount": 8, "unit": "reps" }
+      ]
+    }
   ]
 }`;
 
-  const FORMAT_LABELS: Record<string, string> = {
-    amrap: "AMRAP", emom: "EMOM", for_time: "For Time",
-    interval: "Intervals", ladder: "Ladder", other: "Conditioning",
-  };
-
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `WOD name (optional): ${name?.trim() || "(auto-generate)"}\n\nDescription:\n${description.trim()}` },
+        { role: "user", content: `Session name (optional): ${name?.trim() || "(auto-generate)"}\n\nDescription:\n${description.trim()}` },
       ],
       response_format: { type: "json_object" },
     });
 
     const parsed = JSON.parse(completion.choices[0].message.content || "{}");
-    const format: string = parsed.format ?? "other";
-    const formatLabel = FORMAT_LABELS[format] ?? "Conditioning";
-    const duration: number = typeof parsed.duration === "number" ? parsed.duration : 20;
-    const wodName = name?.trim() || parsed.name || `${formatLabel} ${duration}`;
-    const structure: string = parsed.structure ?? description.trim();
-    const blocks: { movement: string; amount: number; unit: string }[] = parsed.blocks ?? [];
+    const options: any[] = parsed.options ?? [];
 
     const now = Date.now();
-    const exercises = blocks.map((block, idx) => ({
-      id: `ex-${now}-${idx}`,
-      name: block.movement.charAt(0).toUpperCase() + block.movement.slice(1),
-      sets: null,
-      reps: null,
-      rpe: null,
-      rest: null,
-      tempo: null,
-      notes: `${block.amount} ${block.unit}`,
-      rawText: `${block.amount} ${block.unit} ${block.movement}`,
-      weekProgression: [],
-      clientComment: null,
-      perSetReps: null,
-      perSetRpe: null,
-      setWeights: null,
-      setReps: null,
-      weight: null,
-    }));
+    const sessionOptions = options.map((opt: any, oi: number) => {
+      const blocks: { movement: string; amount: number; unit: string }[] = opt.blocks ?? [];
+      const exercises = blocks.map((block, idx) => ({
+        id: `ex-${now}-${oi}-${idx}`,
+        name: block.movement.charAt(0).toUpperCase() + block.movement.slice(1),
+        sets: null,
+        reps: null,
+        rpe: null,
+        rest: null,
+        tempo: null,
+        notes: `${block.amount} ${block.unit}`,
+        rawText: `${block.amount} ${block.unit} ${block.movement}`,
+        weekProgression: [],
+        clientComment: null,
+        perSetReps: null,
+        perSetRpe: null,
+        setWeights: null,
+        setReps: null,
+        weight: null,
+      }));
+      return {
+        name: name?.trim() || opt.name || "WOD",
+        source: "wod_brain",
+        structure: opt.structure ?? description.trim(),
+        format: opt.format ?? "other",
+        exercises,
+      };
+    });
 
-    res.json({ name: wodName, source: "wod_brain", structure, exercises });
+    // Fallback: if AI returned a single option or none, return it in legacy shape
+    if (sessionOptions.length === 0) {
+      res.json({ name: name?.trim() || "WOD", source: "wod_brain", structure: description.trim(), exercises: [] });
+      return;
+    }
+
+    res.json({ options: sessionOptions });
   } catch (err) {
     req.log.error({ err }, "Error parsing WOD session");
     res.status(500).json({ error: "Failed to parse WOD session" });

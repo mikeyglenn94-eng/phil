@@ -311,6 +311,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [parsedAiSession, setParsedAiSession] = useState<any | null>(null);
   const [savingAiSession, setSavingAiSession] = useState<"private" | "public" | "calendar" | null>(null);
   const [parsedQuickSession, setParsedQuickSession] = useState<any | null>(null);
+  const [quickAddWodOptions, setQuickAddWodOptions] = useState<any[] | null>(null);
   const [savingQuickSession, setSavingQuickSession] = useState<"private" | "public" | "calendar" | null>(null);
   const quickAddInterimRef = useRef("");
   const quickAddRecRef = useRef<any>(null);
@@ -358,6 +359,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setQuickAddParsing(true);
     setQuickAddError("");
     setParsedQuickSession(null);
+    setQuickAddWodOptions(null);
     try {
       const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
       const res = await fetch(endpoint, {
@@ -366,10 +368,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
       });
       if (!res.ok) throw new Error();
-      const session = await res.json();
-      setParsedQuickSession(session);
+      const data = await res.json();
+      // WOD endpoint returns { options: [...] } — show choice cards
+      if (data.options && Array.isArray(data.options) && data.options.length > 1) {
+        setQuickAddWodOptions(data.options);
+      } else {
+        setParsedQuickSession(data.options?.[0] ?? data);
+      }
     } catch {
-      setQuickAddError(quickAddType === "wod" ? "Couldn't parse your WOD — please try again." : "Couldn't parse your session — please try again.");
+      setQuickAddError(quickAddType === "wod" ? "Couldn't design your WOD — please try again." : "Couldn't parse your session — please try again.");
     } finally {
       setQuickAddParsing(false);
     }
@@ -417,6 +424,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setAiSessionGenerating(true);
     setQuickAddError("");
     setParsedAiSession(null);
+    setQuickAddWodOptions(null);
     try {
       const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
       const res = await fetch(endpoint, {
@@ -425,10 +433,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
       });
       if (!res.ok) throw new Error();
-      const session = await res.json();
-      setParsedAiSession(session);
+      const data = await res.json();
+      // WOD endpoint returns { options: [...] } — show choice cards
+      if (data.options && Array.isArray(data.options) && data.options.length > 1) {
+        setQuickAddWodOptions(data.options);
+      } else {
+        setParsedAiSession(data.options?.[0] ?? data);
+      }
     } catch {
-      setQuickAddError(quickAddType === "wod" ? "Couldn't parse your WOD — please try again." : "Couldn't parse your session — please try again.");
+      setQuickAddError(quickAddType === "wod" ? "Couldn't design your WOD — please try again." : "Couldn't parse your session — please try again.");
     } finally {
       setAiSessionGenerating(false);
     }
@@ -2688,7 +2701,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       )}
 
       {/* Build Through AI Dialog */}
-      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setSavingAiSession(null); } }}>
+      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setQuickAddWodOptions(null); setSavingAiSession(null); } }}>
         <DialogContent className="max-w-md max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2943,7 +2956,36 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           {!describeGenerating && (
             <DialogFooter className="shrink-0 pt-3 border-t">
               {aiMode === "session" ? (
-                parsedAiSession ? (
+                quickAddWodOptions && !parsedAiSession ? (
+                  /* WOD option picker */
+                  <div className="w-full space-y-3">
+                    <p className="text-xs text-muted-foreground text-center font-medium">Pick a workout option</p>
+                    {quickAddWodOptions.map((opt: any, i: number) => (
+                      <button
+                        key={i}
+                        className="w-full text-left rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5 hover:border-primary/50 hover:bg-primary/10 transition-colors"
+                        onClick={() => { setParsedAiSession(opt); setQuickAddWodOptions(null); }}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider">
+                            {opt.format === "emom" ? "EMOM" : opt.format === "amrap" ? "AMRAP" : opt.format === "for_time" ? "For Time" : "WOD"}
+                          </p>
+                          <p className="text-xs text-primary font-medium">Tap to select →</p>
+                        </div>
+                        <p className="text-sm font-bold leading-snug">{opt.name || "WOD"}</p>
+                        {opt.structure && (
+                          <p className="text-xs text-muted-foreground leading-relaxed">{opt.structure}</p>
+                        )}
+                      </button>
+                    ))}
+                    <button
+                      className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
+                      onClick={() => setQuickAddWodOptions(null)}
+                    >
+                      ← Edit description
+                    </button>
+                  </div>
+                ) : parsedAiSession ? (
                   /* Preview step — choose where to save */
                   <div className="w-full space-y-3">
                     <div className="rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5">
@@ -3048,7 +3090,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       </Dialog>
 
       {/* Quick-add single session dialog */}
-      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); setParsedQuickSession(null); setSavingQuickSession(null); } }}>
+      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); setParsedQuickSession(null); setQuickAddWodOptions(null); setSavingQuickSession(null); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Add Session — {quickAddDate ? format(parseISO(quickAddDate), "EEE d MMM") : ""}</DialogTitle>
@@ -3133,7 +3175,35 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </div>
             {quickAddError && <p className="text-sm text-red-500">{quickAddError}</p>}
           </div>
-          {parsedQuickSession ? (
+          {quickAddWodOptions && !parsedQuickSession ? (
+            <div className="space-y-3 pt-1">
+              <p className="text-xs text-muted-foreground text-center font-medium">Pick a workout option</p>
+              {quickAddWodOptions.map((opt, i) => (
+                <button
+                  key={i}
+                  className="w-full text-left rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5 hover:border-primary/50 hover:bg-primary/10 transition-colors"
+                  onClick={() => { setParsedQuickSession(opt); setQuickAddWodOptions(null); }}
+                >
+                  <div className="flex items-center justify-between mb-0.5">
+                    <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider">
+                      {opt.format === "emom" ? "EMOM" : opt.format === "amrap" ? "AMRAP" : opt.format === "for_time" ? "For Time" : "WOD"}
+                    </p>
+                    <p className="text-xs text-primary font-medium">Tap to select →</p>
+                  </div>
+                  <p className="text-sm font-bold leading-snug">{opt.name || "WOD"}</p>
+                  {opt.structure && (
+                    <p className="text-xs text-muted-foreground leading-relaxed">{opt.structure}</p>
+                  )}
+                </button>
+              ))}
+              <button
+                className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
+                onClick={() => setQuickAddWodOptions(null)}
+              >
+                ← Edit description
+              </button>
+            </div>
+          ) : parsedQuickSession ? (
             <div className="space-y-3 pt-1">
               <div className="rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5">
                 <div className="flex items-center justify-between mb-0.5">
