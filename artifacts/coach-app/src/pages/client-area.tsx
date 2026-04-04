@@ -505,10 +505,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   }
 
   // ── Drag-and-drop ──
-  const draggedItemRef = useRef<{ sessionId: string; programmeId: number } | null>(null);
+  const draggedItemRef = useRef<{ sessionId: string; programmeId: number; isGroupDrag?: boolean; originalDate?: string } | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   // Touch DnD
-  const touchDragRef = useRef<{ sessionId: string; programmeId: number } | null>(null);
+  const touchDragRef = useRef<{ sessionId: string; programmeId: number; isGroupDrag?: boolean; originalDate?: string } | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const [touchDragOverDate, setTouchDragOverDate] = useState<string | null>(null);
   const [touchDraggingActive, setTouchDraggingActive] = useState(false);
@@ -757,6 +757,36 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     });
     await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
     toast({ title: "Session moved" });
+  };
+
+  const moveGroupSessions = async (originalDate: string, targetDate: string) => {
+    const delta = differenceInDays(parseISO(targetDate), parseISO(originalDate));
+    if (delta === 0) return;
+    pushHistory();
+    const byProg = new Map<number, Session[]>();
+    for (const prog of (clientProgrammes ?? [])) {
+      const sessions = prog.sessions as Session[];
+      if (sessions.some(s => selectedSessionIds.has(s.id))) {
+        byProg.set(prog.id, sessions.map(s =>
+          selectedSessionIds.has(s.id)
+            ? { ...s, date: format(addDays(parseISO(s.date), delta), "yyyy-MM-dd") }
+            : s
+        ));
+      }
+    }
+    try {
+      await Promise.all(Array.from(byProg.entries()).map(([progId, sessions]) =>
+        fetch(`/api/programmes/${progId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessions }),
+        })
+      ));
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({ title: `${selectedSessionIds.size} sessions moved` });
+    } catch {
+      toast({ title: "Failed to move sessions", variant: "destructive" });
+    }
   };
 
   const deleteSession = async (sessionId: string, programmeId: number | undefined) => {
@@ -2510,7 +2540,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           e.preventDefault();
                           setDragOverDate(null);
                           const item = draggedItemRef.current;
-                          if (item) { moveSession(item.sessionId, item.programmeId, dateStr); draggedItemRef.current = null; }
+                          if (item) {
+                            if (item.isGroupDrag && item.originalDate) {
+                              void moveGroupSessions(item.originalDate, dateStr);
+                            } else {
+                              moveSession(item.sessionId, item.programmeId, dateStr);
+                            }
+                            draggedItemRef.current = null;
+                          }
                         }}
                       >
                         {calendarView === "month" ? (
@@ -2538,20 +2575,31 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             return (
                               <div
                                 key={session.id}
-                                draggable={!selectionMode}
+                                draggable={!selectionMode || isSelected}
                                 onDragStart={() => {
-                                  if (selectionMode) return;
-                                  if (prog) draggedItemRef.current = { sessionId: session.id, programmeId: prog.id };
+                                  if (selectionMode && isSelected) {
+                                    draggedItemRef.current = { sessionId: session.id, programmeId: prog?.id ?? 0, isGroupDrag: true, originalDate: dateStr };
+                                  } else if (!selectionMode && prog) {
+                                    draggedItemRef.current = { sessionId: session.id, programmeId: prog.id };
+                                  }
                                 }}
                                 onDragEnd={() => { draggedItemRef.current = null; setDragOverDate(null); }}
                                 onTouchStart={e => {
-                                  if (selectionMode) return;
                                   const touch = e.touches[0];
                                   touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
-                                  // Clear any stale long-press timer
                                   if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-                                  // Start long-press: after 450ms activate drag mode
-                                  if (prog) {
+                                  if (selectionMode && isSelected && prog) {
+                                    // Long-press on selected session = group drag
+                                    longPressTimerRef.current = setTimeout(() => {
+                                      touchDragRef.current = { sessionId: session.id, programmeId: prog.id, isGroupDrag: true, originalDate: dateStr };
+                                      isDragActiveRef.current = true;
+                                      setTouchDraggingActive(true);
+                                      const count = selectedSessionIds.size;
+                                      setTouchGhostLabel(count > 1 ? `${count} sessions` : session.name || "Session");
+                                      setTouchGhostPos({ x: touch.clientX, y: touch.clientY });
+                                      if (navigator.vibrate) navigator.vibrate(50);
+                                    }, 450);
+                                  } else if (!selectionMode && prog) {
                                     longPressTimerRef.current = setTimeout(() => {
                                       touchDragRef.current = { sessionId: session.id, programmeId: prog.id };
                                       isDragActiveRef.current = true;
@@ -2563,55 +2611,59 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   }
                                 }}
                                 onTouchMove={e => {
-                                  if (selectionMode) return;
+                                  // Block scroll if we're in an active drag
+                                  if (!isDragActiveRef.current && selectionMode && !isSelected) return;
                                   const t = e.touches[0];
                                   const start = touchStartPosRef.current;
                                   if (!start) return;
                                   const moved = Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y);
                                   if (!isDragActiveRef.current) {
-                                    // Finger moved significantly before long-press fired — cancel it (user is scrolling)
                                     if (moved > 10 && longPressTimerRef.current) {
                                       clearTimeout(longPressTimerRef.current);
                                       longPressTimerRef.current = null;
                                     }
                                     return;
                                   }
-                                  // Drag is active — update ghost and target cell
                                   setTouchGhostPos({ x: t.clientX, y: t.clientY });
                                   const el = document.elementFromPoint(t.clientX, t.clientY);
                                   const cell = el?.closest("[data-date]") as HTMLElement | null;
                                   setTouchDragOverDate(cell?.dataset.date ?? null);
                                 }}
                                 onTouchEnd={e => {
-                                  if (selectionMode) {
-                                    // In selection mode — short tap toggles
-                                    const t = e.changedTouches[0];
-                                    const start = touchStartPosRef.current;
-                                    const moved = start ? Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y) : 0;
-                                    if (moved < 10) {
-                                      e.preventDefault(); // suppress the synthetic onClick so toggleSelect only fires once
-                                      toggleSelectSession(session.id);
-                                    }
-                                    return;
-                                  }
-                                  // Cancel any pending long-press
                                   if (longPressTimerRef.current) {
                                     clearTimeout(longPressTimerRef.current);
                                     longPressTimerRef.current = null;
                                   }
                                   if (isDragActiveRef.current) {
-                                    // Drop the session on the cell under the finger
+                                    // Drop on target cell
                                     const t = e.changedTouches[0];
                                     const el = document.elementFromPoint(t.clientX, t.clientY);
                                     const cell = el?.closest("[data-date]") as HTMLElement | null;
                                     const dropDate = cell?.dataset.date;
                                     const item = touchDragRef.current;
-                                    if (dropDate && item) moveSession(item.sessionId, item.programmeId, dropDate);
+                                    if (dropDate && item) {
+                                      if (item.isGroupDrag && item.originalDate) {
+                                        void moveGroupSessions(item.originalDate, dropDate);
+                                      } else {
+                                        moveSession(item.sessionId, item.programmeId, dropDate);
+                                      }
+                                    }
                                     touchDragRef.current = null;
                                     isDragActiveRef.current = false;
                                     setTouchDraggingActive(false);
                                     setTouchGhostPos(null);
                                     setTouchDragOverDate(null);
+                                    return;
+                                  }
+                                  if (selectionMode) {
+                                    // Short tap toggles selection
+                                    const t = e.changedTouches[0];
+                                    const start = touchStartPosRef.current;
+                                    const moved = start ? Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y) : 0;
+                                    if (moved < 10) {
+                                      e.preventDefault();
+                                      toggleSelectSession(session.id);
+                                    }
                                     return;
                                   }
                                   // Short tap — open session
