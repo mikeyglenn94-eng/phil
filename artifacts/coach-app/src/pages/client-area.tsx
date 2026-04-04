@@ -2575,32 +2575,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 px-3 text-xs rounded-lg gap-1.5"
-                  disabled={selectedSessionIds.size === 0}
-                  onClick={() => shiftSelectedSessions(-1)}
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  1 week
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
                   className="h-8 px-3 text-xs rounded-lg gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                   disabled={selectedSessionIds.size === 0}
                   onClick={copySelectedSessions}
                 >
                   <Copy className="w-3.5 h-3.5" />
                   Copy
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 px-3 text-xs rounded-lg gap-1.5"
-                  disabled={selectedSessionIds.size === 0}
-                  onClick={() => shiftSelectedSessions(1)}
-                >
-                  1 week
-                  <ChevronRight className="w-3.5 h-3.5" />
                 </Button>
                 <Button
                   size="sm"
