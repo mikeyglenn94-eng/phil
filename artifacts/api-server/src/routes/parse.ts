@@ -783,7 +783,7 @@ Use clean, consistent straight sets throughout. Every exercise should have a def
       max_completion_tokens: chosenModel === "gpt-4o" ? 16384 : 32768,
       messages: [
         { role: "system", content: systemPrompt + styleSection },
-        { role: "user", content: `Start date: ${startDate}\n\nDescription: "${description}"` },
+        { role: "user", content: `Description: "${description}"` },
       ],
     });
 
@@ -799,11 +799,15 @@ Use clean, consistent straight sets throughout. Every exercise should have a def
 
     const start = parseISO(startDate);
     const sessions = (parsed.sessions ?? []).map((s: any) => {
-      // Convert dayNumber → ISO date. dayNumber 1 = startDate, dayNumber 2 = startDate+1, etc.
-      const dayNum = typeof s.dayNumber === "number" ? s.dayNumber : null;
+      // Prefer dayNumber; if AI ignored the instruction and returned a date, derive dayNumber from it.
+      let dayNum: number | null = typeof s.dayNumber === "number" ? s.dayNumber : null;
+      if (dayNum == null && s.date) {
+        const diff = Math.round((parseISO(s.date).getTime() - start.getTime()) / 86400000);
+        dayNum = diff + 1; // convert 0-indexed diff back to 1-indexed dayNumber
+      }
       const sessionDate = dayNum != null
         ? format(addDays(start, dayNum - 1), "yyyy-MM-dd")
-        : (s.date ?? startDate); // fallback for any legacy response that still includes a date
+        : startDate;
       const base: any = {
         ...s,
         id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
