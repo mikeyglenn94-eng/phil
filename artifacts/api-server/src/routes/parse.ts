@@ -5,6 +5,7 @@ import { db, programmesTable, clientsTable } from "@workspace/db";
 import type { Exercise } from "@workspace/db";
 import { eq, gte, and, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { addDays, parseISO, format } from "date-fns";
 
 // ── Model routing ──────────────────────────────────────────────────────────
 // Use gpt-5.2 for complex multi-constraint programmes; gpt-4o for simple ones.
@@ -453,18 +454,19 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - "color": "#16a34a"
 - exercises: the run broken into segments as exercises (e.g. {name:"5km Easy Run", sets:1, reps:"5km", rest:null, ...})
 
-## Scheduling rules
-- Session 1 always falls on the provided startDate — no exceptions.
-- Use **relative day offsets** from startDate, not fixed weekday names. The day-name patterns below describe the GAP structure only:
-  - 3 sessions/week → gaps of +0, +2, +4 days (every other day)
-  - 4 sessions/week → gaps of +0, +1, +3, +5 days (e.g. Mon-Tue-Thu-Sat spacing)
-  - 5 sessions/week → gaps of +0, +1, +2, +3, +5 days
-  - 6 sessions/week → gaps of +0, +1, +2, +3, +4, +5 days
-- Apply these same gaps in week 2 onwards, anchored to startDate + 7 days, +14 days, etc.
-- NEVER skip forward to find a specific weekday name — always use the numeric gap from startDate.
-- Spread sessions sensibly — avoid consecutive days where possible (aim for rest days between hard sessions)
-- Schedule for the number of weeks requested, with a hard maximum of 6 weeks. If more than 6 weeks are requested, cap at 6 weeks.
-- Generate varied sessions week to week — don't repeat identical exercises every week. Rotate movements, vary rep ranges, increase load week to week (periodisation). Use different exercise variations across weeks.
+## Scheduling rules — use dayNumber, NOT dates
+- Sessions are positioned by **dayNumber** (integer), NOT by calendar date. Day 1 = the first training day of the programme (maps to startDate). Do NOT output a "date" field.
+- dayNumber is a simple day counter: Day 1, Day 2, Day 3... across the full programme. Rest days are simply gaps in the sequence.
+- Use these dayNumber patterns (offsets within each 7-day week):
+  - 3 sessions/week → week N sessions at days (N-1)×7+1, (N-1)×7+3, (N-1)×7+5
+  - 4 sessions/week → week N sessions at days (N-1)×7+1, (N-1)×7+2, (N-1)×7+4, (N-1)×7+6
+  - 5 sessions/week → week N sessions at days (N-1)×7+1, (N-1)×7+2, (N-1)×7+3, (N-1)×7+4, (N-1)×7+6
+  - 6 sessions/week → week N sessions at days (N-1)×7+1 through (N-1)×7+6
+- Example (4-day, 3-week programme): dayNumbers would be 1,2,4,6, 8,9,11,13, 15,16,18,20
+- NEVER use weekday names (Mon/Tue/Thu/Sat) to compute dates — use dayNumber integers only.
+- Spread sessions sensibly — avoid consecutive days where possible.
+- Schedule for the number of weeks requested, with a hard maximum of 6 weeks.
+- Generate varied sessions week to week — rotate movements, vary rep ranges, increase load (periodisation).
 - Each session must have a unique id: "session-gen-{unique 8 chars}"
 
 ## Endurance / cardio training principles (apply to ALL run sessions and any programme with significant running or cardio content)
@@ -728,13 +730,13 @@ Return ONLY valid JSON (no markdown):
   "sessions": [
     {
       "id": "session-gen-abc12345",
-      "date": "2026-03-30",
+      "dayNumber": 1,
       "name": "Upper Body",
       "exercises": [...]
     },
     {
       "id": "session-gen-def67890",
-      "date": "2026-04-01",
+      "dayNumber": 2,
       "name": "WOD",
       "source": "wod_brain",
       "structure": "21-15-9 Thrusters 42.5kg and Pull-ups for time",
@@ -742,7 +744,9 @@ Return ONLY valid JSON (no markdown):
       "exercises": [...]
     }
   ]
-}`;
+}
+
+IMPORTANT: Use "dayNumber" (integer), NOT "date" (string). The server computes the actual calendar date.`;
 
   const styleSection = strengthStyle === "variety" ? `
 
@@ -793,10 +797,18 @@ Use clean, consistent straight sets throughout. Every exercise should have a def
       return;
     }
 
+    const start = parseISO(startDate);
     const sessions = (parsed.sessions ?? []).map((s: any) => {
+      // Convert dayNumber → ISO date. dayNumber 1 = startDate, dayNumber 2 = startDate+1, etc.
+      const dayNum = typeof s.dayNumber === "number" ? s.dayNumber : null;
+      const sessionDate = dayNum != null
+        ? format(addDays(start, dayNum - 1), "yyyy-MM-dd")
+        : (s.date ?? startDate); // fallback for any legacy response that still includes a date
       const base: any = {
         ...s,
         id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        date: sessionDate,
+        dayNumber: dayNum ?? undefined,
         exercises: (s.exercises ?? []).map((ex: any) => ({
           ...ex,
           id: `ex-${randomUUID().slice(0, 8)}`,

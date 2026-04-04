@@ -30,7 +30,8 @@ export const exerciseSchema = z.object({
 
 export const sessionSchema = z.object({
   id: z.string(),
-  date: z.string(), // ISO date string e.g. "2026-03-23"
+  date: z.string(), // ISO date string e.g. "2026-03-23" — computed from dayNumber + programme startDate
+  dayNumber: z.number().int().optional(), // 1-indexed position in programme (Day 1 = startDate, Day 2 = startDate+1, etc.)
   name: z.string().optional(), // e.g. "Quads", "Upper Body"
   color: z.string().optional(), // hex or named color
   source: z.enum(["wod_brain", "run_brain", "endurance_cycle", "strength_block"]).optional(),
