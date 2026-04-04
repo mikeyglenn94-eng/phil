@@ -2651,21 +2651,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   </>
                                 ) : (
                                   <>
-                                    <span className="block font-semibold pr-5 leading-snug mb-1.5">{session.name || "Session"}</span>
+                                    <span className="block font-semibold pr-5 leading-snug mb-1 line-clamp-2">{session.name || "Session"}</span>
                                     {(session.source === "wod_brain" || session.source === "run_brain") && session.structure && (
-                                      <p className={`text-[10px] leading-relaxed mb-1.5 ${isTouchPicked ? "opacity-90" : "opacity-70"}`}>{session.structure}</p>
+                                      <p className={`text-[10px] leading-snug mb-1 line-clamp-2 ${isTouchPicked ? "opacity-90" : "opacity-70"}`}>{session.structure}</p>
                                     )}
                                     {(session.exercises ?? []).length > 0 && (
                                       <ul className="space-y-0.5">
-                                        {(session.exercises ?? []).map(ex => (
+                                        {(session.exercises ?? []).slice(0, 4).map(ex => (
                                           <li key={ex.id} className={`text-[10px] leading-snug truncate ${isTouchPicked ? "opacity-90" : "opacity-75"}`}>
                                             {ex.name}
                                           </li>
                                         ))}
+                                        {(session.exercises ?? []).length > 4 && (
+                                          <li className={`text-[10px] leading-snug ${isTouchPicked ? "opacity-60" : "opacity-40"}`}>+{(session.exercises ?? []).length - 4} more</li>
+                                        )}
                                       </ul>
                                     )}
                                     {prog && (
-                                      <p className={`mt-2 text-[9px] uppercase tracking-wide truncate ${isTouchPicked ? "opacity-60" : "opacity-40"}`}>{prog.title}</p>
+                                      <p className={`mt-1.5 text-[9px] uppercase tracking-wide truncate ${isTouchPicked ? "opacity-60" : "opacity-40"}`}>{prog.title}</p>
                                     )}
                                   </>
                                 )}
