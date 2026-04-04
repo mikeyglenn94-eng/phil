@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -505,6 +505,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [calendarView, setCalendarView] = useState<"month" | "week">("month");
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [pasteMode, setPasteMode] = useState(false);
+  const [sessionClipboard, setSessionClipboard] = useState<{ sessions: Session[]; baseDate: string } | null>(null);
 
   const toggleSelectSession = (id: string) => {
     setSelectedSessionIds(prev => {
@@ -517,6 +519,46 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const exitSelectionMode = () => {
     setSelectionMode(false);
     setSelectedSessionIds(new Set());
+    setPasteMode(false);
+    setSessionClipboard(null);
+  };
+
+  const copySelectedSessions = () => {
+    const allSessions: Session[] = (clientProgrammes ?? []).flatMap(p => p.sessions as Session[]);
+    const selected = allSessions.filter(s => selectedSessionIds.has(s.id));
+    if (selected.length === 0) return;
+    const dates = selected.map(s => s.date).filter(Boolean) as string[];
+    const baseDate = dates.sort()[0];
+    setSessionClipboard({ sessions: selected, baseDate });
+    setPasteMode(true);
+  };
+
+  const pasteToDate = async (targetDateStr: string) => {
+    if (!sessionClipboard || !clientId) return;
+    const { sessions, baseDate } = sessionClipboard;
+    const baseDateObj = parseISO(baseDate);
+    const targetDateObj = parseISO(targetDateStr);
+    const now = Date.now();
+    const newSessions = sessions.map((s, i) => {
+      const offset = s.date ? differenceInDays(parseISO(s.date), baseDateObj) : 0;
+      const newDate = format(addDays(targetDateObj, offset), "yyyy-MM-dd");
+      return { ...s, id: `session-${now}-${i}`, date: newDate };
+    });
+    try {
+      const targetProg = (clientProgrammes ?? [])[0];
+      if (targetProg) {
+        const updatedSessions = [...(targetProg.sessions as Session[]), ...newSessions];
+        await fetch(`/api/programmes/${targetProg.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions: updatedSessions }) });
+      } else {
+        await fetch("/api/programmes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Sessions", clientId, sessions: newSessions }) });
+      }
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      const n = newSessions.length;
+      toast({ title: `${n} session${n > 1 ? "s" : ""} pasted from ${format(targetDateObj, "EEE d MMM")}` });
+      exitSelectionMode();
+    } catch {
+      toast({ title: "Failed to paste sessions", variant: "destructive" });
+    }
   };
 
   const shiftSelectedSessions = async (deltaWeeks: number) => {
@@ -2265,7 +2307,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                       <div
                         key={di}
                         data-date={dateStr}
-                        className={`calendar-cell transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${isDropTarget ? "!bg-primary/10 ring-2 ring-inset ring-primary/30" : ""} ${calendarView === "week" ? "!min-h-[calc(100vh-280px)]" : ""}`}
+                        className={`calendar-cell transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${isDropTarget ? "!bg-primary/10 ring-2 ring-inset ring-primary/30" : ""} ${calendarView === "week" ? "!min-h-[calc(100vh-280px)]" : ""} ${pasteMode ? "cursor-copy hover:!bg-emerald-50 hover:ring-2 hover:ring-inset hover:ring-emerald-400/50" : ""}`}
+                        onClick={() => { if (pasteMode) void pasteToDate(dateStr); }}
                         onDragOver={e => { e.preventDefault(); setDragOverDate(dateStr); }}
                         onDragLeave={() => setDragOverDate(null)}
                         onDrop={e => {
@@ -2397,6 +2440,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (pasteMode) {
+                                    void pasteToDate(dateStr);
+                                    return;
+                                  }
                                   if (selectionMode) {
                                     toggleSelectSession(session.id);
                                     return;
@@ -2451,7 +2498,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                   <button
                                     onTouchStart={e => e.stopPropagation()}
                                     onClick={e => { e.stopPropagation(); deleteSession(session.id, prog?.id); }}
-                                    className={`absolute top-0.5 right-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${isTouchPicked ? "text-primary-foreground hover:bg-white/20" : "text-primary hover:bg-primary/30"}`}
+                                    className={`absolute top-0.5 right-0.5 rounded p-0.5 opacity-30 group-hover:opacity-100 active:opacity-100 transition-opacity cursor-pointer ${isTouchPicked ? "text-primary-foreground hover:bg-white/20" : "text-primary hover:bg-primary/30"}`}
                                     title="Delete session"
                                   >
                                     <X className="w-2.5 h-2.5" />
@@ -2461,7 +2508,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             );
                           })}
                         </div>
-                        {calendarView === "week" && (
+                        {calendarView === "week" && !pasteMode && (
                           <button
                             onClick={e => { e.stopPropagation(); setQuickAddDate(dateStr); setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddOpen(true); }}
                             className="mt-1.5 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-primary/30 text-primary/60 hover:text-primary hover:bg-primary/8 hover:border-primary/50 active:bg-primary/15 transition-colors text-[11px]"
@@ -2469,6 +2516,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           >
                             <Plus className="w-3 h-3" />
                             <span>Add</span>
+                          </button>
+                        )}
+                        {pasteMode && (
+                          <button
+                            onClick={e => { e.stopPropagation(); void pasteToDate(dateStr); }}
+                            className="mt-1.5 w-full flex items-center justify-center gap-1 py-2 rounded-lg border border-dashed border-emerald-400 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100 active:bg-emerald-200 transition-colors text-[11px] font-medium"
+                            title="Paste sessions here"
+                          >
+                            <Clipboard className="w-3 h-3" />
+                            <span>Paste here</span>
                           </button>
                         )}
                       </div>
@@ -2485,44 +2542,77 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       {/* Multi-select action bar — fixed bottom */}
       {selectionMode && (
         <div className="fixed bottom-0 inset-x-0 z-50 bg-card border-t shadow-xl px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <CheckSquare className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-medium truncate">
-              {selectedSessionIds.size === 0
-                ? "Tap sessions to select"
-                : `${selectedSessionIds.size} session${selectedSessionIds.size > 1 ? "s" : ""} selected`}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-3 text-xs rounded-lg gap-1.5"
-              disabled={selectedSessionIds.size === 0}
-              onClick={() => shiftSelectedSessions(-1)}
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              1 week
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-3 text-xs rounded-lg gap-1.5"
-              disabled={selectedSessionIds.size === 0}
-              onClick={() => shiftSelectedSessions(1)}
-            >
-              1 week
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 px-3 text-xs rounded-lg text-muted-foreground"
-              onClick={exitSelectionMode}
-            >
-              Done
-            </Button>
-          </div>
+          {pasteMode ? (
+            /* Paste mode — waiting for day tap */
+            <>
+              <div className="flex items-center gap-2 min-w-0">
+                <Clipboard className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-sm font-medium truncate text-emerald-700">
+                  Tap any day to paste {sessionClipboard?.sessions.length ?? 0} session{(sessionClipboard?.sessions.length ?? 0) !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-3 text-xs rounded-lg text-muted-foreground shrink-0"
+                onClick={exitSelectionMode}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            /* Selection mode — pick sessions, then shift or copy */
+            <>
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckSquare className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-sm font-medium truncate">
+                  {selectedSessionIds.size === 0
+                    ? "Tap sessions to select"
+                    : `${selectedSessionIds.size} session${selectedSessionIds.size > 1 ? "s" : ""} selected`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-3 text-xs rounded-lg gap-1.5"
+                  disabled={selectedSessionIds.size === 0}
+                  onClick={() => shiftSelectedSessions(-1)}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  1 week
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-3 text-xs rounded-lg gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                  disabled={selectedSessionIds.size === 0}
+                  onClick={copySelectedSessions}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  Copy
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-3 text-xs rounded-lg gap-1.5"
+                  disabled={selectedSessionIds.size === 0}
+                  onClick={() => shiftSelectedSessions(1)}
+                >
+                  1 week
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-3 text-xs rounded-lg text-muted-foreground"
+                  onClick={exitSelectionMode}
+                >
+                  Done
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
