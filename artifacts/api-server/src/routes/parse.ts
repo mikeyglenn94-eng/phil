@@ -727,6 +727,8 @@ The MAJORITY of training volume should NOT be Hyrox-specific. Structure every we
 Return ONLY valid JSON (no markdown):
 {
   "title": "6-Week Strength & Conditioning Block",
+  "blockLength": 6,
+  "sessionsPerWeek": 4,
   "sessions": [
     {
       "id": "session-gen-abc12345",
@@ -746,7 +748,10 @@ Return ONLY valid JSON (no markdown):
   ]
 }
 
-IMPORTANT: Use "dayNumber" (integer), NOT "date" (string). The server computes the actual calendar date.`;
+IMPORTANT:
+- "blockLength": integer number of weeks in the programme (e.g. 4, 6)
+- "sessionsPerWeek": integer number of training days per week (e.g. 3, 4, 5)
+- Use "dayNumber" (integer), NOT "date" (string). The server computes the actual calendar date.`;
 
   const styleSection = strengthStyle === "variety" ? `
 
@@ -823,7 +828,12 @@ Use clean, consistent straight sets throughout. Every exercise should have a def
       return base;
     });
 
-    res.json({ title: parsed.title || "Custom Programme", sessions });
+    res.json({
+      title: parsed.title || "Custom Programme",
+      blockLength: typeof parsed.blockLength === "number" ? parsed.blockLength : null,
+      sessionsPerWeek: typeof parsed.sessionsPerWeek === "number" ? parsed.sessionsPerWeek : null,
+      sessions,
+    });
   } catch (err) {
     req.log.error({ err }, "Error generating programme");
     res.status(500).json({ error: "Failed to generate programme" });

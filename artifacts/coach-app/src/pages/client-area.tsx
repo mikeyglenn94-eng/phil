@@ -176,7 +176,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [describeGenerating, setDescribeGenerating] = useState(false);
   const [rationaleText, setRationaleText] = useState("");
   const [rationaleReady, setRationaleReady] = useState(false);
-  const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[] } | null>(null);
+  const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[]; blockLength?: number | null; sessionsPerWeek?: number | null } | null>(null);
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
   const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety" | null>(null);
   const [generationLimitError, setGenerationLimitError] = useState(false);
@@ -246,7 +246,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       const saveRes = await fetch("/api/programmes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: generatedPreview.title, sessions: generatedPreview.sessions, clientId }),
+        body: JSON.stringify({
+          title: generatedPreview.title,
+          sessions: generatedPreview.sessions,
+          clientId,
+          ...(generatedPreview.blockLength != null ? { blockLength: generatedPreview.blockLength } : {}),
+          ...(generatedPreview.sessionsPerWeek != null ? { sessionsPerWeek: generatedPreview.sessionsPerWeek } : {}),
+        }),
       });
       if (saveRes.status === 429) {
         setGeneratedPreview(null);
@@ -1456,16 +1462,22 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               exercises: (s.exercises ?? []).map((ex: any, ei: number) => normalizeExercise(ex, ei, si)),
             }));
           } else {
-            // Old-style: no dayNumber stored — infer sessionsPerWeek by finding which value
-            // divides totalSessions into a clean (integer) number of weeks.
-            // e.g. 16 sessions: 16÷4=4.0 ✓, 16÷3=5.33 ✗ → 4/week
+            // Old-style: no dayNumber stored — use sessionsPerWeek from DB if available,
+            // otherwise infer by finding which value divides totalSessions into a clean number of weeks.
             const totalSessions = rawSessions.length;
-            let sessionsPerWeek = 4; // sensible default
-            let bestRemainder = Infinity;
-            for (const spw of [4, 3, 5, 6, 2]) {
-              const remainder = Math.abs((totalSessions / spw) - Math.round(totalSessions / spw));
-              if (remainder < bestRemainder) { bestRemainder = remainder; sessionsPerWeek = spw; }
-              if (remainder === 0) break;
+            let sessionsPerWeek: number;
+            if (typeof raw.sessionsPerWeek === "number" && raw.sessionsPerWeek > 0) {
+              // Explicit value stored on the programme — use it directly
+              sessionsPerWeek = raw.sessionsPerWeek;
+            } else {
+              // Infer: e.g. 16 sessions: 16÷4=4.0 ✓, 16÷3=5.33 ✗ → 4/week
+              sessionsPerWeek = 4;
+              let bestRemainder = Infinity;
+              for (const spw of [4, 3, 5, 6, 2]) {
+                const remainder = Math.abs((totalSessions / spw) - Math.round(totalSessions / spw));
+                if (remainder < bestRemainder) { bestRemainder = remainder; sessionsPerWeek = spw; }
+                if (remainder === 0) break;
+              }
             }
             // Gap offsets within each 7-day week by frequency
             const gapPatterns: Record<number, number[]> = {

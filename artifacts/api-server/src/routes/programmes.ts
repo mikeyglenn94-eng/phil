@@ -39,7 +39,13 @@ router.get("/programmes", async (req, res): Promise<void> => {
 });
 
 router.post("/programmes", async (req, res): Promise<void> => {
-  const { title, sessions, clientId } = req.body as { title: string; sessions?: Session[]; clientId?: number };
+  const { title, sessions, clientId, blockLength, sessionsPerWeek } = req.body as {
+    title: string;
+    sessions?: Session[];
+    clientId?: number;
+    blockLength?: number;
+    sessionsPerWeek?: number;
+  };
   if (!title) {
     res.status(400).json({ error: "Title is required" });
     return;
@@ -65,8 +71,10 @@ router.post("/programmes", async (req, res): Promise<void> => {
     }
   }
 
-  const values: { title: string; sessions: Session[]; clientId?: number } = { title, sessions: sessions ?? [] };
+  const values: { title: string; sessions: Session[]; clientId?: number; blockLength?: number; sessionsPerWeek?: number } = { title, sessions: sessions ?? [] };
   if (clientId !== undefined && clientId !== null && !isNaN(Number(clientId))) values.clientId = Number(clientId);
+  if (typeof blockLength === "number") values.blockLength = blockLength;
+  if (typeof sessionsPerWeek === "number") values.sessionsPerWeek = sessionsPerWeek;
   const [programme] = await db
     .insert(programmesTable)
     .values(values)
@@ -87,10 +95,17 @@ router.put("/programmes/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const { title, sessions } = req.body as { title?: string; sessions?: Session[] };
-  const updateData: Partial<{ title: string; sessions: Session[] }> = {};
+  const { title, sessions, blockLength, sessionsPerWeek } = req.body as {
+    title?: string;
+    sessions?: Session[];
+    blockLength?: number;
+    sessionsPerWeek?: number;
+  };
+  const updateData: Partial<{ title: string; sessions: Session[]; blockLength: number; sessionsPerWeek: number }> = {};
   if (title !== undefined) updateData.title = title;
   if (sessions !== undefined) updateData.sessions = sessions;
+  if (typeof blockLength === "number") updateData.blockLength = blockLength;
+  if (typeof sessionsPerWeek === "number") updateData.sessionsPerWeek = sessionsPerWeek;
   const [programme] = await db.update(programmesTable).set(updateData).where(eq(programmesTable.id, id)).returning();
   if (!programme) { res.status(404).json({ error: "Programme not found" }); return; }
   res.json(programme);

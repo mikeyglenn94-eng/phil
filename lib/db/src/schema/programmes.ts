@@ -50,6 +50,8 @@ export const programmesTable = pgTable("programmes", {
   title: text("title").notNull(),
   clientId: integer("client_id"), // null = master programme; set = assigned to a specific client
   sessions: jsonb("sessions").notNull().$type<Session[]>().default([]),
+  blockLength: integer("block_length"), // number of weeks in the programme block
+  sessionsPerWeek: integer("sessions_per_week"), // training days per week
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
