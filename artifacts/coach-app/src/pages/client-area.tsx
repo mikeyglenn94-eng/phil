@@ -1456,14 +1456,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               exercises: (s.exercises ?? []).map((ex: any, ei: number) => normalizeExercise(ex, ei, si)),
             }));
           } else {
-            // Old-style: no dayNumber stored — infer correct weekly gap pattern from session count
+            // Old-style: no dayNumber stored — infer sessionsPerWeek by finding which value
+            // divides totalSessions into a clean (integer) number of weeks.
+            // e.g. 16 sessions: 16÷4=4.0 ✓, 16÷3=5.33 ✗ → 4/week
             const totalSessions = rawSessions.length;
-            const firstDateStr = rawSessions.find((s: any) => s.date)?.date;
-            const lastDateStr = [...rawSessions].reverse().find((s: any) => s.date)?.date;
-            const totalWeeks = firstDateStr && lastDateStr
-              ? Math.max(1, Math.round((new Date(lastDateStr).getTime() - new Date(firstDateStr).getTime()) / (7 * 86400000)) + 1)
-              : Math.ceil(totalSessions / 4);
-            const sessionsPerWeek = Math.max(1, Math.round(totalSessions / totalWeeks));
+            let sessionsPerWeek = 4; // sensible default
+            let bestRemainder = Infinity;
+            for (const spw of [4, 3, 5, 6, 2]) {
+              const remainder = Math.abs((totalSessions / spw) - Math.round(totalSessions / spw));
+              if (remainder < bestRemainder) { bestRemainder = remainder; sessionsPerWeek = spw; }
+              if (remainder === 0) break;
+            }
             // Gap offsets within each 7-day week by frequency
             const gapPatterns: Record<number, number[]> = {
               2: [0, 3],
