@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2 } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -530,6 +530,64 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [pasteMode, setPasteMode] = useState(false);
   const [sessionClipboard, setSessionClipboard] = useState<{ sessions: Session[]; baseDate: string } | null>(null);
 
+  // ── Undo / redo history ──────────────────────────────────────────────────
+  // Each entry is a snapshot of all client programmes' sessions at that moment.
+  type ProgSnapshot = { id: number; sessions: Session[] }[];
+  const [calHistory, setCalHistory] = useState<ProgSnapshot[]>([]);
+  const [calFuture, setCalFuture] = useState<ProgSnapshot[]>([]);
+
+  /** Call before any calendar mutation to save a restore point. */
+  const pushHistory = () => {
+    if (!clientProgrammes) return;
+    const snapshot: ProgSnapshot = clientProgrammes.map(p => ({ id: p.id, sessions: (p.sessions as Session[]).slice() }));
+    setCalHistory(prev => [...prev.slice(-19), snapshot]); // keep last 20
+    setCalFuture([]); // new action clears redo stack
+  };
+
+  const applySnapshot = async (snapshot: ProgSnapshot) => {
+    await Promise.all(
+      snapshot.map(({ id, sessions }) =>
+        fetch(`/api/programmes/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions }) })
+      )
+    );
+    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+  };
+
+  const undo = async () => {
+    if (calHistory.length === 0 || !clientProgrammes) return;
+    const previous = calHistory[calHistory.length - 1];
+    const current: ProgSnapshot = clientProgrammes.map(p => ({ id: p.id, sessions: (p.sessions as Session[]).slice() }));
+    setCalHistory(prev => prev.slice(0, -1));
+    setCalFuture(prev => [...prev, current]);
+    await applySnapshot(previous);
+    toast({ title: "Undone" });
+  };
+
+  const redo = async () => {
+    if (calFuture.length === 0) return;
+    const next = calFuture[calFuture.length - 1];
+    const current: ProgSnapshot = (clientProgrammes ?? []).map(p => ({ id: p.id, sessions: (p.sessions as Session[]).slice() }));
+    setCalFuture(prev => prev.slice(0, -1));
+    setCalHistory(prev => [...prev, current]);
+    await applySnapshot(next);
+    toast({ title: "Redone" });
+  };
+
+  // Clear history when switching clients
+  useEffect(() => { setCalHistory([]); setCalFuture([]); }, [clientId]);
+
+  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); void undo(); }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) { e.preventDefault(); void redo(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [calHistory, calFuture, clientProgrammes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleSelectSession = (id: string) => {
     setSelectedSessionIds(prev => {
       const next = new Set(prev);
@@ -547,6 +605,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const deleteSelectedSessions = async () => {
     if (selectedSessionIds.size === 0) return;
+    pushHistory();
     const byProg = new Map<number, Session[]>();
     for (const prog of (clientProgrammes ?? [])) {
       const sessions = prog.sessions as Session[];
@@ -577,6 +636,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const pasteToDate = async (targetDateStr: string) => {
     if (!sessionClipboard || !clientId) return;
+    pushHistory();
     const { sessions, baseDate } = sessionClipboard;
     const baseDateObj = parseISO(baseDate);
     const targetDateObj = parseISO(targetDateStr);
@@ -605,6 +665,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const shiftSelectedSessions = async (deltaWeeks: number) => {
     if (selectedSessionIds.size === 0) return;
+    pushHistory();
     const byProg = new Map<number, Session[]>();
     for (const prog of (clientProgrammes ?? [])) {
       const sessions = prog.sessions as Session[];
@@ -670,6 +731,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const moveSession = async (sessionId: string, programmeId: number, newDate: string) => {
     const prog = (clientProgrammes ?? []).find(p => p.id === programmeId);
     if (!prog) return;
+    pushHistory();
     const updatedSessions = (prog.sessions as Session[]).map(s =>
       s.id === sessionId ? { ...s, date: newDate } : s
     );
@@ -2264,6 +2326,29 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               </Button>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
+              {/* Undo / Redo */}
+              <div className="flex items-center gap-0.5">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 rounded-md text-muted-foreground"
+                  onClick={() => void undo()}
+                  disabled={calHistory.length === 0}
+                  title="Undo (Ctrl+Z)"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 rounded-md text-muted-foreground"
+                  onClick={() => void redo()}
+                  disabled={calFuture.length === 0}
+                  title="Redo (Ctrl+Y)"
+                >
+                  <Redo2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
               <Button
                 size="sm"
                 variant="outline"
