@@ -47,6 +47,21 @@ function getSessionHighlight(session: Session): string {
     .join(" · ");
 }
 
+function getSessionTypeBadge(session: Session): { label: string; className: string } {
+  switch (session.source) {
+    case "run_brain":
+      return { label: "Run", className: "bg-emerald-100 text-emerald-700" };
+    case "wod_brain":
+      return { label: "WOD", className: "bg-orange-100 text-orange-700" };
+    case "endurance_cycle":
+      return { label: "Endurance", className: "bg-sky-100 text-sky-700" };
+    case "strength_block":
+      return { label: "Strength", className: "bg-violet-100 text-violet-700" };
+    default:
+      return { label: "Strength", className: "bg-violet-100 text-violet-700" };
+  }
+}
+
 interface ClientAreaProps {
   clientIdOverride?: number;
   mode?: "coach" | "client";
@@ -2644,10 +2659,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                 )}
                                 {calendarView === "month" ? (
                                   <>
-                                    <span className={`block truncate font-medium ${selectionMode ? "pl-4" : "pr-3"}`}>{session.name || "Session"}</span>
-                                    {highlight && (
-                                      <span className={`block truncate text-[9px] leading-tight mt-0.5 font-normal ${selectionMode ? "pl-4" : ""} ${isTouchPicked ? "opacity-80" : "opacity-60"}`}>{highlight}</span>
-                                    )}
+                                    {(() => {
+                                      const badge = getSessionTypeBadge(session);
+                                      return (
+                                        <span className={`inline-block text-[8px] font-semibold leading-none px-1.5 py-0.5 rounded-full mb-0.5 ${badge.className} ${selectionMode ? "ml-4" : ""}`}>{badge.label}</span>
+                                      );
+                                    })()}
+                                    <span className={`block truncate font-medium text-[10px] leading-snug ${selectionMode ? "pl-4" : "pr-1"}`}>{session.name || "Session"}</span>
                                   </>
                                 ) : (
                                   <>
