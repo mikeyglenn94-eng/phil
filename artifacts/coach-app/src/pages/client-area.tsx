@@ -2392,7 +2392,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                         key={di}
                         data-date={dateStr}
                         className={`calendar-cell transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${isDropTarget ? "!bg-primary/10 ring-2 ring-inset ring-primary/30" : ""} ${calendarView === "week" ? "!min-h-[calc(100vh-280px)]" : ""} ${pasteMode ? "cursor-copy hover:!bg-emerald-50 hover:ring-2 hover:ring-inset hover:ring-emerald-400/50" : ""}`}
-                        onClick={() => { if (pasteMode) void pasteToDate(dateStr); }}
+                        onClick={() => {
+                          if (pasteMode) { void pasteToDate(dateStr); return; }
+                          if (isDragActiveRef.current) return;
+                          setQuickAddDate(dateStr);
+                          setQuickAddName("");
+                          setQuickAddDesc("");
+                          setQuickAddError("");
+                          setQuickAddOpen(true);
+                        }}
                         onDragOver={e => { e.preventDefault(); setDragOverDate(dateStr); }}
                         onDragLeave={() => setDragOverDate(null)}
                         onDrop={e => {
@@ -2400,14 +2408,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           setDragOverDate(null);
                           const item = draggedItemRef.current;
                           if (item) { moveSession(item.sessionId, item.programmeId, dateStr); draggedItemRef.current = null; }
-                        }}
-                        onClick={() => {
-                          if (isDragActiveRef.current) return;
-                          setQuickAddDate(dateStr);
-                          setQuickAddName("");
-                          setQuickAddDesc("");
-                          setQuickAddError("");
-                          setQuickAddOpen(true);
                         }}
                       >
                         {calendarView === "month" ? (
