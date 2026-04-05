@@ -188,8 +188,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     const params = new URLSearchParams(search);
     const t = params.get("tab");
     if (t === "training") return "training";
-    if (t === "dashboard") return "dashboard";
-    return "nutrition";
+    if (t === "nutrition") return "nutrition";
+    return "dashboard";
   });
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
