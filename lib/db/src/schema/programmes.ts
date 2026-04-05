@@ -28,6 +28,11 @@ export const exerciseSchema = z.object({
   setReps: z.array(z.number().nullable()).optional(), // actual reps achieved per set, logged by client
 });
 
+export const runIntervalSchema = z.object({
+  distance: z.number().nullable().optional(), // km
+  pace: z.string().nullable().optional(),     // "5:30" = 5 min 30 sec per km
+});
+
 export const sessionSchema = z.object({
   id: z.string(),
   date: z.string(), // ISO date string e.g. "2026-03-23" — computed from dayNumber + programme startDate
@@ -38,6 +43,7 @@ export const sessionSchema = z.object({
   structure: z.string().optional(),
   guidance: z.string().optional(),
   clientComment: z.string().nullable().optional(),
+  runLog: z.array(runIntervalSchema).optional(), // logged intervals for run sessions
   exercises: z.array(exerciseSchema),
 });
 

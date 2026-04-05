@@ -363,6 +363,27 @@ export default function SessionEditor() {
                 </div>
                 );
               })()}
+              {/* Run log (read-only for coach) */}
+              {(sessionSource === "run_brain" || sessionSource === "endurance_cycle") && (() => {
+                const runLog = (existingSession as any)?.runLog as Array<{ distance?: number | null; pace?: string | null }> | undefined;
+                if (!runLog || runLog.length === 0) return null;
+                return (
+                  <div className="rounded-xl border overflow-hidden">
+                    <div className="grid grid-cols-[2rem_1fr_1fr] gap-0 bg-emerald-50 border-b border-emerald-100 px-3 py-1.5 text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">
+                      <span>#</span>
+                      <span>Distance (km)</span>
+                      <span>Pace (min/km)</span>
+                    </div>
+                    {runLog.map((row, i) => (
+                      <div key={i} className="grid grid-cols-[2rem_1fr_1fr] gap-0 px-3 py-2 border-b border-border last:border-b-0 text-sm">
+                        <span className="text-xs font-bold text-muted-foreground">{i + 1}</span>
+                        <span className="font-semibold text-primary">{row.distance != null ? `${row.distance} km` : "—"}</span>
+                        <span className="font-semibold">{row.pace || "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               {/* Client feedback (read-only for coach) */}
               {(existingSession as any)?.clientComment && (
                 <div className="rounded-xl border bg-muted/30 p-4 space-y-1">
