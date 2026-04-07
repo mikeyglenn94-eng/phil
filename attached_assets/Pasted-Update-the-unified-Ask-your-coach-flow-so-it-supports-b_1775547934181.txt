@@ -1,0 +1,219 @@
+Update the unified “Ask your coach” flow so it supports both:
+1. quick intent shortcuts
+2. fully detailed freeform briefs in a single message
+
+CORE PRINCIPLE
+Users should be able to describe an entire plan or session request in one go.
+The coach should extract what it can from that message, make sensible assumptions using our existing training philosophy, and ask follow-up questions only when truly necessary.
+
+This should feel like an experienced coach:
+- listening properly
+- understanding context
+- filling in obvious gaps intelligently
+- only asking clarifying questions that materially affect the quality of the outcome
+
+It must NOT feel like a rigid wizard or a dumb chatbot that repeats questions the user already answered.
+
+======================================
+GOAL
+======================================
+
+Improve the “Ask your coach” system so that:
+- users can submit a complete natural-language brief for a plan or session
+- the coach parses and uses the information already provided
+- the coach only asks minimal follow-up questions when important information is missing
+- the coach is allowed to make simple, sensible assumptions aligned with our philosophy
+- quick action chips like “Build a plan” and “Build a session” remain available as shortcuts, but do not constrain the user into a rigid form flow
+
+======================================
+1. INPUT MODEL
+======================================
+
+The single coach input must support:
+- short commands
+- detailed plan briefs
+- detailed session briefs
+- schedule edits
+- plan review requests
+
+Examples the coach must handle well:
+- “Build me a 4 day hybrid plan with 3 strength sessions and 2 runs. Main goal is improve my 5K without losing size. Sessions under 60 minutes. No Wednesdays. Home gym with treadmill.”
+- “Build me a lower body session for tomorrow that supports running. 45 minutes max. Knee is fine, elbow sore.”
+- “I missed Monday. Rework the week without making it more complicated.”
+- “Review this plan and tell me if it is actually balanced.”
+
+Do not force users into step-by-step setup if they already gave enough detail.
+
+======================================
+2. PARSE-FIRST BEHAVIOUR
+======================================
+
+When a user submits a request, the coach should first parse and extract structured intent and constraints.
+
+Extract where possible:
+- request type
+- goal
+- days per week
+- available days
+- modality split
+- equipment
+- session duration limit
+- injury / pain constraints
+- scheduling constraints
+- exercise preferences / exclusions
+- desired simplicity level if stated
+- any performance priorities
+
+The coach should use provided information instead of asking for it again.
+
+======================================
+3. SUFFICIENCY CHECK
+======================================
+
+After parsing the request, the coach should decide:
+“Do I have enough information to build a sensible first draft using our philosophy?”
+
+If YES:
+- build the draft
+- optionally ask only one key follow-up if it materially changes quality
+- otherwise proceed directly
+
+If NO:
+- ask only the minimum missing questions needed to create something good
+
+Do NOT ask broad generic onboarding-style questions if they are not necessary.
+
+======================================
+4. ASSUMPTION MODEL
+======================================
+
+The coach is allowed to make simple, sensible assumptions when missing details are non-critical.
+
+Examples:
+- choose a simple split if the user did not specify one
+- choose a practical weekly order
+- choose standard progression style from our philosophy
+- choose library templates that best fit the request
+
+Whenever assumptions are made:
+- keep them aligned with our training philosophy
+- keep them simple
+- surface them clearly in a short “Assumptions made” section when presenting the plan or session
+
+This is important because it makes the coach feel intelligent and trustworthy.
+
+======================================
+5. FOLLOW-UP QUESTION RULES
+======================================
+
+Only ask follow-up questions when the missing information would materially affect:
+- programme quality
+- safety
+- feasibility
+- scheduling logic
+- equipment suitability
+
+Good follow-up example:
+- “I’ve got enough to build this. One thing to confirm: do you want me to keep the strength work full-body for simplicity, or bias upper/lower?”
+
+Bad follow-up example:
+- asking for frequency, goal, equipment, and day availability again when user already included them
+
+Follow-ups should be:
+- minimal
+- specific
+- high-value
+
+======================================
+6. QUICK ACTION CHIPS
+======================================
+
+Keep quick chips such as:
+- Build a plan
+- Build a session
+- Adjust schedule
+- Review training
+
+But they should function only as shortcuts into the same coach input.
+
+Behaviour:
+- tapping a chip can prefill or scaffold the request
+- user can still overwrite or expand freely
+- chips must not force a rigid multi-step form unless absolutely necessary
+
+======================================
+7. COACH RESPONSE STRUCTURE
+======================================
+
+For detailed plan requests, structure responses like this:
+
+1. Brief acknowledgement
+- confirm what the coach understood from the user’s brief
+
+2. Outcome
+- either:
+  - build the plan directly
+  - or ask one minimal missing question
+
+3. Assumptions made
+- short bullet list only if assumptions were needed
+
+4. Proposed structure
+- clear and concise
+
+5. Confirm / apply option
+
+For session requests:
+- same principle, just lighter and faster
+
+The coach should sound like it understood the request properly, not like it is running a generic workflow.
+
+======================================
+8. OCKHAM’S RAZOR ENFORCEMENT
+======================================
+
+When handling detailed briefs, do not mistake detail for a reason to overcomplicate the outcome.
+
+The coach should still prefer:
+- the simplest effective split
+- practical weekly structure
+- repeatable progression
+- low-friction adherence
+
+Even if the user provides lots of detail, the solution should remain clean and coach-like.
+
+======================================
+9. TECHNICAL SUGGESTION
+======================================
+
+Please add or improve logic such as:
+- parseCoachRequest(input)
+- extractTrainingConstraints(input)
+- hasEnoughInfoForDraft(parsedRequest)
+- getMinimalFollowUpQuestion(parsedRequest)
+- derivePlanAssumptions(parsedRequest, userContext)
+- buildCoachDraftFromRequest(parsedRequest, userContext)
+- renderCoachAssumptions(assumptions)
+
+Reuse existing training philosophy and library matching logic.
+Do not create a separate generic GPT path.
+
+======================================
+10. ACCEPTANCE CRITERIA
+======================================
+
+After this change:
+- users can describe a full plan or session in one message
+- the coach uses the information already provided
+- the coach only asks follow-up questions when genuinely necessary
+- quick chips still exist as shortcuts
+- the system stays clean and uncluttered
+- the coach remains grounded in our philosophy and library
+- assumptions are sensible and visible
+- the experience feels like an educated coach, not a random chatbot
+
+At the end, show me:
+1. which files/components changed
+2. how parsing and sufficiency checks work
+3. how assumptions are derived and shown
+4. how the coach avoids asking redundant questions

@@ -539,6 +539,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [cmdSaving, setCmdSaving] = useState(false);
   const [cmdParsing, setCmdParsing] = useState(false);
   const [coachInlineResponse, setCoachInlineResponse] = useState<string | null>(null);
+
+  // ── Coach parse result (parse-first plan/session flow) ───────────────────
+  interface CoachParseResult {
+    requestType: "programme" | "session";
+    acknowledgement: string;
+    hasEnough: boolean;
+    followUpQuestion?: string;
+    assumptions?: string[];
+    suggestedBrief?: string;
+    parsedConstraints: Record<string, unknown>;
+  }
+  const [coachParseResult, setCoachParseResult] = useState<CoachParseResult | null>(null);
+  const [coachFollowUpInput, setCoachFollowUpInput] = useState("");
+  const [originalCoachInput, setOriginalCoachInput] = useState("");
   const [pendingReschedule, setPendingReschedule] = useState<{
     programmeId: number; programmeName: string; sessions: Session[]; dayLabels: string[];
   } | null>(null);
@@ -1076,45 +1090,90 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   };
 
   // ── Unified coach input routing ──────────────────────────────────────────────
-  // Classifies a natural-language input so we can route it to the right backend.
-  // "plan"     → open the programme/session builder (AI dialog) pre-filled
-  // "library"  → open the library browser pre-filled
-  // "review"   → call coaching endpoint and show inline answer
+  // Classifies a natural-language input to route it to the right backend flow.
+  // "plan"     → parse-first: call /api/coach-parse, show structured response
+  // "library"  → open the library browser pre-filled and auto-search
+  // "review"   → call coaching endpoint and show inline text answer
   // "schedule" → default: send to calendar command parser
   function classifyCoachIntent(input: string): "plan" | "library" | "review" | "schedule" {
     const lower = input.toLowerCase();
-    if (/\b(build|create|generate|plan|make me|give me|design|programme|program)\b/.test(lower)) return "plan";
+    if (/\b(build|create|generate|plan|make|design|programme|program|session|workout|week)\b/.test(lower)) return "plan";
     if (/\b(find|search|browse|show me|look for|library|template|from library)\b/.test(lower)) return "library";
     if (/\b(review|check|is this|balanced|analyse|analyze|explain|what.s missing|what am i missing)\b/.test(lower)) return "review";
     return "schedule";
   }
 
+  // ── Parse-first: called when user submits a plan/session brief ───────────
+  const callCoachParse = async (input: string, followUpAnswer?: string) => {
+    setCmdParsing(true);
+    try {
+      const res = await fetch("/api/coach-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input,
+          ...(followUpAnswer ? { followUpAnswer } : {}),
+          clientContext: {
+            name: client?.name,
+            programmes: (clientProgrammes ?? []).map(p => p.title),
+          },
+        }),
+      });
+      const data = await res.json();
+      setCoachParseResult(data);
+    } catch {
+      toast({ title: "Couldn't reach the coach — try again", variant: "destructive" });
+    } finally {
+      setCmdParsing(false);
+    }
+  };
+
+  // ── Open the plan/session builder pre-filled from a parse result ─────────
+  const handleBuildFromParse = () => {
+    if (!coachParseResult) return;
+    const brief = coachParseResult.suggestedBrief ?? originalCoachInput;
+    const isSession = coachParseResult.requestType === "session";
+    setDescribeText(brief);
+    setAiMode(isSession ? "session" : "programme");
+    setBuildMode("describe");
+    setGeneratedPreview(null);
+    setFromScratchTitle("");
+    setStrengthStyle(null);
+    setQuickAddName("");
+    setQuickAddDesc("");
+    setQuickAddType("strength");
+    setQuickAddError("");
+    setAssignStartDate(format(new Date(), "yyyy-MM-dd"));
+    setAssignDialogOpen(true);
+    setCoachParseResult(null);
+    setCoachFollowUpInput("");
+  };
+
+  // ── Handle user's answer to a coach follow-up question ──────────────────
+  const handleCoachFollowUp = async () => {
+    if (!coachFollowUpInput.trim()) return;
+    await callCoachParse(originalCoachInput, coachFollowUpInput);
+    setCoachFollowUpInput("");
+  };
+
+  // ── Main entry point: dispatch based on intent ───────────────────────────
   const handleCoachInput = async () => {
     const input = cmdInput.trim();
     if (!input) return;
     setCoachInlineResponse(null);
+    setCoachParseResult(null);
 
     const intent = classifyCoachIntent(input);
 
-    // ── Plan: open the builder pre-filled with the natural language description ──
+    // ── Plan / Session: parse-first → structured response panel ─────────────
     if (intent === "plan") {
-      setDescribeText(input);
-      setAiMode("programme");
-      setBuildMode("describe");
-      setGeneratedPreview(null);
-      setFromScratchTitle("");
-      setStrengthStyle(null);
-      setQuickAddName("");
-      setQuickAddDesc("");
-      setQuickAddType("strength");
-      setQuickAddError("");
-      setAssignStartDate(format(new Date(), "yyyy-MM-dd"));
-      setAssignDialogOpen(true);
+      setOriginalCoachInput(input);
       setCmdInput("");
+      await callCoachParse(input);
       return;
     }
 
-    // ── Library: open the library browser pre-filled and auto-search ──
+    // ── Library: open the library browser pre-filled and auto-search ─────────
     if (intent === "library") {
       setBrainQuery(input);
       setBrainResults([]);
@@ -1125,7 +1184,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       return;
     }
 
-    // ── Review: call coaching endpoint with training context ──
+    // ── Review: coaching endpoint → inline text answer ────────────────────────
     if (intent === "review") {
       setCmdParsing(true);
       try {
@@ -1148,7 +1207,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       return;
     }
 
-    // ── Default: calendar schedule command ──
+    // ── Default: calendar / schedule command ──────────────────────────────────
     await handleRescheduleCmd();
   };
 
@@ -2513,10 +2572,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
           {/* ── Ask your coach ─────────────────────────────────────── */}
           <div className="shrink-0 px-4 pt-3 pb-2 border-b bg-background flex flex-col gap-2">
-            {/* Suggested prompt chips — only shown when input is empty and no pending action */}
-            {!cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && !coachInlineResponse && (
+            {/* Quick action chips — shown when idle */}
+            {!cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && !coachInlineResponse && !coachParseResult && (
               <div className="flex flex-wrap gap-1.5">
-                {(["Plan my week", "Adjust schedule", "Progress this plan", "Review my training"] as const).map(chip => (
+                {(["Build a plan", "Build a session", "Adjust schedule", "Review my training"] as const).map(chip => (
                   <button
                     key={chip}
                     onClick={() => setCmdInput(chip)}
@@ -2527,14 +2586,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 ))}
               </div>
             )}
+
+            {/* Input row */}
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={cmdListening ? (cmdInterim || cmdInput) : cmdInput}
-                onChange={e => { setCmdInput(e.target.value); setCoachInlineResponse(null); }}
+                onChange={e => {
+                  setCmdInput(e.target.value);
+                  setCoachInlineResponse(null);
+                  if (coachParseResult) { setCoachParseResult(null); setCoachFollowUpInput(""); }
+                }}
                 onKeyDown={e => { if (e.key === "Enter") void handleCoachInput(); }}
                 placeholder="Ask your coach — plan, adjust, review or progress your training…"
-                disabled={cmdListening}
+                disabled={cmdListening || cmdParsing}
                 className="flex-1 text-sm bg-muted/30 border rounded-xl px-3.5 py-2 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 focus:bg-background transition-colors"
               />
               <button
@@ -2554,11 +2619,89 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 onClick={() => void handleCoachInput()}
                 disabled={!cmdInput.trim() || cmdParsing}
               >
-                {cmdParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                {cmdParsing
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <ChevronRight className="w-3.5 h-3.5" />
+                }
               </Button>
             </div>
 
-            {/* Inline coach review response */}
+            {/* ── Structured coach response (parse-first plan/session flow) ─── */}
+            {coachParseResult && (
+              <div className="flex flex-col gap-2.5 rounded-xl border bg-muted/30 px-3.5 py-3">
+                {/* Acknowledgement + dismiss */}
+                <div className="flex items-start gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                  <p className="text-[13px] leading-relaxed text-foreground flex-1">{coachParseResult.acknowledgement}</p>
+                  <button
+                    onClick={() => { setCoachParseResult(null); setCoachFollowUpInput(""); }}
+                    className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Assumptions — visible when the coach has enough info */}
+                {coachParseResult.hasEnough && !!coachParseResult.assumptions?.length && (
+                  <ul className="ml-5 space-y-0.5">
+                    {coachParseResult.assumptions.map((a, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-[12px] text-muted-foreground">
+                        <span className="text-primary/60 mt-0.5 shrink-0 font-bold">·</span>
+                        <span>{a}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Follow-up question — shown when the coach needs one piece of info */}
+                {!coachParseResult.hasEnough && coachParseResult.followUpQuestion && (
+                  <div className="ml-5 flex flex-col gap-2">
+                    <p className="text-[13px] font-medium text-foreground">{coachParseResult.followUpQuestion}</p>
+                    <input
+                      type="text"
+                      value={coachFollowUpInput}
+                      onChange={e => setCoachFollowUpInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") void handleCoachFollowUp(); }}
+                      placeholder="Your answer…"
+                      autoFocus
+                      className="text-sm bg-background border rounded-lg px-3 py-1.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
+                    />
+                  </div>
+                )}
+
+                {/* Action row */}
+                <div className="flex items-center gap-2 ml-5">
+                  {coachParseResult.hasEnough ? (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs rounded-lg px-3 gap-1.5"
+                      onClick={handleBuildFromParse}
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      {coachParseResult.requestType === "session" ? "Build Session" : "Build Plan"}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs rounded-lg px-3"
+                      onClick={() => void handleCoachFollowUp()}
+                      disabled={!coachFollowUpInput.trim() || cmdParsing}
+                    >
+                      {cmdParsing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                      Continue
+                    </Button>
+                  )}
+                  <button
+                    onClick={() => { setCoachParseResult(null); setCoachFollowUpInput(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Inline coach review response (text answer from coaching endpoint) */}
             {coachInlineResponse && (
               <div className="flex items-start gap-2.5 bg-muted/50 border rounded-xl px-3.5 py-3">
                 <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />

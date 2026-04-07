@@ -15,6 +15,7 @@ import calendarCommandRouter from "./calendar-command";
 import sessionLibraryRouter from "./session-library";
 import analyticsRouter from "./analytics";
 import coachingRouter from "./coaching";
+import coachParseRouter from "./coach-parse";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(runSessionsRouter);
 router.use(sessionLibraryRouter);
 router.use(analyticsRouter);
 router.use(coachingRouter);
+router.use(coachParseRouter);
 
 export default router;
