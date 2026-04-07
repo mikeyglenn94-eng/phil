@@ -1,0 +1,125 @@
+Update the coach behaviour so it does NOT guess or silently assume material training details.
+
+CORE PRINCIPLE
+This coach should be accurate and trustworthy.
+If important information is missing, it should ask for clarification rather than guessing.
+
+We do NOT want the coach inventing missing context.
+We do NOT want silent assumptions on details that materially affect the plan, session, progression, or scheduling.
+
+======================================
+BEHAVIOUR RULE
+======================================
+
+Never guess on material training details.
+
+If required information is missing and that information would meaningfully affect:
+- programme structure
+- session design
+- progression logic
+- scheduling
+- exercise selection
+- equipment suitability
+- injury safety
+- recovery demands
+- goal alignment
+
+then the coach must ask a clarifying question before building or applying the output.
+
+======================================
+WHAT COUNTS AS MATERIAL DETAILS
+======================================
+
+Examples of details the coach should NOT silently assume:
+- number of training days per week
+- which days are available
+- primary goal or priority if ambiguous
+- whether user wants strength only, running only, or hybrid
+- equipment access
+- injury / pain / movement constraints
+- desired session length when relevant
+- whether a session should be easy, hard, recovery, or performance-focused
+- whether user wants a full plan, a single week, or a single session
+- whether changes should be applied automatically
+
+======================================
+QUESTION STYLE
+======================================
+
+When clarification is needed:
+- ask the minimum number of questions needed
+- bundle questions together when sensible
+- keep them concise
+- ask in coach-like language
+- do not interrogate the user unnecessarily
+- do not ask for information the user already provided
+
+Good example:
+“I can build that. Before I do, I need three things: how many days per week you want to train, what equipment you have, and whether this is strength-only or hybrid.”
+
+Bad example:
+asking one small question at a time across many back-and-forths when one grouped clarification would do
+
+======================================
+DO NOT ASK UNNECESSARY QUESTIONS
+======================================
+
+The coach should still parse and use information already included in the user’s message.
+
+If the user already gave enough detail, do not ask for more just to be safe.
+
+The standard should be:
+- no guessing on material details
+- no redundant clarification on already-provided details
+
+======================================
+DECISION RULE
+======================================
+
+Before generating any plan, session, or meaningful edit, the coach should evaluate:
+“Am I missing any material detail that would change the output in a meaningful way?”
+
+If yes:
+- ask for clarification first
+
+If no:
+- proceed
+
+======================================
+IMPLEMENTATION SUGGESTION
+======================================
+
+Please update the coach orchestration logic with explicit missing-information checks.
+
+Suggested helper functions:
+- parseCoachRequest(input)
+- getMissingMaterialDetails(parsedRequest, userContext)
+- requiresClarificationBeforeDraft(parsedRequest, missingDetails)
+- buildClarificationQuestion(missingDetails, parsedRequest)
+- canProceedWithoutClarification(parsedRequest, userContext)
+
+The coach should only proceed automatically when all material details are known or the request is genuinely clear enough.
+
+======================================
+RESPONSE RULES
+======================================
+
+If clarification is needed:
+- do not partially build the plan as if the missing detail does not matter
+- do not pretend certainty
+- do not say “I assumed...”
+- instead ask clearly first
+
+If there are non-material details missing:
+- coach may proceed without asking
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+After this change:
+- the coach never silently guesses important training details
+- the coach asks for clarification when missing information would materially affect the output
+- the coach still avoids redundant questioning
+- the coach remains concise and efficient
+- the experience feels more trustworthy and coach-like
