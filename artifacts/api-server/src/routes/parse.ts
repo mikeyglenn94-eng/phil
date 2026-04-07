@@ -375,7 +375,11 @@ router.post("/generate-programme", async (req, res): Promise<void> => {
     }
   }
 
-  const chosenModel = selectModel(description);
+  // If no week count is mentioned, prepend "6-week" so the AI never defaults to 1 week
+  const weekMentioned = /\b(\d+)[\s-]?week|\bweeks?\b/i.test(description);
+  const effectiveDescription = weekMentioned ? description : `6-week ${description}`;
+
+  const chosenModel = selectModel(effectiveDescription);
   req.log.info({ model: chosenModel, hasClientId: !!clientId }, "generate-programme model selected");
 
   const systemPrompt = `You are an expert fitness programming AI. A coach is describing the training plan they want for a client. Generate a complete, realistic multi-week training programme as a JSON object.
@@ -789,7 +793,7 @@ Use clean, consistent straight sets throughout. Every exercise should have a def
       max_completion_tokens: chosenModel === "gpt-4o" ? 16384 : 32768,
       messages: [
         { role: "system", content: systemPrompt + styleSection },
-        { role: "user", content: `Description: "${description}"` },
+        { role: "user", content: `Description: "${effectiveDescription}"` },
       ],
     });
 

@@ -72,6 +72,7 @@ NON-MATERIAL DETAILS — SAFE TO ASSUME
 ═══════════════════════════════════════════
 
 These do NOT require clarification. Assume sensibly and list them in the assumptions array:
+- Programme duration — default to 6 weeks if not stated. Include this in the suggestedBrief explicitly (e.g. "6-week programme").
 - Split structure (full-body vs upper/lower vs push-pull) — assume based on frequency and goal
 - Weekly session order — assume a practical, balanced default
 - Progression style — assume linear unless stated otherwise
