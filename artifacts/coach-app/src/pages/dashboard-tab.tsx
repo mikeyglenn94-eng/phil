@@ -521,7 +521,7 @@ function secsToMmss(secs: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-type StatDisplay = { label: string; primary: string; delta: string | null };
+type StatDisplay = { label: string; sublabel?: string; primary: string; delta: string | null };
 
 function buildDashboardStat(
   key: ShareStatKey,
@@ -541,8 +541,8 @@ function buildDashboardStat(
     const diff = d.previous != null ? +(d.current - d.previous).toFixed(1) : null;
     const delta = diff != null && Math.abs(diff) >= 0.5
       ? (diff > 0 ? `+${diff}kg` : `${diff}kg`) : null;
-    const labelMap: Record<string, string> = { squat: "SQUAT E1RM", bench: "BENCH E1RM", deadlift: "DEADLIFT E1RM" };
-    return { label: labelMap[key], primary: `${d.current}kg`, delta };
+    const sublabelMap: Record<string, string> = { squat: "Squat", bench: "Bench Press", deadlift: "Deadlift" };
+    return { label: "ESTIMATED 1RM", sublabel: sublabelMap[key], primary: `${d.current}kg`, delta };
   }
   if (key === "est5K") {
     const curr = analytics.runMetrics.estimated5K.current;
@@ -656,6 +656,51 @@ async function generateProgressCard(
   ctx.stroke();
   cy += 48;
 
+  // ── Draw a single metric block ────────────────────────────────────
+  // Returns new cy after drawing.
+  function drawBlock(s: StatDisplay, valueFs: number): number {
+    // 1. Block label (e.g. "FITNESS SCORE", "ESTIMATED 1RM")
+    applyTextShadow();
+    ctx.fillStyle = "rgba(255,255,255,0.60)";
+    ctx.font      = "600 30px 'Inter', system-ui, sans-serif";
+    ctx.fillText(s.label, cx, cy + 30);
+    clearShadow();
+    cy += 30 + 6;
+
+    // 2. Sub-label (e.g. "Squat", "Bench Press") — only for e1RM blocks
+    if (s.sublabel) {
+      applyTextShadow();
+      ctx.fillStyle = "rgba(255,255,255,0.74)";
+      ctx.font      = "500 38px 'Inter', system-ui, sans-serif";
+      ctx.fillText(s.sublabel, cx, cy + 38);
+      clearShadow();
+      cy += 38 + 4;
+    }
+
+    // 3. Value — large, bold, full white
+    applyTextShadow();
+    ctx.font      = `900 ${valueFs}px 'Inter', system-ui, sans-serif`;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(s.primary, cx, cy + Math.round(valueFs * 1.0));
+    clearShadow();
+    cy += Math.round(valueFs * 1.0) + 6;
+
+    // 4. Delta — below the value, green or red, not inline
+    if (s.delta) {
+      const pos = s.delta.startsWith("+");
+      applyTextShadow();
+      ctx.font      = "600 38px 'Inter', system-ui, sans-serif";
+      ctx.fillStyle = pos ? "rgba(134,239,172,0.94)" : "rgba(248,113,113,0.94)";
+      ctx.fillText(s.delta, cx, cy + 38);
+      clearShadow();
+      cy += 38;
+    }
+
+    // Block gap
+    cy += 32;
+    return cy;
+  }
+
   // ── Empty state ───────────────────────────────────────────────────
   if (resolved.length === 0) {
     applyTextShadow();
@@ -664,62 +709,13 @@ async function generateProgressCard(
     ctx.fillText("Select stats to show on this card", cx, cy);
     clearShadow();
   } else {
-    // ── Hero stat (first, typically Fitness Score) ─────────────────
+    // Hero stat (first, typically Fitness Score) gets largest font
     const [hero, ...rest] = resolved;
+    drawBlock(hero, 172);
 
-    // Label
-    applyTextShadow();
-    ctx.fillStyle = "rgba(255,255,255,0.60)";
-    ctx.font      = "600 32px 'Inter', system-ui, sans-serif";
-    ctx.fillText(hero.label, cx, cy);
-    clearShadow();
-    cy += 6;
-
-    // Hero value
-    const heroFs = 196;
-    applyTextShadow();
-    ctx.font      = `900 ${heroFs}px 'Inter', system-ui, sans-serif`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(hero.primary, cx, cy + Math.round(heroFs * 1.15));
-    const heroVw = ctx.measureText(hero.primary).width;
-
-    // Hero delta (inline, right of value, vertically centred)
-    if (hero.delta) {
-      const pos = hero.delta.startsWith("+");
-      ctx.font      = "700 52px 'Inter', system-ui, sans-serif";
-      ctx.fillStyle = pos ? "rgba(134,239,172,0.94)" : "rgba(248,113,113,0.94)";
-      ctx.fillText(hero.delta, cx + heroVw + 22, cy + Math.round(heroFs * 1.15) - 52);
-    }
-    clearShadow();
-    cy += Math.round(heroFs * 1.15) + 48;
-
-    // ── Supporting stats ──────────────────────────────────────────
+    // Supporting stats — slightly smaller
     for (const s of rest) {
-      // Label
-      applyTextShadow();
-      ctx.fillStyle = "rgba(255,255,255,0.58)";
-      ctx.font      = "600 30px 'Inter', system-ui, sans-serif";
-      ctx.fillText(s.label, cx, cy);
-      clearShadow();
-      cy += 6;
-
-      // Value
-      const vfs = 92;
-      applyTextShadow();
-      ctx.font      = `800 ${vfs}px 'Inter', system-ui, sans-serif`;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(s.primary, cx, cy + Math.round(vfs * 1.15));
-      const vw = ctx.measureText(s.primary).width;
-
-      // Delta
-      if (s.delta) {
-        const pos = s.delta.startsWith("+");
-        ctx.font      = `600 42px 'Inter', system-ui, sans-serif`;
-        ctx.fillStyle = pos ? "rgba(134,239,172,0.94)" : "rgba(248,113,113,0.94)";
-        ctx.fillText(s.delta, cx + vw + 18, cy + Math.round(vfs * 1.15) - 18);
-      }
-      clearShadow();
-      cy += Math.round(vfs * 1.15) + 32;
+      drawBlock(s, 116);
     }
   }
 
