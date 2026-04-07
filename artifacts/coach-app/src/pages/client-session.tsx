@@ -52,6 +52,151 @@ function toTitleCase(s: string): string {
   return s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
 }
 
+// ── Muscle heat map ────────────────────────────────────────────────────────────
+
+const MUSCLE_MAP: Array<{ patterns: string[]; primary: string[]; secondary: string[] }> = [
+  { patterns: ["bench press","chest press","fly","flye","push-up","pushup","pec dec","cable crossover","dip"],
+    primary: ["chest"], secondary: ["front_delt","tricep"] },
+  { patterns: ["row","pull-up","pullup","pull up","pulldown","lat pull","seated cable"],
+    primary: ["lat"], secondary: ["rear_delt","bicep"] },
+  { patterns: ["deadlift","rdl","romanian","good morning","back extension","hyperextension"],
+    primary: ["lower_back","hamstring"], secondary: ["glute","trap"] },
+  { patterns: ["squat","leg press","lunge","step-up","split squat","hack squat","goblet squat","front squat","leg extension"],
+    primary: ["quad"], secondary: ["glute","hip"] },
+  { patterns: ["hip thrust","glute bridge","hip bridge","cable kickback","donkey kick"],
+    primary: ["glute"], secondary: ["hamstring"] },
+  { patterns: ["hamstring","leg curl","nordic","lying curl","seated curl","stiff-leg"],
+    primary: ["hamstring"], secondary: ["glute","lower_back"] },
+  { patterns: ["shoulder press","overhead press","ohp","military press","arnold press","front raise"],
+    primary: ["front_delt"], secondary: ["trap","tricep"] },
+  { patterns: ["lateral raise","side raise","face pull","reverse fly","rear delt","band pull"],
+    primary: ["rear_delt"], secondary: ["trap"] },
+  { patterns: ["shrug","upright row","clean","snatch","trap bar"],
+    primary: ["trap"], secondary: ["rear_delt"] },
+  { patterns: ["bicep curl","biceps curl","curl","hammer curl","preacher curl","concentration curl","chin-up","chinup"],
+    primary: ["bicep"], secondary: [] },
+  { patterns: ["tricep","triceps","skull crusher","close-grip","pushdown","overhead extension","kickback"],
+    primary: ["tricep"], secondary: [] },
+  { patterns: ["crunch","sit-up","sit up","plank","ab wheel","cable crunch","hollow","leg raise","toes to bar","russian twist"],
+    primary: ["abs"], secondary: [] },
+  { patterns: ["calf raise","calf press","tibialis"],
+    primary: ["calf"], secondary: [] },
+  { patterns: ["hip flexor","iliopsoas","hanging knee"],
+    primary: ["hip"], secondary: ["abs"] },
+];
+
+function getMuscleStimulus(
+  exercises: Array<{ id: string; name: string; sets?: number }>,
+  logs: Record<string, Array<{ weight: number | null; reps: number | null }>>,
+  nameOverrides: Record<string, string>,
+): Map<string, "high" | "medium"> {
+  const volume: Record<string, number> = {};
+  for (const ex of exercises) {
+    const n = (nameOverrides[ex.id] || ex.name).toLowerCase();
+    const exSets = logs[ex.id] || [];
+    let vol = 0;
+    for (const s of exSets) {
+      if (s.weight !== null && s.reps !== null && s.weight > 0 && s.reps > 0)
+        vol += s.weight * s.reps;
+    }
+    if (vol === 0) vol = (ex.sets || exSets.length || 1) * 10; // fallback
+    for (const entry of MUSCLE_MAP) {
+      if (entry.patterns.some(p => n.includes(p))) {
+        for (const m of entry.primary)   volume[m] = (volume[m] || 0) + vol;
+        for (const m of entry.secondary) volume[m] = (volume[m] || 0) + vol * 0.3;
+        break;
+      }
+    }
+  }
+  if (!Object.keys(volume).length) return new Map();
+  const maxVol = Math.max(...Object.values(volume));
+  const result = new Map<string, "high" | "medium">();
+  for (const [m, v] of Object.entries(volume)) {
+    if (v >= maxVol * 0.55) result.set(m, "high");
+    else if (v >= maxVol * 0.20) result.set(m, "medium");
+  }
+  return result;
+}
+
+function drawBodySilhouette(
+  ctx: CanvasRenderingContext2D,
+  cx: number, top: number, bodyH: number,
+  isFront: boolean,
+  stimulus: Map<string, "high" | "medium">,
+): void {
+  const s = bodyH;
+  const ell = (xc: number, yc: number, rx: number, ry: number) => {
+    ctx.beginPath();
+    ctx.ellipse(cx + xc * s, top + yc * s, rx * s, ry * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  // Base silhouette — subtle white
+  ctx.fillStyle = "rgba(255,255,255,0.11)";
+  ell(0, 0.073, 0.073, 0.073);       // head
+  ell(0, 0.155, 0.033, 0.030);       // neck
+  ell(0, 0.255, 0.215, 0.098);       // upper torso
+  ell(0, 0.365, 0.145, 0.073);       // lower torso
+  ell(0, 0.44,  0.175, 0.058);       // hips
+  ell(-0.295, 0.275, 0.065, 0.095);  // left upper arm
+  ell( 0.295, 0.275, 0.065, 0.095);  // right upper arm
+  ell(-0.285, 0.42,  0.055, 0.082);  // left forearm
+  ell( 0.285, 0.42,  0.055, 0.082);  // right forearm
+  ell(-0.115, 0.59,  0.108, 0.138);  // left thigh
+  ell( 0.115, 0.59,  0.108, 0.138);  // right thigh
+  ell(-0.098, 0.795, 0.082, 0.118);  // left shin
+  ell( 0.098, 0.795, 0.082, 0.118);  // right shin
+
+  // Muscle highlights
+  const col = (key: string) => {
+    const lvl = stimulus.get(key);
+    if (lvl === "high")   return "rgba(99,102,241,0.88)";
+    if (lvl === "medium") return "rgba(139,92,246,0.58)";
+    return null;
+  };
+  const muscle = (key: string, xc: number, yc: number, rx: number, ry: number) => {
+    const c = col(key); if (!c) return;
+    ctx.fillStyle = c; ell(xc, yc, rx, ry);
+  };
+  const glow = (key: string, xc: number, yc: number, rx: number, ry: number) => {
+    const lvl = stimulus.get(key); if (!lvl) return;
+    ctx.shadowColor = lvl === "high" ? "rgba(99,102,241,0.6)" : "rgba(139,92,246,0.4)";
+    ctx.shadowBlur = 18;
+    muscle(key, xc, yc, rx, ry);
+    ctx.shadowBlur = 0;
+  };
+
+  if (isFront) {
+    glow("chest",      0,      0.255, 0.165, 0.075);
+    glow("front_delt", -0.255, 0.21,  0.075, 0.068);
+    glow("front_delt",  0.255, 0.21,  0.075, 0.068);
+    glow("bicep",      -0.295, 0.295, 0.057, 0.080);
+    glow("bicep",       0.295, 0.295, 0.057, 0.080);
+    glow("abs",         0,     0.365, 0.105, 0.068);
+    glow("hip",        -0.098, 0.45,  0.082, 0.046);
+    glow("hip",         0.098, 0.45,  0.082, 0.046);
+    glow("quad",       -0.115, 0.59,  0.093, 0.126);
+    glow("quad",        0.115, 0.59,  0.093, 0.126);
+    glow("calf",       -0.095, 0.795, 0.068, 0.092);
+    glow("calf",        0.095, 0.795, 0.068, 0.092);
+  } else {
+    glow("trap",       0,      0.21,  0.148, 0.063);
+    glow("rear_delt",  -0.245, 0.21,  0.070, 0.063);
+    glow("rear_delt",   0.245, 0.21,  0.070, 0.063);
+    glow("lat",        -0.175, 0.305, 0.095, 0.093);
+    glow("lat",         0.175, 0.305, 0.095, 0.093);
+    glow("lower_back",  0,     0.375, 0.113, 0.063);
+    glow("tricep",     -0.285, 0.295, 0.053, 0.078);
+    glow("tricep",      0.285, 0.295, 0.053, 0.078);
+    glow("glute",      -0.125, 0.45,  0.116, 0.073);
+    glow("glute",       0.125, 0.45,  0.116, 0.073);
+    glow("hamstring",  -0.112, 0.59,  0.093, 0.126);
+    glow("hamstring",   0.112, 0.59,  0.093, 0.126);
+    glow("calf",       -0.090, 0.795, 0.066, 0.092);
+    glow("calf",        0.090, 0.795, 0.066, 0.092);
+  }
+}
+
 export default function ClientSession() {
   const [, params] = useRoute("/client/programmes/:programmeId/sessions/:sessionId");
   const [, setLocation] = useLocation();
@@ -166,6 +311,9 @@ export default function ClientSession() {
   const [shareImageLoading, setShareImageLoading] = useState(false);
   const [shareSaved, setShareSaved] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareIsStrength, setShareIsStrength] = useState(false);
+  const [shareShowTopSet, setShareShowTopSet] = useState(true);
+  const [shareShowComment, setShareShowComment] = useState(true);
 
   // Feedback state
   const [feedbackText, setFeedbackText] = useState("");
@@ -215,6 +363,23 @@ export default function ClientSession() {
       setRunIntervals([{ distance: "", pace: "" }]);
     }
   }, [session]);
+
+  // Live share preview — regenerate when strength toggles change
+  useEffect(() => {
+    if (!showShareModal || !shareIsStrength) return;
+    let cancelled = false;
+    setShareImageLoading(true);
+    const timer = setTimeout(async () => {
+      const file = await generateShareImage({ showTopSet: shareShowTopSet, showComment: shareShowComment });
+      if (cancelled) return;
+      if (file) {
+        setShareFile(file);
+        setShareImageUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
+      }
+      setShareImageLoading(false);
+    }, 200);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [shareShowTopSet, shareShowComment, showShareModal, shareIsStrength]);
 
   // ── Mobile-safe speech recognition ──────────────────────────────────────────
   // iOS Safari requires a *fresh* SpeechRecognition instance for every start()
@@ -718,7 +883,9 @@ export default function ClientSession() {
   );
 
   // ── Share workout — transparent PNG card ─────────────────────────────────────
-  async function generateShareImage(): Promise<File | null> {
+  async function generateShareImage(
+    opts: { showTopSet: boolean; showComment: boolean } = { showTopSet: true, showComment: true }
+  ): Promise<File | null> {
     await document.fonts.ready;
     const W = 1080, H = 1920;
     const canvas = document.createElement("canvas");
@@ -825,65 +992,99 @@ export default function ClientSession() {
     cy += 120;
 
     if (!isCondition) {
-      // ── STRENGTH — exercise names + total weight at bottom ─────────────────
+      // ── STRENGTH — muscle heat map ────────────────────────────────────────
 
-      // ── Exercise list (names only, no set/rep details) ────────────────────
-      const exFont = 52;
-      const exLineH = exFont + 24;
-      ctx.font = `500 ${exFont}px 'Inter', system-ui, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      // Calculate muscle stimulus from logged sets
+      const stimulus = getMuscleStimulus(allExercises, logs, nameOverrides);
 
-      // Reserve space at bottom for the weight callout (≈260px)
-      const weightBlockH = 260;
-      const listBottom = cardTop + cardH - weightBlockH - 40;
+      // Layout: two silhouettes side-by-side in the card content area
+      // Reserve bottom zone for optional top-set / comment callout
+      const bottomZoneH = (opts.showTopSet || opts.showComment) ? 200 : 60;
+      const heatMapTop = cy;
+      const heatMapBot = cardTop + cardH - bottomZoneH;
+      const heatMapH = heatMapBot - heatMapTop;
+      const heatMapW = right - cx;
 
-      allExercises.slice(0, 8).forEach((ex, i) => {
-        if (cy + exLineH > listBottom) return;
-        const exName = nameOverrides[ex.id] || ex.name;
-        const prefix = `${i + 1}.  `;
-        let line = `${prefix}${exName}`;
-        while (ctx.measureText(line).width > cardW - 120 && line.length > prefix.length)
-          line = line.slice(0, -1);
-        if (line !== `${prefix}${exName}`) line += "…";
-        ctx.fillText(line, cx, cy);
-        cy += exLineH;
-      });
+      // Each silhouette is allocated half the width with a gap
+      const gap = Math.round(heatMapW * 0.08);
+      const sideW = (heatMapW - gap) / 2;
 
-      // ── Divider above weight callout ──────────────────────────────────────
-      const divY = cardTop + cardH - weightBlockH - 20;
-      ctx.strokeStyle = "rgba(255,255,255,0.10)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(cx, divY); ctx.lineTo(right, divY); ctx.stroke();
+      // Body height: constrain by available height (aspect ratio ~ 0.38 wide per unit height)
+      const maxBodyH = heatMapH * 0.92;
+      const maxBodyHFromW = sideW / 0.38;
+      const bodyH = Math.min(maxBodyH, maxBodyHFromW);
 
-      // ── Total weight callout — always shown ───────────────────────────────
-      const kgStr = Math.round(totalKg).toLocaleString();
-      const calloutY = cardTop + cardH - 60; // baseline near card bottom
+      // Silhouette vertical offset to center in heat map area
+      const bodyTop = heatMapTop + (heatMapH - bodyH) / 2;
 
-      // Auto-size font so number + "kg" fits
-      let kgFs = 148;
-      ctx.font = `800 ${kgFs}px 'Inter', system-ui, sans-serif`;
-      while (ctx.measureText(kgStr + "  kg").width > cardW - 120 && kgFs > 72) {
-        kgFs -= 8;
-        ctx.font = `800 ${kgFs}px 'Inter', system-ui, sans-serif`;
+      // Center x of each silhouette
+      const frontCx = cx + sideW * 0.5;
+      const backCx  = cx + sideW + gap + sideW * 0.5;
+
+      // Labels: FRONT / BACK
+      ctx.fillStyle = "rgba(255,255,255,0.22)";
+      ctx.font = "600 26px 'Inter', system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("FRONT", frontCx, bodyTop - 20);
+      ctx.fillText("BACK", backCx, bodyTop - 20);
+      ctx.textAlign = "left";
+
+      // Draw the two silhouettes
+      drawBodySilhouette(ctx, frontCx, bodyTop, bodyH, true,  stimulus);
+      drawBodySilhouette(ctx, backCx,  bodyTop, bodyH, false, stimulus);
+
+      // Divider above bottom callout
+      const divY = heatMapBot + 20;
+      if (opts.showTopSet || opts.showComment) {
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(cx, divY); ctx.lineTo(right, divY); ctx.stroke();
       }
-      const kgNumW = ctx.measureText(kgStr).width;
 
-      // Indigo glow + number
-      ctx.shadowColor = "rgba(99, 102, 241, 0.65)";
-      ctx.shadowBlur = 60;
-      ctx.fillStyle = "rgba(165, 180, 252, 1)";
-      ctx.fillText(kgStr, cx, calloutY);
-      ctx.shadowBlur = 0;
+      // Optional: Top set callout
+      if (opts.showTopSet) {
+        let bestVol = 0;
+        let bestLabel = "";
+        for (const ex of allExercises) {
+          const exSets = logs[ex.id] || [];
+          for (const s of exSets) {
+            if (s.weight !== null && s.reps !== null && s.weight > 0 && s.reps > 0) {
+              const vol = s.weight * s.reps;
+              if (vol > bestVol) {
+                bestVol = vol;
+                const eName = nameOverrides[ex.id] || ex.name;
+                bestLabel = `${eName} · ${s.weight}kg × ${s.reps}`;
+              }
+            }
+          }
+        }
+        if (bestLabel) {
+          let calloutCy = divY + 50;
+          ctx.fillStyle = "rgba(255,255,255,0.25)";
+          ctx.font = "600 26px 'Inter', system-ui, sans-serif";
+          ctx.fillText("BEST SET", cx, calloutCy);
+          calloutCy += 44;
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "600 40px 'Inter', system-ui, sans-serif";
+          let bl = bestLabel;
+          while (ctx.measureText(bl).width > cardW - 120 && bl.length > 4)
+            bl = bl.slice(0, -1);
+          if (bl !== bestLabel) bl += "…";
+          ctx.fillText(bl, cx, calloutCy);
+        }
+      }
 
-      // "kg" unit
-      ctx.fillStyle = "rgba(165, 180, 252, 0.55)";
-      ctx.font = `600 ${Math.round(kgFs * 0.40)}px 'Inter', system-ui, sans-serif`;
-      ctx.fillText("kg", cx + kgNumW + 12, calloutY - Math.round(kgFs * 0.08));
-
-      // "TOTAL WEIGHT LIFTED" label above the number
-      ctx.fillStyle = "rgba(255,255,255,0.28)";
-      ctx.font = "600 28px 'Inter', system-ui, sans-serif";
-      ctx.fillText("TOTAL WEIGHT LIFTED", cx, divY + 36);
+      // Optional: session comment
+      if (opts.showComment && sessionComment.trim()) {
+        const comment = sessionComment.trim();
+        const commentCy = cardTop + cardH - 58;
+        ctx.fillStyle = "rgba(255,255,255,0.38)";
+        ctx.font = "italic 36px 'Inter', system-ui, sans-serif";
+        let cl = `"${comment}"`;
+        while (ctx.measureText(cl).width > cardW - 120 && cl.length > 4) cl = cl.slice(0, -1);
+        if (cl !== `"${comment}"`) cl += '…"';
+        ctx.fillText(cl, cx, commentCy);
+      }
 
     } else {
       // ── WOD / Run ─────────────────────────────────────────────────────────
@@ -968,11 +1169,17 @@ export default function ClientSession() {
   }
 
   async function openShareModal() {
+    const src = (session as any).source as string | undefined;
+    const isStrength = !(src === "wod_brain" || src === "run_brain" || src === "endurance_cycle");
+    setShareIsStrength(isStrength);
+    setShareShowTopSet(true);
+    setShareShowComment(true);
+    setShareSaved(false);
     setShowShareModal(true);
     setShareImageLoading(true);
     setShareImageUrl(null);
     setShareFile(null);
-    const file = await generateShareImage();
+    const file = await generateShareImage({ showTopSet: true, showComment: true });
     if (file) {
       setShareFile(file);
       setShareImageUrl(URL.createObjectURL(file));
@@ -1812,7 +2019,9 @@ export default function ClientSession() {
               <p className="font-semibold text-sm">Share Activity</p>
               <div className="w-12" />
             </div>
-            <div className="flex justify-center py-6 px-5">
+
+            {/* Card preview */}
+            <div className="flex justify-center py-5 px-5">
               <div
                 className="relative rounded-2xl overflow-hidden shadow-xl"
                 style={{
@@ -1839,7 +2048,44 @@ export default function ClientSession() {
                 )}
               </div>
             </div>
-            <div className="px-5 pb-8">
+
+            {/* Strength-only toggles */}
+            {shareIsStrength && (
+              <div className="px-5 pb-1">
+                <p className="text-sm font-semibold mb-3">Show on card</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShareShowTopSet(v => !v)}
+                    className={[
+                      "flex-1 flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm font-medium transition-all",
+                      shareShowTopSet
+                        ? "bg-primary/10 border-primary text-primary"
+                        : "bg-muted/40 border-border text-muted-foreground",
+                    ].join(" ")}
+                  >
+                    <span>Best set</span>
+                    {shareShowTopSet && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                  </button>
+                  <button
+                    onClick={() => setShareShowComment(v => !v)}
+                    className={[
+                      "flex-1 flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm font-medium transition-all",
+                      shareShowComment
+                        ? "bg-primary/10 border-primary text-primary"
+                        : "bg-muted/40 border-border text-muted-foreground",
+                    ].join(" ")}
+                  >
+                    <span>Comment</span>
+                    {shareShowComment && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2.5 text-center">
+                  Preview updates as you toggle · Muscle intensity based on logged volume
+                </p>
+              </div>
+            )}
+
+            <div className="px-5 py-5">
               <button
                 onClick={handleSaveImage}
                 disabled={shareImageLoading || !shareFile}
