@@ -207,6 +207,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[]; blockLength?: number | null; sessionsPerWeek?: number | null } | null>(null);
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
   const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety" | null>(null);
+  const [runEnv, setRunEnv] = useState<string[]>([]);
   const [generationLimitError, setGenerationLimitError] = useState(false);
 
   // Proactive client-side limit check from loaded programmes
@@ -232,6 +233,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     return !hyrox && !oly && !runOnly;
   }
 
+  function isRunDescription(text: string) {
+    return /\brun(ning|s)?\b|\bhybrid\b|\bcardio\b|\bwod\b|\binterval(s)?\b|\btreadmill\b|\btrack\b|\bhills?\b|\bhalf.?marathon\b|\bmarathon\b|\b5k\b|\b10k\b|\bendurance\b/i.test(text);
+  }
+
+  function toggleRunEnv(env: string) {
+    setRunEnv(prev => prev.includes(env) ? prev.filter(e => e !== env) : [...prev, env]);
+  }
+
   async function handleGenerateProgramme() {
     if (!describeText.trim() || !assignStartDate) return;
     setDescribeGenerating(true);
@@ -241,7 +250,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     let capturedRationale = "";
     try {
       // Step 1: get rationale quickly (shows during the long wait)
-      const body = { description: describeText.trim(), startDate: assignStartDate, strengthStyle: strengthStyle ?? "straight", clientId };
+      const envSuffix = runEnv.length > 0 ? ` Running environment: ${runEnv.join(", ")}.` : "";
+      const body = { description: describeText.trim() + envSuffix, startDate: assignStartDate, strengthStyle: strengthStyle ?? "straight", clientId };
       const rationaleRes = await fetch("/api/generate-rationale", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3180,7 +3190,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       )}
 
       {/* Build Your Plan Dialog */}
-      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setQuickAddWodOptions(null); setSavingAiSession(null); } }}>
+      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setQuickAddWodOptions(null); setSavingAiSession(null); setRunEnv([]); } }}>
         <DialogContent className="max-w-md max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -3389,6 +3399,34 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           <p className="text-xs text-muted-foreground mt-0.5">Wave loading, pyramids, drop sets, AMRAP finishers</p>
                         </button>
                       </div>
+                    </div>
+                  )}
+                  {describeText.trim() && isRunDescription(describeText) && (
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-sm font-medium">Running environment</label>
+                        <p className="text-xs text-muted-foreground mt-0.5">Select what you have access to</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { id: "road", label: "Road" },
+                          { id: "treadmill", label: "Treadmill" },
+                          { id: "track", label: "Track" },
+                          { id: "hills", label: "Hills" },
+                        ].map(({ id, label }) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => toggleRunEnv(id)}
+                            className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${runEnv.includes(id) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {runEnv.includes("treadmill") && (
+                        <p className="text-[11px] text-muted-foreground">Treadmill selected — intervals and quality sessions will be built for treadmill use.</p>
+                      )}
                     </div>
                   )}
                   <div className="space-y-1.5">
