@@ -1,0 +1,296 @@
+Add lightweight LLM coaching to the dashboard, but do NOT turn the dashboard into a chat app.
+
+CORE PRINCIPLE
+The dashboard must stay clean, fast, and low-clutter.
+LLM should feel like an optional coaching layer on top of the dashboard, not the main interface.
+
+We are anti-clutter.
+We do not want a large chat box on the home screen.
+We do not want an open-ended “ask anything” interface as the primary dashboard experience.
+
+======================================
+GOAL
+======================================
+
+Add a minimal “Ask about your training” entry point to the dashboard that opens a focused AI coaching experience.
+
+This should:
+- help users understand their data
+- help users know what to do next
+- feel contextual and useful
+- stay visually lightweight
+- preserve the current dashboard hierarchy and simplicity
+
+======================================
+UX REQUIREMENTS
+======================================
+
+Do NOT add:
+- a large text input on the dashboard
+- a persistent chat window on the dashboard
+- long AI summaries directly on the home screen
+- anything that makes the dashboard feel busy
+
+Instead, add:
+- one small entry point beneath the Fitness Score / Why it moved section
+- this can be:
+  - a compact button
+  - a pill button row
+  - or a single card with a CTA
+- keep it visually subtle and aligned with current design language
+
+Recommended copy options:
+- “Ask about your training”
+- “Get AI coaching”
+- “Explain my progress”
+Choose whichever fits the current UI best, but keep it short.
+
+Best placement:
+- below “Why it moved”
+- above “Weekly Win”
+This keeps it close to the score and explanation layer without interrupting the rest of the dashboard.
+
+======================================
+INTERACTION MODEL
+======================================
+
+When the user taps the entry point:
+- open a bottom sheet, modal, or dedicated lightweight panel
+- do NOT navigate into a full complex chat screen unless that is already the established product pattern
+- the first state should show suggested prompts
+- keep it focused and low-friction
+
+The user experience should feel like:
+1. Tap AI coaching entry point
+2. See 4 to 6 suggested questions based on their data
+3. Tap one question OR type their own short question
+4. Get a concise, data-aware answer
+5. Optionally ask a follow-up
+
+This should feel like a coach layer, not a general chatbot.
+
+======================================
+SUGGESTED PROMPTS
+======================================
+
+The initial AI panel should show context-aware suggested prompts.
+
+Examples:
+- “Why did my Fitness Score change?”
+- “What should I focus on this week?”
+- “Am I being consistent enough?”
+- “How do I improve my 5K estimate?”
+- “Why is my squat not moving?”
+- “What is holding back my progress?”
+
+Prompt suggestions should be generated from actual user data where possible.
+
+Rules:
+- show the most relevant 4 to 6 prompts only
+- keep prompts short
+- prioritise adherence, consistency, and next actions
+- avoid generic prompts that could apply to anyone
+
+Examples of dynamic prompt logic:
+- if no steady run data:
+  - show “How do I get a 5K estimate?”
+- if consistency is weak:
+  - show “Am I being consistent enough?”
+- if score dropped:
+  - show “Why did my Fitness Score drop?”
+- if one lift is flat:
+  - show “Why is my bench not improving?”
+- if user has low overall data:
+  - show “What should I log first?”
+
+======================================
+RESPONSE STYLE
+======================================
+
+AI responses must be:
+- concise
+- specific
+- grounded in the user’s data
+- action-oriented
+- calm and coach-like
+- non-cheesy
+
+Do NOT produce:
+- generic motivational fluff
+- long essays
+- vague statements
+- broad internet fitness advice unrelated to the user’s own training data
+
+Preferred response format:
+- short direct answer
+- 2 to 4 specific observations from the user’s data
+- 1 to 3 practical next steps
+
+Example structure:
+- one-sentence answer
+- brief bullets or short paragraphs
+- short “Focus this week” section if relevant
+
+Example:
+“Your Fitness Score dropped mainly because you missed 2 planned sessions. Your running trend is stable, but adherence is the main limiter right now. Focus this week on completing all planned sessions before worrying about intensity.”
+
+======================================
+LLM BEHAVIOUR RULES
+======================================
+
+The AI should prioritise:
+1. consistency
+2. adherence
+3. balanced lift + run training
+4. gradual performance improvement
+
+The AI should NOT encourage:
+- random max effort testing
+- chasing PRs every session
+- overreacting to one bad week
+- overcomplicating training decisions
+
+The AI should behave like a smart coach reviewing dashboard data.
+
+======================================
+DATA CONTEXT TO PASS INTO AI
+======================================
+
+When generating responses, provide the AI with structured context from the user’s dashboard and recent training data.
+
+Include, where available:
+- current Fitness Score
+- Fitness Score change vs last week and last month
+- explanation drivers behind score movement
+- sessions completed vs planned
+- adherence streak
+- whether both lifting and running were completed this week
+- Estimated 5K current value and trend
+- Squat e1RM current value and trend
+- Bench e1RM current value and trend
+- Deadlift e1RM current value and trend
+- Distance run this week vs last week
+- Volume lifted this week vs last week
+- whether data is insufficient or missing for any major metric
+- any relevant low-data or first-benchmark states
+
+Do not expose raw internal formulas to the user.
+Use the context to generate grounded responses.
+
+======================================
+UI / VISUAL RULES
+======================================
+
+Keep the AI entry point visually minimal.
+
+Requirements:
+- no large chat input on the dashboard
+- no multi-paragraph AI block on the dashboard
+- no cluttered prompt cloud
+- no more than one compact AI entry point visible on the home screen
+
+In the AI panel itself:
+- suggested prompts should be tappable chips or buttons
+- one text input can exist inside the panel for custom questions
+- keep spacing clean and mobile-friendly
+- responses should be easy to scan
+- do not make the panel feel like enterprise software
+
+======================================
+FOLLOW-UP EXPERIENCE
+======================================
+
+Allow lightweight follow-up questions inside the AI panel, but keep the interaction constrained and simple.
+
+Good examples:
+- “What should I prioritise?”
+- “How do I fix that?”
+- “Why is that happening?”
+- “What should next week look like?”
+
+Avoid turning this into a sprawling chat history.
+Prefer a simple session-style interaction.
+
+If needed:
+- keep only the current response visible
+- or show just a short recent thread
+- avoid excessive scroll length
+
+======================================
+EMPTY / LOW-DATA STATES
+======================================
+
+The AI should still be useful for users with limited data.
+
+Examples:
+- if very little data exists:
+  - explain what to log first
+  - recommend first useful actions
+- if no steady run exists:
+  - explain that a steady run is needed for Estimated 5K
+- if only one lift has data:
+  - speak only to that lift and consistency
+- if there is no formal plan:
+  - focus on baseline frequency and balanced training habits
+
+Never make low-data users feel the feature is broken.
+
+======================================
+IMPLEMENTATION DETAILS
+======================================
+
+Please implement this as a lightweight dashboard extension.
+
+Likely components / helpers:
+- Dashboard AI entry point component
+- AI coaching bottom sheet / modal / panel
+- Suggested prompts generator
+- AI response formatter
+- Dashboard context builder for AI
+
+Suggested helpers:
+- getSuggestedTrainingQuestions(userContext)
+- buildTrainingAiContext(userData)
+- answerTrainingQuestion(question, userContext)
+- formatTrainingAiResponse(response)
+- getLowDataCoachingPrompt(userContext)
+
+If there is already an LLM integration in the codebase, reuse it.
+If not, add a clean abstraction layer rather than hardcoding LLM calls inside UI components.
+
+======================================
+PROMPTING REQUIREMENTS
+======================================
+
+When sending context to the LLM, instruct it to:
+- answer only from the provided user data and app context
+- avoid inventing metrics or trends
+- acknowledge uncertainty when data is missing
+- give short practical coaching guidance
+- keep answers concise
+- prioritise adherence and consistency over optimisation gimmicks
+
+The AI should be honest when data is limited.
+Examples:
+- “There is not enough steady running data yet to judge your 5K trend”
+- “Your bench has a baseline, but there is not enough history yet to call it a trend”
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+The finished experience should:
+- add LLM coaching without cluttering the dashboard
+- preserve the clean dashboard layout
+- provide one small AI entry point on the dashboard
+- open a focused coaching panel with suggested prompts
+- generate useful answers grounded in the user’s own data
+- prioritise adherence and consistency in coaching advice
+- stay concise and mobile-friendly
+- feel like a coach layer, not a generic chatbot
+
+At the end, show me:
+1. which files/components were added or changed
+2. how suggested prompts are generated
+3. what structured dashboard context is passed into the AI
+4. any assumptions made about low-data users or follow-up handling

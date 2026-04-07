@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import {
   BarChart3, Trophy, CheckSquare, TrendingUp, Footprints,
-  Timer, Dumbbell, SlidersHorizontal, ChevronDown,
+  Timer, Dumbbell, SlidersHorizontal, ChevronDown, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import CoachingSheet from "@/components/coaching-sheet";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -500,6 +501,7 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
   const [prefs, setPrefs] = useState<DashboardPrefs>(() => loadPrefs(clientId));
   const [editOpen, setEditOpen] = useState(false);
   const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const [coachingOpen, setCoachingOpen] = useState(false);
 
   useEffect(() => { savePrefs(clientId, prefs); }, [prefs, clientId]);
 
@@ -628,6 +630,16 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
           </div>
         )}
       </div>
+
+      {/* ── AI Coaching entry point ──────────────────────────── */}
+      <button
+        onClick={() => setCoachingOpen(true)}
+        className="w-full flex items-center gap-2.5 px-4 py-3 rounded-2xl border bg-card hover:bg-muted/40 transition-colors text-left -mt-2"
+      >
+        <Sparkles className="w-4 h-4 text-primary shrink-0" />
+        <span className="text-[13px] text-muted-foreground font-medium flex-1">Ask about your training</span>
+        <span className="text-[11px] text-muted-foreground/50">→</span>
+      </button>
 
       {/* ── 2. Weekly Win ────────────────────────────────────── */}
       {prefs.showWeeklyWin && (
@@ -848,6 +860,16 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
           Edit Dashboard
         </Button>
       </div>
+
+      {/* ── AI Coaching sheet ────────────────────────────────── */}
+      <CoachingSheet
+        open={coachingOpen}
+        onOpenChange={setCoachingOpen}
+        analytics={analytics}
+        thisWeekData={thisWeekData}
+        lastWeekData={lastWeekData}
+        clientId={clientId}
+      />
 
       {/* ── Preferences sheet ────────────────────────────────── */}
       <Sheet open={editOpen} onOpenChange={setEditOpen}>

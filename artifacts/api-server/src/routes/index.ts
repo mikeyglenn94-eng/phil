@@ -14,6 +14,7 @@ import xlsUploadRouter from "./xls-upload";
 import calendarCommandRouter from "./calendar-command";
 import sessionLibraryRouter from "./session-library";
 import analyticsRouter from "./analytics";
+import coachingRouter from "./coaching";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(brainRouter);
 router.use(runSessionsRouter);
 router.use(sessionLibraryRouter);
 router.use(analyticsRouter);
+router.use(coachingRouter);
 
 export default router;
