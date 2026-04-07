@@ -53,36 +53,36 @@ function toTitleCase(s: string): string {
 }
 
 // ── Muscle heat map ────────────────────────────────────────────────────────────
+// Zone names: shoulder, chest, bicep, forearm, core, quad, calf (front)
+//             shoulder, upper_back, lat, tricep, lower_back, glute, hamstring, calf (back)
 
 const MUSCLE_MAP: Array<{ patterns: string[]; primary: string[]; secondary: string[] }> = [
   { patterns: ["bench press","chest press","fly","flye","push-up","pushup","pec dec","cable crossover","dip"],
-    primary: ["chest"], secondary: ["front_delt","tricep"] },
+    primary: ["chest"], secondary: ["shoulder","tricep"] },
   { patterns: ["row","pull-up","pullup","pull up","pulldown","lat pull","seated cable"],
-    primary: ["lat"], secondary: ["rear_delt","bicep"] },
+    primary: ["lat"], secondary: ["upper_back","shoulder","bicep","forearm"] },
   { patterns: ["deadlift","rdl","romanian","good morning","back extension","hyperextension"],
-    primary: ["lower_back","hamstring"], secondary: ["glute","trap"] },
+    primary: ["lower_back","hamstring"], secondary: ["glute","upper_back"] },
   { patterns: ["squat","leg press","lunge","step-up","split squat","hack squat","goblet squat","front squat","leg extension"],
-    primary: ["quad"], secondary: ["glute","hip"] },
+    primary: ["quad"], secondary: ["glute"] },
   { patterns: ["hip thrust","glute bridge","hip bridge","cable kickback","donkey kick"],
     primary: ["glute"], secondary: ["hamstring"] },
   { patterns: ["hamstring","leg curl","nordic","lying curl","seated curl","stiff-leg"],
     primary: ["hamstring"], secondary: ["glute","lower_back"] },
   { patterns: ["shoulder press","overhead press","ohp","military press","arnold press","front raise"],
-    primary: ["front_delt"], secondary: ["trap","tricep"] },
+    primary: ["shoulder"], secondary: ["upper_back","tricep"] },
   { patterns: ["lateral raise","side raise","face pull","reverse fly","rear delt","band pull"],
-    primary: ["rear_delt"], secondary: ["trap"] },
+    primary: ["shoulder"], secondary: ["upper_back"] },
   { patterns: ["shrug","upright row","clean","snatch","trap bar"],
-    primary: ["trap"], secondary: ["rear_delt"] },
+    primary: ["upper_back"], secondary: ["shoulder"] },
   { patterns: ["bicep curl","biceps curl","curl","hammer curl","preacher curl","concentration curl","chin-up","chinup"],
-    primary: ["bicep"], secondary: [] },
+    primary: ["bicep"], secondary: ["forearm"] },
   { patterns: ["tricep","triceps","skull crusher","close-grip","pushdown","overhead extension","kickback"],
     primary: ["tricep"], secondary: [] },
   { patterns: ["crunch","sit-up","sit up","plank","ab wheel","cable crunch","hollow","leg raise","toes to bar","russian twist"],
-    primary: ["abs"], secondary: [] },
+    primary: ["core"], secondary: [] },
   { patterns: ["calf raise","calf press","tibialis"],
     primary: ["calf"], secondary: [] },
-  { patterns: ["hip flexor","iliopsoas","hanging knee"],
-    primary: ["hip"], secondary: ["abs"] },
 ];
 
 function getMuscleStimulus(
@@ -99,7 +99,7 @@ function getMuscleStimulus(
       if (s.weight !== null && s.reps !== null && s.weight > 0 && s.reps > 0)
         vol += s.weight * s.reps;
     }
-    if (vol === 0) vol = (ex.sets || exSets.length || 1) * 10; // fallback
+    if (vol === 0) vol = (ex.sets || exSets.length || 1) * 10;
     for (const entry of MUSCLE_MAP) {
       if (entry.patterns.some(p => n.includes(p))) {
         for (const m of entry.primary)   volume[m] = (volume[m] || 0) + vol;
@@ -118,82 +118,121 @@ function getMuscleStimulus(
   return result;
 }
 
+// Aspect ratio constant: total silhouette width (arms included) = BODY_W_RATIO * bodyH
+const BODY_W_RATIO = 0.64;
+
 function drawBodySilhouette(
   ctx: CanvasRenderingContext2D,
   cx: number, top: number, bodyH: number,
   isFront: boolean,
   stimulus: Map<string, "high" | "medium">,
 ): void {
-  const s = bodyH;
-  const ell = (xc: number, yc: number, rx: number, ry: number) => {
+  const S = bodyH;
+
+  // Helper: fill an ellipse at normalised (dx, dy) coords relative to body centre/top
+  const ell = (dx: number, dy: number, rx: number, ry: number) => {
     ctx.beginPath();
-    ctx.ellipse(cx + xc * s, top + yc * s, rx * s, ry * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + dx * S, top + dy * S, rx * S, ry * S, 0, 0, Math.PI * 2);
     ctx.fill();
   };
 
-  // Base silhouette — subtle white
-  ctx.fillStyle = "rgba(255,255,255,0.11)";
-  ell(0, 0.073, 0.073, 0.073);       // head
-  ell(0, 0.155, 0.033, 0.030);       // neck
-  ell(0, 0.255, 0.215, 0.098);       // upper torso
-  ell(0, 0.365, 0.145, 0.073);       // lower torso
-  ell(0, 0.44,  0.175, 0.058);       // hips
-  ell(-0.295, 0.275, 0.065, 0.095);  // left upper arm
-  ell( 0.295, 0.275, 0.065, 0.095);  // right upper arm
-  ell(-0.285, 0.42,  0.055, 0.082);  // left forearm
-  ell( 0.285, 0.42,  0.055, 0.082);  // right forearm
-  ell(-0.115, 0.59,  0.108, 0.138);  // left thigh
-  ell( 0.115, 0.59,  0.108, 0.138);  // right thigh
-  ell(-0.098, 0.795, 0.082, 0.118);  // left shin
-  ell( 0.098, 0.795, 0.082, 0.118);  // right shin
+  // ── Base silhouette ────────────────────────────────────────────────────────
+  // All parts drawn in the same muted colour and overlapping → continuous body shape.
+  // Limbs use highly elongated ellipses (ry >> rx) so they look like limbs, not blobs.
+  ctx.fillStyle = "rgba(255,255,255,0.13)";
 
-  // Muscle highlights
-  const col = (key: string) => {
+  // Head
+  ell(0,      0.072,  0.073,  0.073);
+  // Neck (overlaps head base and shoulder band)
+  ell(0,      0.152,  0.036,  0.044);
+  // Shoulder band — wide horizontal, creates broad athletic shoulders
+  ell(0,      0.205,  0.258,  0.060);
+  // Chest / upper-torso block
+  ell(0,      0.278,  0.175,  0.088);
+  // Abdomen / lower-torso block
+  ell(0,      0.358,  0.138,  0.078);
+  // Pelvis / hips
+  ell(0,      0.428,  0.178,  0.065);
+
+  // LEFT upper arm — very elongated vertical ellipse (limb shape, not blob)
+  ell(-0.262, 0.282,  0.056,  0.118);
+  // RIGHT upper arm
+  ell( 0.262, 0.282,  0.056,  0.118);
+  // LEFT forearm — taller and narrower still
+  ell(-0.258, 0.430,  0.044,  0.096);
+  // RIGHT forearm
+  ell( 0.258, 0.430,  0.044,  0.096);
+  // LEFT hand
+  ell(-0.252, 0.540,  0.038,  0.042);
+  // RIGHT hand
+  ell( 0.252, 0.540,  0.038,  0.042);
+
+  // LEFT thigh — tall, slightly wider than shin
+  ell(-0.108, 0.598,  0.090,  0.148);
+  // RIGHT thigh
+  ell( 0.108, 0.598,  0.090,  0.148);
+  // LEFT shin — taller, narrower
+  ell(-0.096, 0.792,  0.072,  0.118);
+  // RIGHT shin
+  ell( 0.096, 0.792,  0.072,  0.118);
+  // Feet (small, at the base)
+  ell(-0.092, 0.942,  0.068,  0.044);
+  ell( 0.092, 0.942,  0.068,  0.044);
+
+  // ── Muscle zone overlays ───────────────────────────────────────────────────
+  const zone = (key: string, dx: number, dy: number, rx: number, ry: number) => {
     const lvl = stimulus.get(key);
-    if (lvl === "high")   return "rgba(99,102,241,0.88)";
-    if (lvl === "medium") return "rgba(139,92,246,0.58)";
-    return null;
-  };
-  const muscle = (key: string, xc: number, yc: number, rx: number, ry: number) => {
-    const c = col(key); if (!c) return;
-    ctx.fillStyle = c; ell(xc, yc, rx, ry);
-  };
-  const glow = (key: string, xc: number, yc: number, rx: number, ry: number) => {
-    const lvl = stimulus.get(key); if (!lvl) return;
-    ctx.shadowColor = lvl === "high" ? "rgba(99,102,241,0.6)" : "rgba(139,92,246,0.4)";
-    ctx.shadowBlur = 18;
-    muscle(key, xc, yc, rx, ry);
+    if (!lvl) return;
+    ctx.fillStyle = lvl === "high" ? "rgba(99,102,241,0.86)" : "rgba(139,92,246,0.56)";
+    ctx.shadowColor = lvl === "high" ? "rgba(99,102,241,0.50)" : "rgba(139,92,246,0.30)";
+    ctx.shadowBlur = 14;
+    ell(dx, dy, rx, ry);
     ctx.shadowBlur = 0;
   };
 
   if (isFront) {
-    glow("chest",      0,      0.255, 0.165, 0.075);
-    glow("front_delt", -0.255, 0.21,  0.075, 0.068);
-    glow("front_delt",  0.255, 0.21,  0.075, 0.068);
-    glow("bicep",      -0.295, 0.295, 0.057, 0.080);
-    glow("bicep",       0.295, 0.295, 0.057, 0.080);
-    glow("abs",         0,     0.365, 0.105, 0.068);
-    glow("hip",        -0.098, 0.45,  0.082, 0.046);
-    glow("hip",         0.098, 0.45,  0.082, 0.046);
-    glow("quad",       -0.115, 0.59,  0.093, 0.126);
-    glow("quad",        0.115, 0.59,  0.093, 0.126);
-    glow("calf",       -0.095, 0.795, 0.068, 0.092);
-    glow("calf",        0.095, 0.795, 0.068, 0.092);
+    // Shoulders (anterior deltoid caps sit on top of the shoulder band)
+    zone("shoulder",   -0.218, 0.208, 0.072, 0.055);
+    zone("shoulder",    0.218, 0.208, 0.072, 0.055);
+    // Chest (pectorals — fills upper torso block)
+    zone("chest",       0,     0.278, 0.148, 0.075);
+    // Biceps (elongated to match the upper-arm shape)
+    zone("bicep",      -0.262, 0.285, 0.040, 0.092);
+    zone("bicep",       0.262, 0.285, 0.040, 0.092);
+    // Forearms
+    zone("forearm",    -0.257, 0.428, 0.030, 0.072);
+    zone("forearm",     0.257, 0.428, 0.030, 0.072);
+    // Core / abs (lower torso block)
+    zone("core",        0,     0.358, 0.105, 0.065);
+    // Quads (fills thigh region)
+    zone("quad",       -0.108, 0.596, 0.076, 0.126);
+    zone("quad",        0.108, 0.596, 0.076, 0.126);
+    // Calves (front portion of shin)
+    zone("calf",       -0.094, 0.792, 0.054, 0.090);
+    zone("calf",        0.094, 0.792, 0.054, 0.090);
   } else {
-    glow("trap",       0,      0.21,  0.148, 0.063);
-    glow("rear_delt",  -0.245, 0.21,  0.070, 0.063);
-    glow("rear_delt",   0.245, 0.21,  0.070, 0.063);
-    glow("lat",        -0.175, 0.305, 0.095, 0.093);
-    glow("lat",         0.175, 0.305, 0.095, 0.093);
-    glow("lower_back",  0,     0.375, 0.113, 0.063);
-    glow("tricep",     -0.285, 0.295, 0.053, 0.078);
-    glow("tricep",      0.285, 0.295, 0.053, 0.078);
-    glow("glute",      -0.125, 0.45,  0.116, 0.073);
-    glow("glute",       0.125, 0.45,  0.116, 0.073);
-    glow("hamstring",  -0.112, 0.59,  0.093, 0.126);
-    glow("hamstring",   0.112, 0.59,  0.093, 0.126);
-    glow("calf",       -0.090, 0.795, 0.066, 0.092);
-    glow("calf",        0.090, 0.795, 0.066, 0.092);
+    // Shoulders (posterior deltoid)
+    zone("shoulder",   -0.218, 0.208, 0.072, 0.055);
+    zone("shoulder",    0.218, 0.208, 0.072, 0.055);
+    // Upper back / traps (spans the shoulder band)
+    zone("upper_back",  0,     0.224, 0.168, 0.060);
+    // Lats (wide fan shape over mid-torso sides)
+    zone("lat",        -0.162, 0.308, 0.085, 0.094);
+    zone("lat",         0.162, 0.308, 0.085, 0.094);
+    // Triceps (back of upper arm)
+    zone("tricep",     -0.262, 0.285, 0.040, 0.092);
+    zone("tricep",      0.262, 0.285, 0.040, 0.092);
+    // Lower back / erectors
+    zone("lower_back",  0,     0.366, 0.112, 0.064);
+    // Glutes (fills pelvis/hip region)
+    zone("glute",      -0.112, 0.438, 0.112, 0.065);
+    zone("glute",       0.112, 0.438, 0.112, 0.065);
+    // Hamstrings (back of thigh)
+    zone("hamstring",  -0.106, 0.596, 0.076, 0.126);
+    zone("hamstring",   0.106, 0.596, 0.076, 0.126);
+    // Calves (back of shin — gastrocnemius)
+    zone("calf",       -0.090, 0.792, 0.054, 0.090);
+    zone("calf",        0.090, 0.792, 0.054, 0.090);
   }
 }
 
@@ -1009,9 +1048,9 @@ export default function ClientSession() {
       const gap = Math.round(heatMapW * 0.08);
       const sideW = (heatMapW - gap) / 2;
 
-      // Body height: constrain by available height (aspect ratio ~ 0.38 wide per unit height)
+      // Body height: constrain so total width (BODY_W_RATIO * bodyH) fits in sideW
       const maxBodyH = heatMapH * 0.92;
-      const maxBodyHFromW = sideW / 0.38;
+      const maxBodyHFromW = sideW / BODY_W_RATIO;
       const bodyH = Math.min(maxBodyH, maxBodyHFromW);
 
       // Silhouette vertical offset to center in heat map area

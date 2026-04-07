@@ -1,0 +1,69 @@
+Rebuild the body heatmap using Option A: a real human silhouette as the base.
+
+Goal:
+Replace the current blob-style body map with a clean, anatomically believable front and back silhouette that feels premium and readable.
+
+Instructions:
+
+1. Use a proper SVG human silhouette as the foundation
+- Create or import a clean front-view and back-view human silhouette
+- Keep it minimal and stylised, but anatomically correct
+- Front and back figures must match in scale and proportions
+- Use one consistent silhouette style for both
+
+2. Build the heatmap as overlay zones on top of the silhouette
+- Do NOT build the body out of circles or blob shapes anymore
+- Keep the silhouette as the base layer
+- Add separate overlay zones for each muscle region
+
+3. Use these muscle zones only
+Front:
+- shoulders
+- chest
+- biceps
+- forearms
+- core
+- quads
+- calves
+
+Back:
+- shoulders
+- upper back
+- lats
+- triceps
+- lower back
+- glutes
+- hamstrings
+- calves
+
+4. Zone design rules
+- Each zone should fit naturally inside the silhouette
+- Curves should follow the body shape
+- Left and right sides should be symmetrical
+- Front and back zones should feel like the same person, not two different drawings
+- Keep the number of zones low and clean
+
+5. Heatmap styling
+- Inactive zones: muted dark grey with low opacity
+- Active zones: blue / purple fill with subtle glow
+- High activation zones: brighter fill and slightly stronger glow
+- Keep the glow restrained and premium, not neon or gamified
+
+6. Layout and spacing
+- Keep front and back bodies aligned horizontally
+- Give them enough space so they do not feel cramped
+- Make labels like FRONT and BACK small and subtle
+- Preserve generous padding inside the card
+
+7. Visual style
+- Premium, minimal, dark-mode athletic UI
+- Think modern performance app, not medical app and not gaming UI
+- Avoid cartoon anatomy, round blobs, or exaggerated muscle shapes
+
+8. Fallback
+- If the silhouette-based heatmap still looks weak, replace it temporarily with a clean text-based muscle load summary instead of showing a poor visual
+
+Success criteria:
+- The body should be instantly recognisable as a real human silhouette
+- The heatmap should communicate trained regions at a glance
+- The component should feel trustworthy and polished
