@@ -1,0 +1,96 @@
+Use the uploaded file `shutterstock_2315081475.svg` as the fixed anatomical body asset for the muscle heatmap.
+
+Important:
+- Do not generate or redraw the body
+- Do not use blob shapes, circles, div-based silhouettes, or approximated anatomy
+- Use this SVG as the single source of truth for the body graphic
+
+What to do:
+
+1. Import `shutterstock_2315081475.svg`
+- Use it as the exact front/back anatomical figure
+- Preserve the original proportions and clinical look
+- Keep the background transparent
+
+2. Clean the SVG for app use
+- Remove any background fills
+- Remove any text labels, watermarks, or decorative elements if present
+- Keep only the body artwork needed for the heatmap
+
+3. Prepare the SVG for interactivity
+- Ensure muscle regions are exposed as separate SVG paths or groups wherever possible
+- Add stable IDs to key regions so they can be styled programmatically
+
+Use these IDs where possible:
+
+Front:
+- front_shoulders_left
+- front_shoulders_right
+- front_chest
+- front_biceps_left
+- front_biceps_right
+- front_forearms_left
+- front_forearms_right
+- front_core
+- front_quads_left
+- front_quads_right
+- front_calves_left
+- front_calves_right
+
+Back:
+- back_shoulders_left
+- back_shoulders_right
+- back_upper_back
+- back_lats_left
+- back_lats_right
+- back_triceps_left
+- back_triceps_right
+- back_lower_back
+- back_glutes
+- back_hamstrings_left
+- back_hamstrings_right
+- back_calves_left
+- back_calves_right
+
+4. If the SVG is grouped awkwardly
+- Ungroup and restructure it as needed
+- Preserve the exact visual geometry
+- Do not change the anatomical drawing style
+- Prioritise anatomical accuracy over convenience
+
+5. Heatmap styling
+- Inactive regions: muted grey / low opacity
+- Active regions: blue-purple fill
+- High activation: brighter blue-purple fill
+- Keep the clinical linework visible
+- No heavy glow, no cartoon look, no soft blob boundaries
+
+6. Layout
+- Display front and back figures side by side
+- Keep them aligned and evenly spaced
+- Transparent background only
+- No dark card behind them
+
+7. Overlay mode
+- The silhouettes and text should sit directly on top of video/content
+- No backing panel or container behind the UI
+- Use subtle text shadow only if needed for legibility
+
+8. Keep the surrounding UI clean
+- Improve spacing so nothing feels squashed
+- Increase line-height for labels and values
+- Add more breathing room between the title, body graphic, and best set text
+
+9. Bottom summary formatting
+Show:
+Bench Press
+60kg × 10
+
+Use a clean stacked layout with proper spacing, not cramped inline text.
+
+10. Success criteria
+- The body looks clinical and anatomical
+- No weird lumps or fake silhouette construction
+- Transparent background only
+- Works as a premium overlay on training video
+- Easy to style muscle regions programmatically from workout data
