@@ -1,0 +1,66 @@
+Clarify and correct the social sharing feature so it is built from dashboard-level data, not individual session data.
+
+CORE PRINCIPLE
+The share overlay represents overall progress, not a single workout.
+It must be generated from dashboard metrics (weekly / monthly aggregation), not from individual session logs.
+
+======================================
+PRIMARY DATA SOURCE
+======================================
+
+The share overlay must pull from dashboard-level data:
+
+Include:
+- Fitness Score
+- Fitness Score weekly change
+- aggregated performance improvements:
+  - e1RM changes (squat, bench, deadlift)
+  - estimated 5K change (if confident)
+  - pace change
+  - distance change
+
+Do NOT build the overlay from:
+- a single workout
+- a single session log
+- per-session stats
+
+======================================
+USER FLOW
+======================================
+
+Entry point must be from the dashboard:
+
+- user taps “Share” on the dashboard screen
+- NOT inside a session view
+- NOT tied to a specific workout
+
+======================================
+TOGGLE SYSTEM CONTEXT
+======================================
+
+When user toggles stats:
+- these refer to dashboard-level changes
+
+Examples:
+- “Squat +5kg” = change over the selected period (e.g. this week vs last week)
+- “Distance +12km” = total distance increase week-on-week
+
+======================================
+SESSION SHARING (NOT IN SCOPE)
+======================================
+
+Do NOT implement session-based sharing in this feature.
+
+Session sharing may be added later as a separate feature, but:
+- it should not be part of this overlay system
+- it should not influence current implementation
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+After this change:
+- share overlay is always based on dashboard data
+- entry point is only from the dashboard
+- no session-specific data is used
+- overlay reflects progress over time, not a single workout

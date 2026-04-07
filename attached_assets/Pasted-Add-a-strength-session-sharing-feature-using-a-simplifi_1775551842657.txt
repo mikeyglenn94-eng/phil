@@ -1,0 +1,106 @@
+Add a strength session sharing feature using a simplified muscle heat map visual.
+
+CORE PRINCIPLE
+The share output should be visually intuitive and instantly understandable.
+It should show “what was trained” using a clean, stylised muscle heat map.
+Do not replicate detailed or clinical anatomy charts.
+
+======================================
+FEATURE: STRENGTH SESSION OVERLAY
+======================================
+
+Create a shareable overlay for strength sessions that includes:
+
+1. Session name (small, top)
+- e.g. “Upper Body”, “Pull Day”
+
+2. Central visual:
+- front and back human silhouette
+- muscle heat map
+
+3. Optional bottom section (minimal):
+- top set OR
+- number of exercises OR
+- user comment
+
+======================================
+HEAT MAP DESIGN
+======================================
+
+- use simplified human silhouettes (front + back)
+- no labels
+- no legend
+- no “untargeted” colour
+
+Use 2–3 intensity levels:
+- high stimulus → strong colour
+- medium → lighter colour
+- low → optional or omit
+
+Avoid:
+- overly detailed muscle segmentation
+- medical-style visuals
+
+======================================
+DATA MAPPING
+======================================
+
+Map exercises to muscle groups using existing exercise data.
+
+Calculate stimulus using:
+- simple volume proxy (sets or reps × weight)
+OR
+- number of sets per muscle group
+
+Bucket into:
+- high
+- medium
+- low
+
+No need for precise physiological modelling.
+
+======================================
+SIMPLICITY RULE
+======================================
+
+Prioritise:
+- visual clarity
+- aesthetic quality
+- immediate understanding
+
+Do NOT:
+- display exercise tables
+- display full workout logs
+- show too many stats
+
+======================================
+UX FLOW
+======================================
+
+1. User taps “Share”
+2. Selects “Session”
+3. Selects strength session
+4. Preview appears
+5. Optional toggles:
+   - show top set
+   - show comment
+6. Export as transparent overlay
+
+======================================
+DESIGN RULES
+======================================
+
+- transparent background
+- bold, clean visuals
+- minimal text
+- readable on varied backgrounds
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+- heat map clearly shows trained muscle groups
+- design is clean and shareable
+- output is not cluttered
+- users can recognise what was trained instantly
+- overlay works well on Instagram stories

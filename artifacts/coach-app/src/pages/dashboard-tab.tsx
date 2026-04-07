@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   BarChart3, Trophy, CheckSquare, TrendingUp, Footprints,
   Timer, Dumbbell, SlidersHorizontal, ChevronDown, Sparkles,
+  Share2, Download, Check, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -497,15 +498,343 @@ interface Props {
   clientId: number;
 }
 
+// ── Share helpers ─────────────────────────────────────────────────
+
+const SHARE_STAT_OPTIONS = [
+  { key: "fitnessScore", label: "Fitness Score" },
+  { key: "squat",        label: "Squat e1RM" },
+  { key: "bench",        label: "Bench e1RM" },
+  { key: "deadlift",     label: "Deadlift e1RM" },
+  { key: "est5K",        label: "Est. 5K" },
+  { key: "distance",     label: "Distance" },
+  { key: "pace",         label: "Pace" },
+] as const;
+
+type ShareStatKey = typeof SHARE_STAT_OPTIONS[number]["key"];
+
+function parsePaceStr(pace: string): number | null {
+  const m = pace.match(/^(\d+):(\d{2})$/);
+  return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+}
+function secsToMmss(secs: number): string {
+  const m = Math.floor(secs / 60), s = Math.round(secs % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+type StatDisplay = { label: string; primary: string; delta: string | null };
+
+function buildDashboardStat(
+  key: ShareStatKey,
+  analytics: AnalyticsData,
+  thisWeekData: AnalyticsData["byWeek"][number] | undefined,
+  lastWeekData: AnalyticsData["byWeek"][number] | undefined,
+): StatDisplay | null {
+  if (key === "fitnessScore") {
+    const curr = analytics.fitnessScore.current;
+    const ch   = analytics.fitnessScore.change;
+    const delta = ch != null && ch !== 0 ? (ch > 0 ? `+${ch} pts` : `${ch} pts`) : null;
+    return { label: "FITNESS SCORE", primary: String(Math.round(curr)), delta };
+  }
+  if (key === "squat" || key === "bench" || key === "deadlift") {
+    const d = analytics.strengthMetrics[key];
+    if (d.current == null) return null;
+    const diff = d.previous != null ? +(d.current - d.previous).toFixed(1) : null;
+    const delta = diff != null && Math.abs(diff) >= 0.5
+      ? (diff > 0 ? `+${diff}kg` : `${diff}kg`) : null;
+    return { label: key.toUpperCase(), primary: `${d.current}kg`, delta };
+  }
+  if (key === "est5K") {
+    const curr = analytics.runMetrics.estimated5K.current;
+    const prev = analytics.runMetrics.estimated5K.previous;
+    if (!curr) return null;
+    let delta: string | null = null;
+    if (prev) {
+      const cs = parsePaceStr(curr.replace(/[^0-9:]/g,"").trim());
+      const ps = parsePaceStr(prev.replace(/[^0-9:]/g,"").trim());
+      if (cs != null && ps != null && cs !== ps) {
+        const d = Math.round(cs - ps);
+        delta = d < 0 ? `-${secsToMmss(Math.abs(d))}` : `+${secsToMmss(d)}`;
+      }
+    }
+    return { label: "EST. 5K", primary: curr, delta };
+  }
+  if (key === "distance") {
+    const curr = thisWeekData?.totalDistance ?? 0;
+    if (curr <= 0) return null;
+    const prev = lastWeekData?.totalDistance ?? 0;
+    const diff = +(curr - prev).toFixed(1);
+    const delta = prev > 0 && diff !== 0 ? (diff > 0 ? `+${diff}km` : `${diff}km`) : null;
+    return { label: "DISTANCE", primary: `${curr.toFixed(1)}km`, delta };
+  }
+  if (key === "pace") {
+    const currPace = thisWeekData?.avgPace;
+    if (!currPace) return null;
+    const prevPace = lastWeekData?.avgPace;
+    let delta: string | null = null;
+    if (prevPace) {
+      const cs = parsePaceStr(currPace), ps = parsePaceStr(prevPace);
+      if (cs != null && ps != null && cs !== ps) {
+        const d = Math.round(cs - ps);
+        delta = d < 0 ? `-${secsToMmss(Math.abs(d))}` : `+${secsToMmss(d)}`;
+      }
+    }
+    return { label: "AVG PACE", primary: `${currPace}/km`, delta };
+  }
+  return null;
+}
+
+// ── Progress card canvas generation ──────────────────────────────
+
+async function generateProgressCard(
+  analytics: AnalyticsData,
+  thisWeekData: AnalyticsData["byWeek"][number] | undefined,
+  lastWeekData: AnalyticsData["byWeek"][number] | undefined,
+  activeStats: ShareStatKey[],
+): Promise<File | null> {
+  await document.fonts.ready;
+  const W = 1080, H = 1920;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = 56;
+  const cardTop = Math.round(H * 0.38);
+  const cardH = H - cardTop - 40;
+  const cardW = W - pad * 2;
+  const cx = pad + 60;
+  const right = pad + cardW - 60;
+
+  function rr(x: number, y: number, w: number, h: number, r: number) {
+    ctx!.beginPath();
+    ctx!.moveTo(x + r, y);
+    ctx!.arcTo(x + w, y, x + w, y + h, r);
+    ctx!.arcTo(x + w, y + h, x, y + h, r);
+    ctx!.arcTo(x, y + h, x, y, r);
+    ctx!.arcTo(x, y, x + w, y, r);
+    ctx!.closePath();
+  }
+
+  // Card background
+  ctx.fillStyle = "rgba(5,5,16,0.93)";
+  rr(pad, cardTop, cardW, cardH, 52);
+  ctx.fill();
+
+  // Indigo accent bar at top of card
+  const ag = ctx.createLinearGradient(pad, 0, pad + 320, 0);
+  ag.addColorStop(0, "rgba(99,102,241,1)");
+  ag.addColorStop(1, "rgba(139,92,246,0)");
+  ctx.fillStyle = ag;
+  rr(pad, cardTop, 340, 6, 3);
+  ctx.fill();
+
+  let cy = cardTop + 72;
+
+  // Logo square
+  const ls = 72;
+  rr(cx, cy - ls * 0.78, ls, ls, 18);
+  ctx.fillStyle = "rgba(99,102,241,1)";
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = `900 ${Math.round(ls * 0.62)}px Georgia, serif`;
+  ctx.textAlign = "center";
+  ctx.fillText("M", cx + ls / 2, cy - ls * 0.78 + ls * 0.72);
+  ctx.textAlign = "left";
+
+  // Date (top-right)
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase();
+  ctx.fillStyle = "rgba(255,255,255,0.40)";
+  ctx.font = "500 30px 'Inter', system-ui, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(`WEEK OF ${dateStr}`, right, cy);
+  ctx.textAlign = "left";
+  cy += 72;
+
+  // Heading
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 72px 'Inter', system-ui, sans-serif";
+  ctx.fillText("YOUR PROGRESS", cx, cy);
+  cy += 28;
+
+  // Divider
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx, cy + 24); ctx.lineTo(right, cy + 24); ctx.stroke();
+  cy += 96;
+
+  // Stats
+  const resolved = activeStats
+    .map(k => buildDashboardStat(k, analytics, thisWeekData, lastWeekData))
+    .filter((s): s is StatDisplay => s !== null);
+
+  if (resolved.length === 0) {
+    ctx.fillStyle = "rgba(255,255,255,0.28)";
+    ctx.font = "400 40px 'Inter', system-ui, sans-serif";
+    ctx.fillText("Select stats to show on this card", cx, cy);
+  } else if (resolved.length === 1) {
+    const s = resolved[0];
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.font = "600 30px 'Inter', system-ui, sans-serif";
+    ctx.fillText(s.label, cx, cy);
+    cy += 48;
+    const fs = 160;
+    ctx.font = `800 ${fs}px 'Inter', system-ui, sans-serif`;
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = "rgba(99,102,241,0.60)"; ctx.shadowBlur = 56;
+    ctx.fillText(s.primary, cx, cy + fs * 0.78);
+    ctx.shadowBlur = 0;
+    if (s.delta) {
+      const vw = ctx.measureText(s.primary).width;
+      const pos = s.delta.startsWith("+");
+      ctx.fillStyle = pos ? "rgba(134,239,172,0.90)" : "rgba(248,113,113,0.90)";
+      ctx.font = "700 60px 'Inter', system-ui, sans-serif";
+      ctx.fillText(s.delta, cx + vw + 20, cy + fs * 0.78 - 40);
+    }
+  } else {
+    const rowH = resolved.length <= 2 ? 160 : resolved.length <= 3 ? 130 : 110;
+    for (const s of resolved) {
+      const vfs = resolved.length <= 2 ? 96 : resolved.length <= 3 ? 80 : 70;
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.font = "600 28px 'Inter', system-ui, sans-serif";
+      ctx.fillText(s.label, cx, cy + 28);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `700 ${vfs}px 'Inter', system-ui, sans-serif`;
+      ctx.fillText(s.primary, cx, cy + 28 + vfs * 0.8);
+      if (s.delta) {
+        const vw = ctx.measureText(s.primary).width;
+        const pos = s.delta.startsWith("+");
+        ctx.fillStyle = pos ? "rgba(134,239,172,0.90)" : "rgba(248,113,113,0.90)";
+        ctx.font = `600 ${Math.round(vfs * 0.5)}px 'Inter', system-ui, sans-serif`;
+        ctx.fillText(s.delta, cx + vw + 14, cy + 28 + vfs * 0.8 - 10);
+      }
+      cy += rowH;
+    }
+  }
+
+  return new Promise(resolve => {
+    canvas.toBlob(blob => {
+      if (!blob) { resolve(null); return; }
+      resolve(new File([blob], "axis-progress.png", { type: "image/png" }));
+    }, "image/png");
+  });
+}
+
+// ── Main component ────────────────────────────────────────────────
+
 export default function DashboardTab({ analytics, isLoading, clientId }: Props) {
   const [prefs, setPrefs] = useState<DashboardPrefs>(() => loadPrefs(clientId));
   const [editOpen, setEditOpen] = useState(false);
   const [drilldownOpen, setDrilldownOpen] = useState(false);
   const [coachingOpen, setCoachingOpen] = useState(false);
 
+  // Share state
+  const [showShare, setShowShare] = useState(false);
+  const [shareStats, setShareStats] = useState<ShareStatKey[]>([]);
+  const [shareMaxReached, setShareMaxReached] = useState(false);
+  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+  const [shareFile, setShareFile] = useState<File | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareSaved, setShareSaved] = useState(false);
+
   useEffect(() => { savePrefs(clientId, prefs); }, [prefs, clientId]);
 
+  // Live share preview — regenerate on stat toggle
+  useEffect(() => {
+    if (!showShare) return;
+    let cancelled = false;
+    setShareLoading(true);
+
+    const compute = () => {
+      const today = new Date();
+      const dow = today.getDay();
+      const diffToMon = dow === 0 ? -6 : 1 - dow;
+      const thisMonday = new Date(today);
+      thisMonday.setDate(today.getDate() + diffToMon);
+      const thisWkStr = thisMonday.toISOString().slice(0, 10);
+      const lastWkDate = new Date(thisMonday);
+      lastWkDate.setDate(lastWkDate.getDate() - 7);
+      const lastWkStr = lastWkDate.toISOString().slice(0, 10);
+      return {
+        twd: analytics.byWeek.find(w => w.weekStart === thisWkStr),
+        lwd: analytics.byWeek.find(w => w.weekStart === lastWkStr),
+      };
+    };
+
+    const timer = setTimeout(async () => {
+      const { twd, lwd } = compute();
+      const file = await generateProgressCard(analytics, twd, lwd, shareStats);
+      if (cancelled) return;
+      if (file) {
+        setShareFile(file);
+        setShareImageUrl(prev => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(file);
+        });
+      }
+      setShareLoading(false);
+    }, 180);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [showShare, shareStats, analytics]);
+
   const toggle = (k: keyof DashboardPrefs) => setPrefs(p => ({ ...p, [k]: !p[k] }));
+
+  // ── Share handlers ─────────────────────────────────────────────
+  function openShareModal() {
+    // Smart defaults: fitness score + best available strength or run stat
+    const defaults: ShareStatKey[] = ["fitnessScore"];
+    const extras: ShareStatKey[] = ["squat", "bench", "deadlift", "est5K", "distance", "pace"];
+    for (const k of extras) {
+      const ok = buildDashboardStat(k, analytics,
+        analytics.byWeek.find(w => {
+          const today = new Date();
+          const dow = today.getDay();
+          const d = new Date(today);
+          d.setDate(today.getDate() + (dow === 0 ? -6 : 1 - dow));
+          return w.weekStart === d.toISOString().slice(0, 10);
+        }),
+        undefined,
+      );
+      if (ok) { defaults.push(k); break; }
+    }
+    setShareStats(defaults);
+    setShareMaxReached(false);
+    setShareSaved(false);
+    setShareImageUrl(null);
+    setShareFile(null);
+    setShowShare(true);
+  }
+
+  function closeShareModal() {
+    setShowShare(false);
+    setShareImageUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+  }
+
+  function toggleShareStat(key: ShareStatKey) {
+    setShareStats(prev => {
+      if (prev.includes(key)) {
+        setShareMaxReached(false);
+        return prev.filter(k => k !== key);
+      }
+      if (prev.length >= 4) { setShareMaxReached(true); return prev; }
+      setShareMaxReached(false);
+      return [...prev, key];
+    });
+  }
+
+  async function handleSaveImage() {
+    if (!shareFile) return;
+    const url = URL.createObjectURL(shareFile);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "axis-progress.png";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setShareSaved(true);
+    setTimeout(() => setShareSaved(false), 3000);
+  }
 
   if (isLoading) {
     return (
@@ -638,6 +967,16 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
       >
         <Sparkles className="w-4 h-4 text-primary shrink-0" />
         <span className="text-[13px] text-muted-foreground font-medium flex-1">Ask about your training</span>
+        <span className="text-[11px] text-muted-foreground/50">→</span>
+      </button>
+
+      {/* ── Share progress card ───────────────────────────────── */}
+      <button
+        onClick={openShareModal}
+        className="w-full flex items-center gap-2.5 px-4 py-3 rounded-2xl border bg-card hover:bg-muted/40 transition-colors text-left -mt-2"
+      >
+        <Share2 className="w-4 h-4 text-primary shrink-0" />
+        <span className="text-[13px] text-muted-foreground font-medium flex-1">Share your progress</span>
         <span className="text-[11px] text-muted-foreground/50">→</span>
       </button>
 
@@ -900,6 +1239,109 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
           <Button className="w-full mt-6" onClick={() => setEditOpen(false)}>Done</Button>
         </SheetContent>
       </Sheet>
+
+      {/* ── Share Progress Modal ──────────────────────────────── */}
+      {showShare && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/60" onClick={closeShareModal} />
+          <div className="relative bg-background rounded-t-3xl shadow-2xl max-h-[94vh] overflow-y-auto">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/25" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b">
+              <button onClick={closeShareModal} className="text-sm text-foreground font-medium">Close</button>
+              <p className="font-semibold text-sm">Share Progress</p>
+              <div className="w-12" />
+            </div>
+
+            {/* Card preview */}
+            <div className="flex justify-center py-5 px-5">
+              <div
+                className="relative rounded-2xl overflow-hidden shadow-xl"
+                style={{
+                  width: 210, height: 374,
+                  backgroundImage: "linear-gradient(45deg,#8b8b8b 25%,transparent 25%),linear-gradient(-45deg,#8b8b8b 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#8b8b8b 75%),linear-gradient(-45deg,transparent 75%,#8b8b8b 75%)",
+                  backgroundSize: "18px 18px",
+                  backgroundPosition: "0 0,0 9px,9px -9px,-9px 0",
+                  backgroundColor: "#6b7280",
+                }}
+              >
+                <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 bg-black/55 backdrop-blur-sm text-white text-[9px] font-bold tracking-wider px-2 py-0.5 rounded">
+                  TRANSPARENT
+                </div>
+                {shareLoading ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-white/60" />
+                  </div>
+                ) : shareImageUrl ? (
+                  <img src={shareImageUrl} alt="Progress card preview" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <p className="text-white/40 text-xs text-center px-4">Generating…</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Stat toggles */}
+            <div className="px-5 pb-1">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold">Show on card</p>
+                {shareMaxReached && (
+                  <p className="text-xs text-amber-500 font-medium">Max 4 stats</p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {SHARE_STAT_OPTIONS.map(opt => {
+                  const available = buildDashboardStat(opt.key, analytics, thisWeekData, lastWeekData) !== null;
+                  const active = shareStats.includes(opt.key);
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => available && toggleShareStat(opt.key)}
+                      disabled={!available}
+                      className={[
+                        "flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm font-medium transition-all",
+                        available
+                          ? active
+                            ? "bg-primary/10 border-primary text-primary"
+                            : "bg-muted/40 border-border text-foreground hover:border-primary/40"
+                          : "opacity-30 bg-muted/20 border-border text-muted-foreground cursor-not-allowed",
+                      ].join(" ")}
+                    >
+                      <span>{opt.label}</span>
+                      {available && active && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                      {!available && <span className="text-[10px]">no data</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2.5 text-center">
+                Deltas show vs previous week · Preview updates as you toggle
+              </p>
+            </div>
+
+            {/* Save button */}
+            <div className="px-5 py-5">
+              <button
+                onClick={handleSaveImage}
+                disabled={shareLoading || !shareFile}
+                className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-base shadow-md disabled:opacity-50 transition-opacity hover:bg-primary/90"
+              >
+                {shareSaved
+                  ? <><Check className="w-5 h-5" /> Saved!</>
+                  : shareLoading
+                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Generating…</>
+                  : <><Download className="w-5 h-5" /> Save Image</>
+                }
+              </button>
+              <p className="text-xs text-muted-foreground text-center mt-3">
+                Transparent PNG — layer over your content in Instagram or any editor.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

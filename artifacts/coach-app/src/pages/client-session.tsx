@@ -166,16 +166,6 @@ export default function ClientSession() {
   const [shareImageLoading, setShareImageLoading] = useState(false);
   const [shareSaved, setShareSaved] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
-  const [shareStats, setShareStats] = useState<string[]>([]);
-  const [shareStatsMaxReached, setShareStatsMaxReached] = useState(false);
-  type ShareAnalyticsData = {
-    fitnessScore: { current: number | null; previous: number | null };
-    squat: { current: number | null; previous: number | null };
-    bench: { current: number | null; previous: number | null };
-    deadlift: { current: number | null; previous: number | null };
-    est5K: { current: string | null; previous: string | null };
-  };
-  const [shareAnalytics, setShareAnalytics] = useState<ShareAnalyticsData | null>(null);
 
   // Feedback state
   const [feedbackText, setFeedbackText] = useState("");
@@ -225,32 +215,6 @@ export default function ClientSession() {
       setRunIntervals([{ distance: "", pace: "" }]);
     }
   }, [session]);
-
-  // Live share-image regeneration whenever active stats or analytics change
-  useEffect(() => {
-    if (!showShareModal) return;
-    let cancelled = false;
-    setShareImageLoading(true);
-    const timer = setTimeout(async () => {
-      const file = await generateShareImageWithStats(shareStats, shareAnalytics);
-      if (!cancelled && file) {
-        setShareImageUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
-        setShareFile(file);
-      }
-      if (!cancelled) setShareImageLoading(false);
-    }, 160);
-    return () => { cancelled = true; clearTimeout(timer); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shareStats, shareAnalytics, showShareModal]);
-
-  function toggleShareStat(key: string) {
-    setShareStatsMaxReached(false);
-    setShareStats(prev => {
-      if (prev.includes(key)) return prev.filter(k => k !== key);
-      if (prev.length >= 4) { setShareStatsMaxReached(true); return prev; }
-      return [...prev, key];
-    });
-  }
 
   // ── Mobile-safe speech recognition ──────────────────────────────────────────
   // iOS Safari requires a *fresh* SpeechRecognition instance for every start()
@@ -753,85 +717,8 @@ export default function ClientSession() {
     </div>
   );
 
-  // ── Share stat helpers ────────────────────────────────────────────────────────
-  function parsePaceToSecs(pace: string): number | null {
-    const m = pace.match(/^(\d+):(\d{2})$/);
-    if (!m) return null;
-    return parseInt(m[1]) * 60 + parseInt(m[2]);
-  }
-  function secsToMmss(secs: number): string {
-    const m = Math.floor(secs / 60), s = Math.round(secs % 60);
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  }
-
-  const SHARE_STAT_OPTIONS = [
-    { key: "fitnessScore", label: "Fitness Score" },
-    { key: "distance",     label: "Distance" },
-    { key: "pace",         label: "Pace" },
-    { key: "est5K",        label: "Est. 5K" },
-    { key: "squat",        label: "Squat" },
-    { key: "bench",        label: "Bench" },
-    { key: "deadlift",     label: "Deadlift" },
-  ] as const;
-
-  function buildStatDisplay(
-    key: string,
-    analyticsData: { fitnessScore: { current: number | null; previous: number | null }; squat: { current: number | null; previous: number | null }; bench: { current: number | null; previous: number | null }; deadlift: { current: number | null; previous: number | null }; est5K: { current: string | null; previous: string | null } } | null,
-    intervals: RunInterval[]
-  ): { label: string; primary: string; delta: string | null } | null {
-    if (key === "fitnessScore") {
-      const curr = analyticsData?.fitnessScore.current;
-      const prev = analyticsData?.fitnessScore.previous;
-      if (curr == null) return null;
-      const diff = (prev != null) ? Math.round(curr - prev) : null;
-      const delta = diff != null && diff !== 0 ? (diff > 0 ? `+${diff} pts` : `${diff} pts`) : null;
-      return { label: "FITNESS SCORE", primary: String(Math.round(curr)), delta };
-    }
-    if (key === "squat" || key === "bench" || key === "deadlift") {
-      const d = analyticsData?.[key as "squat" | "bench" | "deadlift"];
-      if (!d || d.current == null) return null;
-      const diff = d.previous != null ? d.current - d.previous : null;
-      const delta = diff != null && Math.abs(diff) >= 0.5 ? (diff > 0 ? `+${diff}kg` : `${diff}kg`) : null;
-      return { label: key.toUpperCase(), primary: `${d.current}kg`, delta };
-    }
-    if (key === "est5K") {
-      const curr = analyticsData?.est5K.current;
-      const prev = analyticsData?.est5K.previous;
-      if (!curr) return null;
-      let delta: string | null = null;
-      if (prev) {
-        const cs = parsePaceToSecs(curr.replace(/[^0-9:]/g, "").trim());
-        const ps = parsePaceToSecs(prev.replace(/[^0-9:]/g, "").trim());
-        if (cs != null && ps != null) {
-          const diffS = Math.round(cs - ps);
-          if (diffS !== 0) delta = diffS < 0 ? `-${secsToMmss(Math.abs(diffS))}` : `+${secsToMmss(diffS)}`;
-        }
-      }
-      return { label: "EST. 5K", primary: curr, delta };
-    }
-    if (key === "distance") {
-      const total = intervals.reduce((sum, r) => sum + (parseFloat(r.distance) || 0), 0);
-      if (total <= 0) return null;
-      return { label: "DISTANCE", primary: `${total.toFixed(1)} km`, delta: null };
-    }
-    if (key === "pace") {
-      const valid = intervals.filter(r => r.pace && parsePaceToSecs(r.pace) != null);
-      if (valid.length === 0) return null;
-      const avgSecs = valid.reduce((sum, r) => sum + parsePaceToSecs(r.pace)!, 0) / valid.length;
-      return { label: "AVG PACE", primary: `${secsToMmss(avgSecs)}/km`, delta: null };
-    }
-    return null;
-  }
-
-  function isStatAvailable(key: string, analyticsData: { fitnessScore: { current: number | null; previous: number | null }; squat: { current: number | null; previous: number | null }; bench: { current: number | null; previous: number | null }; deadlift: { current: number | null; previous: number | null }; est5K: { current: string | null; previous: string | null } } | null, intervals: RunInterval[]): boolean {
-    return buildStatDisplay(key, analyticsData, intervals) !== null;
-  }
-
   // ── Share workout — transparent PNG card ─────────────────────────────────────
-  async function generateShareImageWithStats(
-    activeStats: string[],
-    analyticsData: { fitnessScore: { current: number | null; previous: number | null }; squat: { current: number | null; previous: number | null }; bench: { current: number | null; previous: number | null }; deadlift: { current: number | null; previous: number | null }; est5K: { current: string | null; previous: string | null } } | null
-  ): Promise<File | null> {
+  async function generateShareImage(): Promise<File | null> {
     await document.fonts.ready;
     const W = 1080, H = 1920;
     const canvas = document.createElement("canvas");
@@ -936,64 +823,6 @@ export default function ClientSession() {
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(cx, cy + 26); ctx.lineTo(right, cy + 26); ctx.stroke();
     cy += 120;
-
-    // ── Stat overlay band ─────────────────────────────────────────────────────
-    const resolvedStats = activeStats
-      .map(k => buildStatDisplay(k, analyticsData, runIntervals))
-      .filter((s): s is NonNullable<typeof s> => s !== null);
-
-    if (resolvedStats.length > 0) {
-      const count = resolvedStats.length;
-
-      if (count === 1) {
-        // Large single-stat layout
-        const s = resolvedStats[0];
-        ctx.fillStyle = "rgba(255,255,255,0.32)";
-        ctx.font = "600 30px 'Inter', system-ui, sans-serif";
-        ctx.fillText(s.label, cx, cy);
-        cy += 46;
-        const valFs = 128;
-        ctx.font = `800 ${valFs}px 'Inter', system-ui, sans-serif`;
-        ctx.fillStyle = "#ffffff";
-        ctx.shadowColor = "rgba(99,102,241,0.55)"; ctx.shadowBlur = 48;
-        ctx.fillText(s.primary, cx, cy + valFs * 0.78);
-        ctx.shadowBlur = 0;
-        if (s.delta) {
-          const valW = ctx.measureText(s.primary).width;
-          const isPos = s.delta.startsWith("+");
-          ctx.fillStyle = isPos ? "rgba(134,239,172,0.90)" : "rgba(248,113,113,0.90)";
-          ctx.font = "700 52px 'Inter', system-ui, sans-serif";
-          ctx.fillText(s.delta, cx + valW + 20, cy + valFs * 0.78 - 36);
-        }
-        cy += valFs + 24;
-      } else {
-        // Compact 2-4 stat rows
-        const rowH = 88;
-        for (const s of resolvedStats) {
-          ctx.fillStyle = "rgba(255,255,255,0.35)";
-          ctx.font = "600 28px 'Inter', system-ui, sans-serif";
-          ctx.fillText(s.label, cx, cy + 28);
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "700 64px 'Inter', system-ui, sans-serif";
-          ctx.fillText(s.primary, cx, cy + 28 + 52);
-          if (s.delta) {
-            const valW = ctx.measureText(s.primary).width;
-            const isPos = s.delta.startsWith("+");
-            ctx.fillStyle = isPos ? "rgba(134,239,172,0.90)" : "rgba(248,113,113,0.90)";
-            ctx.font = "600 40px 'Inter', system-ui, sans-serif";
-            ctx.fillText(s.delta, cx + valW + 16, cy + 28 + 52 - 10);
-          }
-          cy += rowH;
-        }
-        cy += 8;
-      }
-
-      // Divider below stat band
-      ctx.strokeStyle = "rgba(255,255,255,0.08)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(right, cy); ctx.stroke();
-      cy += 44;
-    }
 
     if (!isCondition) {
       // ── STRENGTH — exercise names + total weight at bottom ─────────────────
@@ -1140,38 +969,15 @@ export default function ClientSession() {
 
   async function openShareModal() {
     setShowShareModal(true);
-    setShareStatsMaxReached(false);
+    setShareImageLoading(true);
     setShareImageUrl(null);
     setShareFile(null);
-    // Fetch analytics for delta values
-    try {
-      const clientId = (programme as any)?.clientId;
-      if (clientId) {
-        const res = await fetch(`/api/clients/${clientId}/analytics`);
-        if (res.ok) {
-          const data = await res.json();
-          const analyticsPayload: ShareAnalyticsData = {
-            fitnessScore: { current: data.fitnessScore?.current ?? null, previous: data.fitnessScore?.previousWeek ?? null },
-            squat:    { current: data.strengthMetrics?.squat?.current    ?? null, previous: data.strengthMetrics?.squat?.previous    ?? null },
-            bench:    { current: data.strengthMetrics?.bench?.current    ?? null, previous: data.strengthMetrics?.bench?.previous    ?? null },
-            deadlift: { current: data.strengthMetrics?.deadlift?.current ?? null, previous: data.strengthMetrics?.deadlift?.previous ?? null },
-            est5K:    { current: data.runMetrics?.estimated5K?.current   ?? null, previous: data.runMetrics?.estimated5K?.previous   ?? null },
-          };
-          setShareAnalytics(analyticsPayload);
-          // Smart defaults: fitness score + best available performance stat
-          const perfKeys = ["squat","bench","deadlift","est5K","distance","pace"] as const;
-          const bestPerf = perfKeys.find(k => buildStatDisplay(k, analyticsPayload, runIntervals) !== null);
-          const defaults = ["fitnessScore", ...(bestPerf ? [bestPerf] : [])];
-          setShareStats(defaults);
-        } else {
-          setShareStats(["fitnessScore"]);
-        }
-      } else {
-        setShareStats(["fitnessScore"]);
-      }
-    } catch {
-      setShareStats(["fitnessScore"]);
+    const file = await generateShareImage();
+    if (file) {
+      setShareFile(file);
+      setShareImageUrl(URL.createObjectURL(file));
     }
+    setShareImageLoading(false);
   }
 
   function closeShareModal() {
@@ -1997,20 +1803,16 @@ export default function ClientSession() {
       {showShareModal && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/60" onClick={closeShareModal} />
-
           <div className="relative bg-background rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-muted-foreground/25" />
             </div>
-
             <div className="flex items-center justify-between px-5 py-3 border-b">
               <button onClick={closeShareModal} className="text-sm text-foreground font-medium">Close</button>
               <p className="font-semibold text-sm">Share Activity</p>
               <div className="w-12" />
             </div>
-
-            {/* Card preview */}
-            <div className="flex justify-center py-5 px-5">
+            <div className="flex justify-center py-6 px-5">
               <div
                 className="relative rounded-2xl overflow-hidden shadow-xl"
                 style={{
@@ -2037,51 +1839,7 @@ export default function ClientSession() {
                 )}
               </div>
             </div>
-
-            {/* Stat toggles */}
-            <div className="px-5 pb-1">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-semibold">Show on overlay</p>
-                {shareStatsMaxReached && (
-                  <p className="text-xs text-amber-500 font-medium animate-pulse">Pick up to 4 stats</p>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {SHARE_STAT_OPTIONS.map(opt => {
-                  const available = isStatAvailable(opt.key, shareAnalytics, runIntervals);
-                  const active = shareStats.includes(opt.key);
-                  return (
-                    <button
-                      key={opt.key}
-                      onClick={() => available && toggleShareStat(opt.key)}
-                      disabled={!available}
-                      className={[
-                        "flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm font-medium transition-all",
-                        available
-                          ? active
-                            ? "bg-primary/10 border-primary text-primary"
-                            : "bg-muted/40 border-border text-foreground hover:border-primary/40"
-                          : "opacity-30 bg-muted/20 border-border text-muted-foreground cursor-not-allowed",
-                      ].join(" ")}
-                    >
-                      <span>{opt.label}</span>
-                      {available
-                        ? active
-                          ? <Check className="w-3.5 h-3.5 flex-shrink-0" />
-                          : null
-                        : <span className="text-[10px]">no data</span>
-                      }
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground mt-2.5 text-center">
-                Deltas show change vs previous week · Preview updates as you toggle
-              </p>
-            </div>
-
-            {/* Save button */}
-            <div className="px-5 py-5">
+            <div className="px-5 pb-8">
               <button
                 onClick={handleSaveImage}
                 disabled={shareImageLoading || !shareFile}
