@@ -579,7 +579,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     description: string;
     changes: { programmeId: number; sessions: Session[] }[];
   } | null>(null);
-  const [calendarView, setCalendarView] = useState<"month" | "week">("month");
+  const [calendarView, setCalendarView] = useState<"month" | "week">(
+    () => (sessionStorage.getItem("axis_calendar_view") as "month" | "week") || "month"
+  );
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [pasteMode, setPasteMode] = useState(false);
@@ -630,6 +632,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   // Clear history when switching clients
   useEffect(() => { setCalHistory([]); setCalFuture([]); }, [clientId]);
+  useEffect(() => { sessionStorage.setItem("axis_calendar_view", calendarView); }, [calendarView]);
 
   // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
   useEffect(() => {
