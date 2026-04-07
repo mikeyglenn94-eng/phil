@@ -411,7 +411,7 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - If a block is 4–6 weeks, plan which exercises to use in weeks 1–3 and which variations to rotate in from week 4 onwards. This should be a visible change, not just a small rep range tweak.
 
 ### 2. Intensity is the default for regular clients
-- Most clients train 4–5 times per week, once per day. At this frequency, they do NOT need large amounts of easy/Zone 2 volume. The Z2-heavy model comes from endurance professionals running 100+ miles per week doing two-a-day sessions — it does not apply here.
+- Most clients train 4–5 days per week. On busy days, they may do two sessions — a strength block in the morning and a WOD or run in the afternoon/evening. Same-day pairing is normal and expected in hybrid programmes.
 - Not every session should make the client want to throw up, but they should be working hard most of the time. Hard and purposeful is the standard. Easy volume for its own sake is a waste of a session.
 - This applies to both running and conditioning work. Do not pad programmes with easy filler. Every session earns its place by delivering a meaningful stimulus.
 
@@ -478,17 +478,40 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 ## Scheduling rules — use dayNumber, NOT dates
 - Sessions are positioned by **dayNumber** (integer), NOT by calendar date. Day 1 = the first training day of the programme (maps to startDate). Do NOT output a "date" field.
 - dayNumber is a simple day counter: Day 1, Day 2, Day 3... across the full programme. Rest days are simply gaps in the sequence.
-- Use these dayNumber patterns (offsets within each 7-day week):
-  - 3 sessions/week → week N sessions at days (N-1)×7+1, (N-1)×7+3, (N-1)×7+5
-  - 4 sessions/week → week N sessions at days (N-1)×7+1, (N-1)×7+2, (N-1)×7+4, (N-1)×7+6
-  - 5 sessions/week → week N sessions at days (N-1)×7+1, (N-1)×7+2, (N-1)×7+3, (N-1)×7+4, (N-1)×7+6
-  - 6 sessions/week → week N sessions at days (N-1)×7+1 through (N-1)×7+6
-- Example (4-day, 3-week programme): dayNumbers would be 1,2,4,6, 8,9,11,13, 15,16,18,20
+- **Multiple sessions can share the same dayNumber** — this places them on the same calendar day. Use this for same-day pairs (e.g. strength AM + WOD PM, strength + run). Each session still gets its own unique id.
+- Use these dayNumber patterns (offsets within each 7-day week), counting training DAYS not sessions:
+  - 3 training days/week → week N training days at (N-1)×7+1, (N-1)×7+3, (N-1)×7+5
+  - 4 training days/week → week N training days at (N-1)×7+1, (N-1)×7+2, (N-1)×7+4, (N-1)×7+6
+  - 5 training days/week → week N training days at (N-1)×7+1, (N-1)×7+2, (N-1)×7+3, (N-1)×7+4, (N-1)×7+6
+- Example (4-day week with same-day pairing, 3 weeks): days 1,1,2,4,6, 8,8,9,11,13, 15,15,16,18,20 — where day 1, 8, and 15 each have two sessions
 - NEVER use weekday names (Mon/Tue/Thu/Sat) to compute dates — use dayNumber integers only.
-- Spread sessions sensibly — avoid consecutive days where possible.
+- Spread training days sensibly — avoid consecutive days where possible. Same-day pairs are not consecutive-day issues.
 - Schedule for the number of weeks requested. **If no specific duration is mentioned, default to 6 weeks.** Hard maximum of 6 weeks. Never generate only 1 week of sessions unless the user explicitly asks for 1 week.
 - Generate varied sessions week to week — rotate movements, vary rep ranges, increase load (periodisation).
 - Each session must have a unique id: "session-gen-{unique 8 chars}"
+
+## Same-day session pairing rules
+
+When the description involves hybrid training (strength + WOD, strength + run, WOD + run), use same-day pairing to fit the full training load within the client's available days. Guidelines:
+
+**Valid pairings (use freely):**
+- Strength + WOD: strength block first (heavier compound work), WOD finisher in the same session slot or labelled as a second session
+- Strength + Run: strength block first, run after — works well when the run is a quality session (short, structured) or a steady run
+- Strength + steady run: always strength first, run second — keeps quality high on both
+- WOD + Run (short): WOD first, short quality run or sprint work after
+
+**Order always matters:**
+- Heavy compound strength always comes FIRST on a shared day — before cardio, before WODs
+- Never programme a long steady run before a strength session on the same day
+
+**When to put on separate days instead:**
+- When the run is long (30+ min sustained) — give it its own day or separate it from heavy lifting
+- When both sessions are high-intensity (two separate max-effort sessions) — better on different days
+
+**How to schedule same-day pairs:**
+- Give both sessions the same dayNumber integer
+- Each gets a distinct id, name, and complete session content
+- Example: dayNumber 1 → "Upper Body Strength" (strength session), dayNumber 1 → "WOD — Metcon Finisher" (wod_brain session)
 
 ## Endurance / cardio training principles (apply to ALL run sessions and any programme with significant running or cardio content)
 
