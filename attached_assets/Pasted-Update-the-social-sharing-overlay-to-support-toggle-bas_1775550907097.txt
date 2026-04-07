@@ -1,0 +1,110 @@
+Update the social sharing overlay to support toggle-based customisation while keeping the UI clean and constrained.
+
+CORE PRINCIPLE
+Users should be able to choose what stats to show.
+But the experience must remain minimal, structured, and high-quality.
+
+Do NOT allow full design control.
+Do NOT allow cluttered outputs.
+
+======================================
+TOGGLE-BASED CUSTOMISATION
+======================================
+
+Add a “Show on overlay” section in the share preview.
+
+Include toggles for:
+- Fitness Score
+- Distance
+- Pace
+- Estimated 5K
+- Squat
+- Bench
+- Deadlift
+
+======================================
+CONSTRAINTS
+======================================
+
+- maximum 4 items can be active at once
+- if user tries to exceed:
+  - show message:
+    “Pick up to 4 stats”
+  - prevent additional selections
+
+======================================
+DISPLAY RULES
+======================================
+
+- always show change (delta), not just raw values
+- examples:
+  - “Squat +5kg”
+  - “5K -42s”
+- only show current value if useful and clean
+
+======================================
+ESTIMATE HANDLING
+======================================
+
+For estimated stats (e1RM, 5K):
+- only display if confidence is acceptable
+- if not:
+  - hide or disable toggle
+- optionally show small “(est)” label
+
+======================================
+DEFAULT STATE
+======================================
+
+When opening Share:
+- pre-select:
+  - Fitness Score
+  - best available performance stat
+
+======================================
+LIVE PREVIEW
+======================================
+
+- overlay preview updates instantly as toggles change
+- user can:
+  - drag overlay
+  - resize overlay
+
+======================================
+LAYOUT LOGIC
+======================================
+
+- 1 stat → large, centred
+- 2 stats → stacked
+- 3–4 stats → compact vertical stack
+
+No grid layouts.
+No manual positioning of individual stats.
+
+======================================
+DESIGN RULES
+======================================
+
+- transparent background
+- minimal typography
+- strong hierarchy
+- no clutter
+- no backgrounds or cards
+
+======================================
+EXPORT
+======================================
+
+- export as high-resolution transparent PNG
+- ready for Instagram stories
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+- users can toggle stats on/off
+- overlay remains clean and readable
+- no more than 4 stats displayed
+- no low-confidence estimates shown
+- preview updates instantly
+- output looks premium and intentional
