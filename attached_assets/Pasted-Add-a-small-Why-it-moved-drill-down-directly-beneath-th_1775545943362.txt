@@ -1,0 +1,100 @@
+Add a small “Why it moved” drill-down directly beneath the Fitness Score section.
+
+PURPOSE
+Prevent Fitness Score from feeling arbitrary.
+Help users understand what actually drove the score change this week.
+Reinforce the behaviours we want:
+- consistency
+- adherence
+- balanced training
+- gradual performance improvement
+
+UI REQUIREMENTS
+- place this directly under the Fitness Score hero card
+- keep it compact and clean
+- default state can be collapsed or lightly summarised
+- user should be able to expand it to see more detail
+- this should feel like a small explanatory layer, not a big analytics section
+
+DEFAULT SUMMARY LINE
+Show a short one-line explanation such as:
+- “Driven by full consistency and stronger running trend”
+- “Lifted by session adherence, held back by missed runs”
+- “Improved through balanced training and a better 5K estimate”
+- “Held steady by consistent training despite flat performance markers”
+
+EXPANDED VIEW
+When expanded, show the main score drivers for the week in plain English.
+
+Example structure:
+- Consistency: positive
+  - Completed 4 of 4 planned sessions
+  - 5-week adherence streak maintained
+- Running trend: positive
+  - Estimated 5K improved by 36 seconds
+- Strength trend: neutral
+  - No major e1RM change this week
+- Balance: positive
+  - Both lifting and running completed this week
+
+Or, if week was weaker:
+- Consistency: negative
+  - Completed 2 of 4 planned sessions
+- Running trend: neutral
+  - Not enough steady running data yet
+- Strength trend: positive
+  - Bench e1RM up 2.5kg
+- Balance: negative
+  - No run logged this week
+
+BEHAVIOUR RULES
+- explain score movement in plain English
+- avoid percentages unless truly useful
+- avoid overly technical scoring language
+- do not expose internal weighting math directly in the default UI
+- do not show raw formulas to the user
+- focus on human-readable drivers
+
+TONE
+- factual
+- concise
+- non-cheesy
+- non-judgemental
+- should feel like useful coaching feedback, not gamification fluff
+
+IMPLEMENTATION REQUIREMENTS
+Create helper logic for score explanations, for example:
+- explainFitnessScoreChange(inputs)
+- getTopPositiveDrivers(inputs)
+- getTopNegativeDrivers(inputs)
+- formatScoreDriverSummary(drivers)
+
+The explanation system should:
+- identify top 2 to 4 drivers of weekly score movement
+- distinguish between positive, neutral, and negative contributors
+- prioritise adherence and consistency drivers over minor metric noise
+- gracefully handle missing data
+
+DISPLAY RULES
+For the compact version:
+- show one summary sentence only
+
+For the expanded version:
+- show grouped drivers such as:
+  - Consistency
+  - Running
+  - Strength
+  - Balance
+
+Optional:
+- include small up / flat / down indicators beside each category
+
+IMPORTANT
+This explanation layer should mirror the actual scoring logic closely enough that users trust it.
+It does not need to reveal exact point values, but it must not contradict the real score behaviour.
+
+ACCEPTANCE CRITERIA
+- user can quickly understand why their Fitness Score changed
+- the explanation reinforces adherence-first behaviour
+- the score feels credible, not arbitrary
+- the UI remains compact and mobile-friendly

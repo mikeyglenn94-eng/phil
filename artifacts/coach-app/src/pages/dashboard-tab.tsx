@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   BarChart3, Trophy, CheckSquare, TrendingUp, Footprints,
-  Timer, Dumbbell, SlidersHorizontal, X,
+  Timer, Dumbbell, SlidersHorizontal, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -150,6 +150,204 @@ function TimeDeltaBadge({ current, previous }: { current: string | null; previou
   );
 }
 
+// ── Score driver logic ────────────────────────────────────────────
+
+type Polarity = "positive" | "neutral" | "negative";
+
+interface ScoreDriver {
+  label: string;
+  polarity: Polarity;
+  polarityLabel: string;
+  lines: string[];
+}
+
+function computeScoreDrivers(analytics: AnalyticsData, thisWeekData: AnalyticsData["byWeek"][number] | undefined): ScoreDriver[] {
+  const { adherence, strengthMetrics, runMetrics } = analytics;
+  const drivers: ScoreDriver[] = [];
+
+  // ── Consistency ──────────────────────────────────────────────────
+  const { completed, planned } = adherence.thisWeek;
+  const ratio = planned > 0 ? completed / planned : null;
+  let cPolarity: Polarity;
+  let cLabel: string;
+  const cLines: string[] = [];
+
+  if (ratio === null) {
+    cPolarity = completed > 0 ? "neutral" : "negative";
+    cLabel = cPolarity === "neutral" ? "some activity" : "no sessions yet";
+    cLines.push(completed > 0 ? `${completed} session${completed !== 1 ? "s" : ""} logged (no formal plan)` : "No sessions logged this week");
+  } else if (ratio >= 1) {
+    cPolarity = "positive";
+    cLabel = "positive";
+    cLines.push(`Completed ${completed} of ${planned} planned session${planned !== 1 ? "s" : ""}`);
+    if (adherence.streak >= 2) cLines.push(`${adherence.streak}-week adherence streak`);
+    if (adherence.bothModalities) cLines.push("Both lifting and running completed");
+  } else if (ratio >= 0.5) {
+    cPolarity = "neutral";
+    cLabel = "partial";
+    cLines.push(`Completed ${completed} of ${planned} planned session${planned !== 1 ? "s" : ""}`);
+    const missed = planned - completed;
+    cLines.push(`${missed} session${missed !== 1 ? "s" : ""} remaining this week`);
+  } else {
+    cPolarity = "negative";
+    cLabel = "negative";
+    cLines.push(`Completed ${completed} of ${planned} planned session${planned !== 1 ? "s" : ""}`);
+    const missed = planned - completed;
+    cLines.push(`${missed} session${missed !== 1 ? "s" : ""} missed — biggest drag on score`);
+  }
+  drivers.push({ label: "Consistency", polarity: cPolarity, polarityLabel: cLabel, lines: cLines });
+
+  // ── Running ──────────────────────────────────────────────────────
+  const { estimated5K } = runMetrics;
+  let rPolarity: Polarity;
+  let rLabel: string;
+  const rLines: string[] = [];
+
+  if (!estimated5K.current) {
+    rPolarity = "neutral";
+    rLabel = "no data";
+    rLines.push("Not enough steady running data yet");
+    rLines.push("Needs a continuous run of 3km+ to estimate");
+  } else if (!estimated5K.previous) {
+    rPolarity = "neutral";
+    rLabel = "first estimate";
+    rLines.push(`Estimated 5K: ${estimated5K.current}`);
+    rLines.push("No previous estimate to compare yet");
+  } else {
+    const cs = paceToSeconds(estimated5K.current);
+    const ps = paceToSeconds(estimated5K.previous);
+    if (cs && ps) {
+      const diff = ps - cs; // positive = faster
+      if (diff > 10) {
+        rPolarity = "positive";
+        rLabel = "positive";
+        rLines.push(`Estimated 5K improved by ${diff}s`);
+        rLines.push(`${estimated5K.previous} → ${estimated5K.current}`);
+      } else if (diff < -10) {
+        rPolarity = "negative";
+        rLabel = "negative";
+        rLines.push(`Estimated 5K slower by ${Math.abs(diff)}s`);
+        rLines.push(`${estimated5K.previous} → ${estimated5K.current}`);
+      } else {
+        rPolarity = "neutral";
+        rLabel = "stable";
+        rLines.push(`Estimated 5K unchanged at ~${estimated5K.current}`);
+      }
+    } else {
+      rPolarity = "neutral";
+      rLabel = "no data";
+      rLines.push("Not enough steady running data yet");
+    }
+  }
+  drivers.push({ label: "Running", polarity: rPolarity, polarityLabel: rLabel, lines: rLines });
+
+  // ── Strength ─────────────────────────────────────────────────────
+  const lifts: [string, number | null, number | null][] = [
+    ["Squat",    strengthMetrics.squat.current,    strengthMetrics.squat.previous],
+    ["Bench",    strengthMetrics.bench.current,    strengthMetrics.bench.previous],
+    ["Deadlift", strengthMetrics.deadlift.current, strengthMetrics.deadlift.previous],
+  ];
+  const gains: string[]     = [];
+  const losses: string[]    = [];
+  const firstLogs: string[] = [];
+
+  for (const [name, curr, prev] of lifts) {
+    if (curr === null) continue;
+    if (prev === null) { firstLogs.push(`${name}: ${curr}kg e1RM (first record)`); continue; }
+    if (curr > prev)   { gains.push(`${name} e1RM up ${curr - prev}kg to ${curr}kg`); continue; }
+    if (curr < prev)   { losses.push(`${name} e1RM down ${prev - curr}kg to ${curr}kg`); }
+  }
+
+  let sPolarity: Polarity;
+  let sLabel: string;
+  const sLines: string[] = [];
+
+  if (gains.length > 0) {
+    sPolarity = "positive";
+    sLabel = "positive";
+    sLines.push(...gains);
+    if (losses.length > 0) sLines.push(...losses);
+  } else if (losses.length > 0) {
+    sPolarity = "negative";
+    sLabel = "negative";
+    sLines.push(...losses);
+  } else if (firstLogs.length > 0) {
+    sPolarity = "neutral";
+    sLabel = "first records";
+    sLines.push(...firstLogs);
+  } else if (lifts.every(([, c]) => c === null)) {
+    sPolarity = "neutral";
+    sLabel = "no data";
+    sLines.push("No strength data logged yet");
+  } else {
+    sPolarity = "neutral";
+    sLabel = "stable";
+    sLines.push("No major change in estimated 1RMs this period");
+  }
+  drivers.push({ label: "Strength", polarity: sPolarity, polarityLabel: sLabel, lines: sLines });
+
+  // ── Balance ──────────────────────────────────────────────────────
+  const hasLift = (thisWeekData?.strengthSessions ?? 0) > 0;
+  const hasRun  = (thisWeekData?.runSessions ?? 0) > 0;
+  let bPolarity: Polarity;
+  let bLabel: string;
+  const bLines: string[] = [];
+
+  if (hasLift && hasRun) {
+    bPolarity = "positive";
+    bLabel = "positive";
+    bLines.push("Both lifting and running logged this week");
+    bLines.push("Balanced training contributes to a stronger score");
+  } else if (hasLift) {
+    bPolarity = "neutral";
+    bLabel = "lift only";
+    bLines.push("Only lifting logged this week");
+    bLines.push("Adding a run session would boost balance score");
+  } else if (hasRun) {
+    bPolarity = "neutral";
+    bLabel = "run only";
+    bLines.push("Only running logged this week");
+    bLines.push("Adding a lift session would boost balance score");
+  } else {
+    bPolarity = "negative";
+    bLabel = "negative";
+    bLines.push("No training logged this week");
+  }
+  drivers.push({ label: "Balance", polarity: bPolarity, polarityLabel: bLabel, lines: bLines });
+
+  return drivers;
+}
+
+// ── Driver row ────────────────────────────────────────────────────
+
+function DriverRow({ driver }: { driver: ScoreDriver }) {
+  const color =
+    driver.polarity === "positive" ? "text-emerald-600" :
+    driver.polarity === "negative" ? "text-red-500" :
+    "text-muted-foreground";
+
+  const arrow =
+    driver.polarity === "positive" ? "↑" :
+    driver.polarity === "negative" ? "↓" : "→";
+
+  return (
+    <div className="flex gap-3 items-start">
+      <span className={`text-sm font-bold mt-0.5 w-4 text-center shrink-0 ${color}`}>{arrow}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-1.5 flex-wrap">
+          <span className="text-[12px] font-semibold">{driver.label}</span>
+          <span className={`text-[10px] font-medium uppercase tracking-wide ${color}`}>
+            {driver.polarityLabel}
+          </span>
+        </div>
+        {driver.lines.map((line, i) => (
+          <p key={i} className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{line}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Stat card ─────────────────────────────────────────────────────
 
 function StatCard({
@@ -201,6 +399,7 @@ interface Props {
 export default function DashboardTab({ analytics, isLoading, clientId }: Props) {
   const [prefs, setPrefs] = useState<DashboardPrefs>(() => loadPrefs(clientId));
   const [editOpen, setEditOpen] = useState(false);
+  const [drilldownOpen, setDrilldownOpen] = useState(false);
 
   useEffect(() => { savePrefs(clientId, prefs); }, [prefs, clientId]);
 
@@ -257,6 +456,8 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
     ? adherence.thisWeek.completed / adherence.thisWeek.planned
     : null;
 
+  const scoreDrivers = computeScoreDrivers(analytics, thisWeekData);
+
   return (
     <div className="max-w-lg mx-auto px-4 pt-5 pb-24 space-y-5">
 
@@ -287,6 +488,33 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
           <p className="mt-3 text-[12px] text-muted-foreground italic border-t pt-3">
             {fitnessScore.explanation}
           </p>
+        )}
+      </div>
+
+      {/* ── Why it moved ─────────────────────────────────────── */}
+      <div className="rounded-2xl border bg-card overflow-hidden -mt-2">
+        <button
+          onClick={() => setDrilldownOpen(d => !d)}
+          className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+        >
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-[11px] text-muted-foreground font-medium">Why it moved</span>
+            <span className="text-[11px] text-muted-foreground/70 truncate hidden sm:block">
+              — {fitnessScore.explanation}
+            </span>
+          </div>
+          <ChevronDown
+            className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${drilldownOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {drilldownOpen && (
+          <div className="px-4 pb-4 pt-1 space-y-4 border-t">
+            <p className="text-[11px] text-muted-foreground pt-2 italic">{fitnessScore.explanation}</p>
+            {scoreDrivers.map(driver => (
+              <DriverRow key={driver.label} driver={driver} />
+            ))}
+          </div>
         )}
       </div>
 
