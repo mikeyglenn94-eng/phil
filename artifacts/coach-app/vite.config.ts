@@ -32,6 +32,7 @@ export default defineConfig({
       injectRegister: "auto",
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,jpeg,woff,woff2}"],
+        globIgnores: ["**/anatomy-body.png"],
         navigateFallback: `${basePath}index.html`,
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
