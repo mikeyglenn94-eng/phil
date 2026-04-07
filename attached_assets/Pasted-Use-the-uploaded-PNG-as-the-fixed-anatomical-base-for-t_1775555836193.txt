@@ -1,0 +1,121 @@
+Use the uploaded PNG as the fixed anatomical base for the body heatmap.
+
+Important:
+- Do NOT redraw the body
+- Do NOT generate silhouettes or blob shapes
+- The PNG is the single source of truth for the body visual
+
+GOAL:
+Create a clean, precise muscle heatmap by overlaying interactive regions aligned to the PNG.
+
+----------------------------------
+1. BASE IMAGE
+----------------------------------
+
+- Render the PNG at high resolution
+- Maintain aspect ratio
+- Keep background fully transparent
+- Do not apply filters or distortions
+
+----------------------------------
+2. OVERLAY SYSTEM (CORE LOGIC)
+----------------------------------
+
+Build a transparent overlay layer on top of the PNG:
+
+- Use SVG or canvas positioned directly over the image
+- All interaction and colouring happens in this overlay layer
+- The PNG remains visually untouched underneath
+
+----------------------------------
+3. DEFINE MUSCLE REGIONS
+----------------------------------
+
+Create polygon/path regions aligned to the PNG for:
+
+FRONT:
+- shoulders_left / shoulders_right
+- chest
+- biceps_left / biceps_right
+- forearms_left / forearms_right
+- core
+- quads_left / quads_right
+- calves_left / calves_right
+
+BACK:
+- shoulders_left / shoulders_right
+- upper_back
+- lats_left / lats_right
+- triceps_left / triceps_right
+- lower_back
+- glutes
+- hamstrings_left / hamstrings_right
+- calves_left / calves_right
+
+Rules:
+- Keep shapes clean and minimal
+- Follow anatomical boundaries in the PNG
+- Ensure symmetry left/right
+- Avoid small fragmented regions
+
+----------------------------------
+4. HEATMAP STYLING
+----------------------------------
+
+- Default (inactive): transparent or very low opacity grey
+- Active: blue/purple fill
+- High activation: brighter blue/purple
+
+- Use clean fills (no blobs, no fuzzy edges)
+- Optional: very subtle opacity gradient, but keep it minimal
+
+----------------------------------
+5. ALIGNMENT
+----------------------------------
+
+- Overlay must perfectly match the PNG proportions
+- Lock overlay to image dimensions (no scaling mismatch)
+- Test responsiveness to ensure alignment holds on different screen sizes
+
+----------------------------------
+6. INTERACTION / DATA HOOK
+----------------------------------
+
+Each region should be addressable:
+
+Example:
+- front_chest
+- back_lats_left
+
+Allow programmatic updates:
+
+- set fill based on training data
+- update intensity dynamically
+
+----------------------------------
+7. OVERLAY UI MODE (IMPORTANT)
+----------------------------------
+
+- No card background
+- Everything sits on top of content (video/image)
+
+- Add subtle text shadow for legibility
+- Keep spacing generous (no squashed text)
+
+----------------------------------
+8. PERFORMANCE
+----------------------------------
+
+- Keep number of regions low (10–16 total max)
+- Avoid excessive DOM elements
+- Optimise for smooth updates
+
+----------------------------------
+SUCCESS CRITERIA
+----------------------------------
+
+- Body looks clean and anatomical (from PNG)
+- No weird lumps or generated shapes
+- Heatmap aligns perfectly to body
+- Works as a premium overlay on video
+- Regions update cleanly based on workout data

@@ -118,157 +118,123 @@ function getMuscleStimulus(
   return result;
 }
 
-// SVG viewBox aspect ratio: "0 0 100 220" → height = 2.2 × width
-const SVG_ASPECT = 2.2;
+// Anatomy PNG: 5671×5671, three panels side-by-side (front | side | back), each 1/3 of width.
+// Panel aspect ratio: height = 3 × width  (5671 / (5671/3) = 3.0)
+const PANEL_ASPECT = 3.0;
 
-async function drawSVGOnCanvas(
-  ctx: CanvasRenderingContext2D,
-  svgString: string,
-  x: number, y: number, w: number, h: number,
-): Promise<void> {
+let _anatomyImg: HTMLImageElement | null = null;
+function loadAnatomyImage(): Promise<HTMLImageElement | null> {
+  if (_anatomyImg) return Promise.resolve(_anatomyImg);
   return new Promise(resolve => {
-    const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-    const url  = URL.createObjectURL(blob);
-    const img  = new Image();
-    img.onload  = () => { ctx.drawImage(img, x, y, w, h); URL.revokeObjectURL(url); resolve(); };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-    img.src = url;
+    const img = new Image();
+    img.onload  = () => { _anatomyImg = img; resolve(img); };
+    img.onerror = () => resolve(null);
+    img.src = "/anatomy-body.png";
   });
 }
 
-function renderBodySVG(
+// Overlay polygon coordinates — normalized [0,1]×[0,1] within each panel crop.
+// Front panel = left 1/3 of image.  Back panel = right 1/3 of image.
+// Estimated from the stock figure proportions; can be refined visually.
+type Poly = [number, number][];
+interface ZoneRegion { key: string; polys: Poly[]; }
+
+const FRONT_ZONES: ZoneRegion[] = [
+  { key: "shoulder", polys: [
+    [[0.07,0.18],[0.25,0.16],[0.29,0.23],[0.25,0.31],[0.08,0.31]],  // left ant. deltoid
+    [[0.93,0.18],[0.75,0.16],[0.71,0.23],[0.75,0.31],[0.92,0.31]],  // right
+  ]},
+  { key: "chest", polys: [
+    [[0.25,0.18],[0.50,0.17],[0.50,0.37],[0.27,0.39],[0.20,0.31]],  // left pec
+    [[0.75,0.18],[0.50,0.17],[0.50,0.37],[0.73,0.39],[0.80,0.31]],  // right pec
+  ]},
+  { key: "bicep", polys: [
+    [[0.07,0.31],[0.23,0.31],[0.21,0.50],[0.08,0.50]],              // left
+    [[0.93,0.31],[0.77,0.31],[0.79,0.50],[0.92,0.50]],              // right
+  ]},
+  { key: "forearm", polys: [
+    [[0.09,0.50],[0.21,0.50],[0.19,0.64],[0.12,0.64]],             // left
+    [[0.91,0.50],[0.79,0.50],[0.81,0.64],[0.88,0.64]],             // right
+  ]},
+  { key: "core", polys: [
+    [[0.27,0.37],[0.73,0.37],[0.70,0.59],[0.30,0.59]],             // abs + obliques
+  ]},
+  { key: "quad", polys: [
+    [[0.28,0.60],[0.50,0.60],[0.48,0.80],[0.28,0.80]],             // left thigh
+    [[0.72,0.60],[0.50,0.60],[0.52,0.80],[0.72,0.80]],             // right thigh
+  ]},
+  { key: "calf", polys: [
+    [[0.30,0.80],[0.47,0.80],[0.45,0.93],[0.31,0.93]],             // left shin
+    [[0.70,0.80],[0.53,0.80],[0.55,0.93],[0.69,0.93]],             // right shin
+  ]},
+];
+
+const BACK_ZONES: ZoneRegion[] = [
+  { key: "shoulder", polys: [
+    [[0.07,0.18],[0.25,0.16],[0.28,0.23],[0.25,0.31],[0.07,0.31]], // left post. deltoid
+    [[0.93,0.18],[0.75,0.16],[0.72,0.23],[0.75,0.31],[0.93,0.31]], // right
+  ]},
+  { key: "upper_back", polys: [
+    [[0.27,0.16],[0.73,0.16],[0.80,0.28],[0.70,0.41],[0.50,0.45],[0.30,0.41],[0.20,0.28]], // trapezius
+  ]},
+  { key: "lat", polys: [
+    [[0.08,0.31],[0.30,0.33],[0.37,0.59],[0.27,0.62],[0.09,0.57]], // left lat
+    [[0.92,0.31],[0.70,0.33],[0.63,0.59],[0.73,0.62],[0.91,0.57]], // right lat
+  ]},
+  { key: "tricep", polys: [
+    [[0.07,0.31],[0.22,0.31],[0.20,0.51],[0.07,0.51]],             // left
+    [[0.93,0.31],[0.78,0.31],[0.80,0.51],[0.93,0.51]],             // right
+  ]},
+  { key: "forearm", polys: [
+    [[0.09,0.51],[0.20,0.51],[0.18,0.64],[0.12,0.64]],             // left
+    [[0.91,0.51],[0.80,0.51],[0.82,0.64],[0.88,0.64]],             // right
+  ]},
+  { key: "lower_back", polys: [
+    [[0.35,0.54],[0.65,0.54],[0.65,0.63],[0.35,0.63]],             // erectors
+  ]},
+  { key: "glute", polys: [
+    [[0.28,0.62],[0.72,0.62],[0.70,0.73],[0.30,0.73]],             // glutes
+  ]},
+  { key: "hamstring", polys: [
+    [[0.28,0.73],[0.50,0.73],[0.48,0.85],[0.29,0.85]],             // left
+    [[0.72,0.73],[0.50,0.73],[0.52,0.85],[0.71,0.85]],             // right
+  ]},
+  { key: "calf", polys: [
+    [[0.30,0.85],[0.47,0.85],[0.45,0.94],[0.31,0.94]],             // left gastroc
+    [[0.70,0.85],[0.53,0.85],[0.55,0.94],[0.69,0.94]],             // right gastroc
+  ]},
+];
+
+async function drawAnatomyPanel(
+  ctx: CanvasRenderingContext2D,
   isFront: boolean,
   stimulus: Map<string, "high" | "medium">,
-): string {
-  const col = (key: string) => {
-    const lvl = stimulus.get(key);
-    if (lvl === "high")   return "rgba(99,102,241,0.72)";
-    if (lvl === "medium") return "rgba(139,92,246,0.48)";
-    return "rgba(185,192,220,0.09)";
-  };
-  const n  = "rgba(185,192,220,0.09)";   // neutral / inactive fill
-  const sc = "rgba(185,195,230,0.36)";   // zone stroke
-  const oc = "rgba(185,195,230,0.50)";   // outer-body stroke
-  const lc = "rgba(185,195,230,0.26)";   // fine internal linework
-  const sw = "0.6";   // zone stroke-width
-  const lw = "0.45";  // linework stroke-width
-  const a  = `stroke="${sc}" stroke-width="${sw}" stroke-linejoin="round"`;
+  destX: number, destY: number, destW: number, destH: number,
+): Promise<void> {
+  const img = await loadAnatomyImage();
+  if (img) {
+    const iw = img.naturalWidth;   // 5671
+    const ih = img.naturalHeight;  // 5671
+    const pw = iw / 3;             // panel width in source image
+    const sx = isFront ? 0 : pw * 2;
+    ctx.drawImage(img, sx, 0, pw, ih, destX, destY, destW, destH);
+  }
 
-  // Muscle zone path (colored fill + stroke)
-  const z = (k: string, d: string) => `<path d="${d}" fill="${col(k)}" ${a}/>`;
-  // Neutral area path (no muscle color)
-  const s = (d: string)             => `<path d="${d}" fill="${n}" ${a}/>`;
-  // Anatomical linework (stroke only, no fill)
-  const l = (d: string)             => `<path d="${d}" fill="none" stroke="${lc}" stroke-width="${lw}" stroke-linecap="round"/>`;
-
-  if (isFront) {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 220">
-<!-- HEAD -->
-<circle cx="50" cy="9.5" r="9" fill="${n}" stroke="${oc}" stroke-width="${sw}"/>
-<!-- NECK -->
-<path d="M 45 18 L 55 18 L 56 26 L 44 26 Z" fill="${n}" ${a}/>
-<!-- CLAVICLE / SHOULDER BAND -->
-${z("shoulder","M 44 22 L 56 22 L 74 28 L 76 36 L 24 36 L 26 28 Z")}
-<!-- LEFT ANTERIOR DELTOID -->
-${z("shoulder","M 26 28 C 19 30 15 36 15 44 C 15 52 18 58 23 60 L 30 58 C 30 50 30 42 30 36 Z")}
-<!-- RIGHT ANTERIOR DELTOID -->
-${z("shoulder","M 74 28 C 81 30 85 36 85 44 C 85 52 82 58 77 60 L 70 58 C 70 50 70 42 70 36 Z")}
-<!-- LEFT PECTORALIS MAJOR -->
-${z("chest","M 30 36 C 29 42 27 54 23 60 L 30 72 L 50 70 L 50 28 L 44 26 L 38 28 Z")}
-<!-- RIGHT PECTORALIS MAJOR -->
-${z("chest","M 70 36 C 71 42 73 54 77 60 L 70 72 L 50 70 L 50 28 L 56 26 L 62 28 Z")}
-<!-- LEFT BICEPS BRACHII -->
-${z("bicep","M 23 60 C 16 64 14 78 15 90 C 17 96 21 98 25 98 C 29 96 31 92 31 86 C 30 72 28 60 23 60 Z")}
-<!-- RIGHT BICEPS BRACHII -->
-${z("bicep","M 77 60 C 84 64 86 78 85 90 C 83 96 79 98 75 98 C 71 96 69 92 69 86 C 70 72 72 60 77 60 Z")}
-<!-- LEFT FOREARM -->
-${z("forearm","M 25 98 C 18 102 15 116 17 128 C 18 132 22 134 25 134 C 29 133 31 129 31 124 C 31 110 29 100 25 98 Z")}
-<!-- RIGHT FOREARM -->
-${z("forearm","M 75 98 C 82 102 85 116 83 128 C 82 132 78 134 75 134 C 71 133 69 129 69 124 C 69 110 71 100 75 98 Z")}
-<!-- RECTUS ABDOMINIS -->
-${z("core","M 33 72 L 50 70 L 67 72 L 65 90 C 58 93 54 94 50 94 C 46 94 42 93 35 90 Z")}
-<!-- LEFT EXTERNAL OBLIQUE -->
-${z("core","M 23 60 L 33 72 L 35 90 C 28 88 22 84 21 76 C 20 68 20 62 23 60 Z")}
-<!-- RIGHT EXTERNAL OBLIQUE -->
-${z("core","M 77 60 L 67 72 L 65 90 C 72 88 78 84 79 76 C 80 68 80 62 77 60 Z")}
-<!-- PELVIS FRONT (neutral) -->
-${s("M 21 90 C 24 100 27 108 28 112 L 40 116 L 50 118 L 60 116 L 72 112 C 73 108 76 100 79 90 L 65 90 Q 56 94 50 94 Q 44 94 35 90 Z")}
-<!-- LEFT QUADRICEPS -->
-${z("quad","M 28 112 C 25 120 24 134 25 148 C 26 158 29 166 33 170 L 44 172 L 50 160 L 50 118 L 40 116 Z")}
-<!-- RIGHT QUADRICEPS -->
-${z("quad","M 72 112 C 75 120 76 134 75 148 C 74 158 71 166 67 170 L 56 172 L 50 160 L 50 118 L 60 116 Z")}
-<!-- LEFT TIBIALIS ANTERIOR / SHIN FRONT -->
-${z("calf","M 33 170 L 44 172 L 46 198 C 44 206 40 208 36 206 C 32 204 31 198 31 190 C 31 180 31 172 33 170 Z")}
-<!-- RIGHT TIBIALIS ANTERIOR -->
-${z("calf","M 67 170 L 56 172 L 54 198 C 56 206 60 208 64 206 C 68 204 69 198 69 190 C 69 180 69 172 67 170 Z")}
-<!-- FEET -->
-<ellipse cx="40" cy="212" rx="9" ry="5" fill="${n}" stroke="${sc}" stroke-width="${sw}"/>
-<ellipse cx="60" cy="212" rx="9" ry="5" fill="${n}" stroke="${sc}" stroke-width="${sw}"/>
-<!-- LINEWORK: midline, pec boundary, ab grid, elbow, knee -->
-${l("M 50 28 L 50 70")}${l("M 50 70 L 50 90")}
-${l("M 23 60 Q 50 68 77 60")}
-${l("M 33 72 L 50 70 L 67 72")}
-${l("M 35 79 Q 50 80 65 79")}${l("M 35 85 Q 50 86 65 85")}
-${l("M 50 118 L 50 160")}
-${l("M 14 90 Q 23 96 31 90")}${l("M 86 90 Q 77 96 69 90")}
-${l("M 25 170 Q 33 176 44 172")}${l("M 75 170 Q 67 176 56 172")}
-${l("M 44 172 Q 47 175 50 172 Q 53 175 56 172")}
-</svg>`;
-  } else {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 220">
-<!-- HEAD (back) -->
-<circle cx="50" cy="9.5" r="9" fill="${n}" stroke="${oc}" stroke-width="${sw}"/>
-<!-- NECK -->
-<path d="M 45 18 L 55 18 L 56 26 L 44 26 Z" fill="${n}" ${a}/>
-<!-- TRAPEZIUS (full diamond — upper_back) -->
-${z("upper_back","M 44 18 L 56 18 L 80 32 L 80 46 L 66 62 L 50 68 L 34 62 L 20 46 L 20 32 Z")}
-<!-- LEFT LATISSIMUS DORSI (drawn before infraspinatus so scapula zone appears on top) -->
-${z("lat","M 14 64 C 16 82 18 98 22 114 L 32 118 L 36 82 L 36 64 Z")}
-<!-- RIGHT LATISSIMUS DORSI -->
-${z("lat","M 86 64 C 84 82 82 98 78 114 L 68 118 L 64 82 L 64 64 Z")}
-<!-- LEFT POSTERIOR DELTOID -->
-${z("shoulder","M 20 32 C 13 34 11 40 11 48 C 11 56 14 62 20 64 L 27 62 C 25 56 24 48 24 42 Z")}
-<!-- RIGHT POSTERIOR DELTOID -->
-${z("shoulder","M 80 32 C 87 34 89 40 89 48 C 89 56 86 62 80 64 L 73 62 C 75 56 76 48 76 42 Z")}
-<!-- LEFT INFRASPINATUS / TERES (scapula — upper_back, drawn above lat) -->
-${z("upper_back","M 20 64 L 27 62 L 34 62 L 36 80 C 30 82 24 78 21 72 Z")}
-<!-- RIGHT INFRASPINATUS / TERES -->
-${z("upper_back","M 80 64 L 73 62 L 66 62 L 64 80 C 70 82 76 78 79 72 Z")}
-<!-- LEFT TRICEPS BRACHII -->
-${z("tricep","M 20 64 C 13 68 10 82 11 96 C 12 102 16 104 20 104 C 24 102 27 98 27 92 C 27 78 26 66 20 64 Z")}
-<!-- RIGHT TRICEPS -->
-${z("tricep","M 80 64 C 87 68 90 82 89 96 C 88 102 84 104 80 104 C 76 102 73 98 73 92 C 73 78 74 66 80 64 Z")}
-<!-- LEFT FOREARM (back) -->
-${z("forearm","M 20 104 C 14 108 11 122 12 134 C 13 138 17 140 21 140 C 25 139 27 135 27 130 C 27 116 25 106 20 104 Z")}
-<!-- RIGHT FOREARM (back) -->
-${z("forearm","M 80 104 C 86 108 89 122 88 134 C 87 138 83 140 79 140 C 75 139 73 135 73 130 C 73 116 75 106 80 104 Z")}
-<!-- LOWER BACK / ERECTOR SPINAE -->
-${z("lower_back","M 34 68 L 66 68 L 68 118 L 32 118 Z")}
-<!-- LEFT GLUTEUS MAXIMUS -->
-${z("glute","M 32 118 L 50 118 L 50 160 C 44 160 38 156 32 148 C 28 138 28 128 32 118 Z")}
-<!-- RIGHT GLUTEUS MAXIMUS -->
-${z("glute","M 68 118 L 50 118 L 50 160 C 56 160 62 156 68 148 C 72 138 72 128 68 118 Z")}
-<!-- LEFT HAMSTRINGS -->
-${z("hamstring","M 32 148 C 28 158 26 170 26 182 C 27 192 31 198 36 202 L 46 202 L 50 160 Z")}
-<!-- RIGHT HAMSTRINGS -->
-${z("hamstring","M 68 148 C 72 158 74 170 74 182 C 73 192 69 198 64 202 L 54 202 L 50 160 Z")}
-<!-- LEFT GASTROCNEMIUS (CALF) -->
-${z("calf","M 36 202 C 32 208 31 214 33 218 C 36 220 40 220 43 218 C 44 214 45 208 46 202 Z")}
-<!-- RIGHT GASTROCNEMIUS -->
-${z("calf","M 64 202 C 68 208 69 214 67 218 C 64 220 60 220 57 218 C 56 214 55 208 54 202 Z")}
-<!-- FEET (back) -->
-<ellipse cx="40" cy="219" rx="9" ry="2.5" fill="${n}" stroke="${sc}" stroke-width="${sw}"/>
-<ellipse cx="60" cy="219" rx="9" ry="2.5" fill="${n}" stroke="${sc}" stroke-width="${sw}"/>
-<!-- LINEWORK: spine, trap boundary, scapula edges, erectors, glute division, knee, elbow -->
-${l("M 50 26 L 50 118")}
-${l("M 34 62 Q 50 70 66 62")}
-${l("M 27 38 C 23 44 22 52 24 60")}${l("M 73 38 C 77 44 78 52 76 60")}
-${l("M 27 38 L 36 62")}${l("M 73 38 L 64 62")}
-${l("M 34 68 L 34 118")}${l("M 66 68 L 66 118")}
-${l("M 50 118 L 50 160")}
-${l("M 26 202 Q 36 208 46 202")}${l("M 74 202 Q 64 208 54 202")}
-${l("M 10 96 Q 20 104 27 96")}${l("M 90 96 Q 80 104 73 96")}
-</svg>`;
+  const zones = isFront ? FRONT_ZONES : BACK_ZONES;
+  for (const zone of zones) {
+    const level = stimulus.get(zone.key);
+    if (!level) continue;
+    ctx.fillStyle = level === "high"
+      ? "rgba(99,102,241,0.68)"
+      : "rgba(139,92,246,0.50)";
+    for (const poly of zone.polys) {
+      ctx.beginPath();
+      ctx.moveTo(destX + poly[0][0] * destW, destY + poly[0][1] * destH);
+      for (let i = 1; i < poly.length; i++)
+        ctx.lineTo(destX + poly[i][0] * destW, destY + poly[i][1] * destH);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 }
 
@@ -1084,26 +1050,26 @@ export default function ClientSession() {
       const gap = Math.round(heatMapW * 0.08);
       const sideW = (heatMapW - gap) / 2;
 
-      // SVG body size: height constrained by available area, preserving 100×220 aspect
-      const svgH = Math.min(heatMapH * 0.94, sideW * 0.96 * SVG_ASPECT);
-      const svgW = svgH / SVG_ASPECT;
+      // Panel size: each crop is 1/3 wide × full height → aspect ratio 3:1 (h = 3×w)
+      const bodyH = Math.min(heatMapH * 0.94, sideW * PANEL_ASPECT);
+      const bodyW = bodyH / PANEL_ASPECT;
 
-      // Position each SVG centred in its half-column
-      const frontX = cx + (sideW - svgW) / 2;
-      const backX  = cx + sideW + gap + (sideW - svgW) / 2;
-      const svgTop = heatMapTop + (heatMapH - svgH) / 2;
+      // Centre each panel in its half-column
+      const frontX = cx + (sideW - bodyW) / 2;
+      const backX  = cx + sideW + gap + (sideW - bodyW) / 2;
+      const bodyTop = heatMapTop + (heatMapH - bodyH) / 2;
 
       // Labels: FRONT / BACK
       ctx.fillStyle = "rgba(255,255,255,0.22)";
       ctx.font = "600 26px 'Inter', system-ui, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("FRONT", frontX + svgW / 2, svgTop - 18);
-      ctx.fillText("BACK",  backX  + svgW / 2, svgTop - 18);
+      ctx.fillText("FRONT", frontX + bodyW / 2, bodyTop - 18);
+      ctx.fillText("BACK",  backX  + bodyW / 2, bodyTop - 18);
       ctx.textAlign = "left";
 
-      // Render the anatomical SVG diagrams onto the canvas
-      await drawSVGOnCanvas(ctx, renderBodySVG(true,  stimulus), frontX, svgTop, svgW, svgH);
-      await drawSVGOnCanvas(ctx, renderBodySVG(false, stimulus), backX,  svgTop, svgW, svgH);
+      // Draw anatomy PNG panels with muscle-zone overlays
+      await drawAnatomyPanel(ctx, true,  stimulus, frontX, bodyTop, bodyW, bodyH);
+      await drawAnatomyPanel(ctx, false, stimulus, backX,  bodyTop, bodyW, bodyH);
 
       // Divider above bottom callout
       const divY = heatMapBot + 20;
