@@ -118,121 +118,157 @@ function getMuscleStimulus(
   return result;
 }
 
-// Aspect ratio constant: total silhouette width (arms included) = BODY_W_RATIO * bodyH
-const BODY_W_RATIO = 0.64;
+// SVG viewBox aspect ratio: "0 0 100 220" → height = 2.2 × width
+const SVG_ASPECT = 2.2;
 
-function drawBodySilhouette(
+async function drawSVGOnCanvas(
   ctx: CanvasRenderingContext2D,
-  cx: number, top: number, bodyH: number,
+  svgString: string,
+  x: number, y: number, w: number, h: number,
+): Promise<void> {
+  return new Promise(resolve => {
+    const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const img  = new Image();
+    img.onload  = () => { ctx.drawImage(img, x, y, w, h); URL.revokeObjectURL(url); resolve(); };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+    img.src = url;
+  });
+}
+
+function renderBodySVG(
   isFront: boolean,
   stimulus: Map<string, "high" | "medium">,
-): void {
-  const S = bodyH;
-
-  // Helper: fill an ellipse at normalised (dx, dy) coords relative to body centre/top
-  const ell = (dx: number, dy: number, rx: number, ry: number) => {
-    ctx.beginPath();
-    ctx.ellipse(cx + dx * S, top + dy * S, rx * S, ry * S, 0, 0, Math.PI * 2);
-    ctx.fill();
-  };
-
-  // ── Base silhouette ────────────────────────────────────────────────────────
-  // All parts drawn in the same muted colour and overlapping → continuous body shape.
-  // Limbs use highly elongated ellipses (ry >> rx) so they look like limbs, not blobs.
-  ctx.fillStyle = "rgba(255,255,255,0.13)";
-
-  // Head
-  ell(0,      0.072,  0.073,  0.073);
-  // Neck (overlaps head base and shoulder band)
-  ell(0,      0.152,  0.036,  0.044);
-  // Shoulder band — wide horizontal, creates broad athletic shoulders
-  ell(0,      0.205,  0.258,  0.060);
-  // Chest / upper-torso block
-  ell(0,      0.278,  0.175,  0.088);
-  // Abdomen / lower-torso block
-  ell(0,      0.358,  0.138,  0.078);
-  // Pelvis / hips
-  ell(0,      0.428,  0.178,  0.065);
-
-  // LEFT upper arm — very elongated vertical ellipse (limb shape, not blob)
-  ell(-0.262, 0.282,  0.056,  0.118);
-  // RIGHT upper arm
-  ell( 0.262, 0.282,  0.056,  0.118);
-  // LEFT forearm — taller and narrower still
-  ell(-0.258, 0.430,  0.044,  0.096);
-  // RIGHT forearm
-  ell( 0.258, 0.430,  0.044,  0.096);
-  // LEFT hand
-  ell(-0.252, 0.540,  0.038,  0.042);
-  // RIGHT hand
-  ell( 0.252, 0.540,  0.038,  0.042);
-
-  // LEFT thigh — tall, slightly wider than shin
-  ell(-0.108, 0.598,  0.090,  0.148);
-  // RIGHT thigh
-  ell( 0.108, 0.598,  0.090,  0.148);
-  // LEFT shin — taller, narrower
-  ell(-0.096, 0.792,  0.072,  0.118);
-  // RIGHT shin
-  ell( 0.096, 0.792,  0.072,  0.118);
-  // Feet (small, at the base)
-  ell(-0.092, 0.942,  0.068,  0.044);
-  ell( 0.092, 0.942,  0.068,  0.044);
-
-  // ── Muscle zone overlays ───────────────────────────────────────────────────
-  const zone = (key: string, dx: number, dy: number, rx: number, ry: number) => {
+): string {
+  const col = (key: string) => {
     const lvl = stimulus.get(key);
-    if (!lvl) return;
-    ctx.fillStyle = lvl === "high" ? "rgba(99,102,241,0.86)" : "rgba(139,92,246,0.56)";
-    ctx.shadowColor = lvl === "high" ? "rgba(99,102,241,0.50)" : "rgba(139,92,246,0.30)";
-    ctx.shadowBlur = 14;
-    ell(dx, dy, rx, ry);
-    ctx.shadowBlur = 0;
+    if (lvl === "high")   return "rgba(99,102,241,0.72)";
+    if (lvl === "medium") return "rgba(139,92,246,0.48)";
+    return "rgba(185,192,220,0.09)";
   };
+  const n  = "rgba(185,192,220,0.09)";   // neutral / inactive fill
+  const sc = "rgba(185,195,230,0.36)";   // zone stroke
+  const oc = "rgba(185,195,230,0.50)";   // outer-body stroke
+  const lc = "rgba(185,195,230,0.26)";   // fine internal linework
+  const sw = "0.6";   // zone stroke-width
+  const lw = "0.45";  // linework stroke-width
+  const a  = `stroke="${sc}" stroke-width="${sw}" stroke-linejoin="round"`;
+
+  // Muscle zone path (colored fill + stroke)
+  const z = (k: string, d: string) => `<path d="${d}" fill="${col(k)}" ${a}/>`;
+  // Neutral area path (no muscle color)
+  const s = (d: string)             => `<path d="${d}" fill="${n}" ${a}/>`;
+  // Anatomical linework (stroke only, no fill)
+  const l = (d: string)             => `<path d="${d}" fill="none" stroke="${lc}" stroke-width="${lw}" stroke-linecap="round"/>`;
 
   if (isFront) {
-    // Shoulders (anterior deltoid caps sit on top of the shoulder band)
-    zone("shoulder",   -0.218, 0.208, 0.072, 0.055);
-    zone("shoulder",    0.218, 0.208, 0.072, 0.055);
-    // Chest (pectorals — fills upper torso block)
-    zone("chest",       0,     0.278, 0.148, 0.075);
-    // Biceps (elongated to match the upper-arm shape)
-    zone("bicep",      -0.262, 0.285, 0.040, 0.092);
-    zone("bicep",       0.262, 0.285, 0.040, 0.092);
-    // Forearms
-    zone("forearm",    -0.257, 0.428, 0.030, 0.072);
-    zone("forearm",     0.257, 0.428, 0.030, 0.072);
-    // Core / abs (lower torso block)
-    zone("core",        0,     0.358, 0.105, 0.065);
-    // Quads (fills thigh region)
-    zone("quad",       -0.108, 0.596, 0.076, 0.126);
-    zone("quad",        0.108, 0.596, 0.076, 0.126);
-    // Calves (front portion of shin)
-    zone("calf",       -0.094, 0.792, 0.054, 0.090);
-    zone("calf",        0.094, 0.792, 0.054, 0.090);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 220">
+<!-- HEAD -->
+<circle cx="50" cy="9.5" r="9" fill="${n}" stroke="${oc}" stroke-width="${sw}"/>
+<!-- NECK -->
+<path d="M 45 18 L 55 18 L 56 26 L 44 26 Z" fill="${n}" ${a}/>
+<!-- CLAVICLE / SHOULDER BAND -->
+${z("shoulder","M 44 22 L 56 22 L 74 28 L 76 36 L 24 36 L 26 28 Z")}
+<!-- LEFT ANTERIOR DELTOID -->
+${z("shoulder","M 26 28 C 19 30 15 36 15 44 C 15 52 18 58 23 60 L 30 58 C 30 50 30 42 30 36 Z")}
+<!-- RIGHT ANTERIOR DELTOID -->
+${z("shoulder","M 74 28 C 81 30 85 36 85 44 C 85 52 82 58 77 60 L 70 58 C 70 50 70 42 70 36 Z")}
+<!-- LEFT PECTORALIS MAJOR -->
+${z("chest","M 30 36 C 29 42 27 54 23 60 L 30 72 L 50 70 L 50 28 L 44 26 L 38 28 Z")}
+<!-- RIGHT PECTORALIS MAJOR -->
+${z("chest","M 70 36 C 71 42 73 54 77 60 L 70 72 L 50 70 L 50 28 L 56 26 L 62 28 Z")}
+<!-- LEFT BICEPS BRACHII -->
+${z("bicep","M 23 60 C 16 64 14 78 15 90 C 17 96 21 98 25 98 C 29 96 31 92 31 86 C 30 72 28 60 23 60 Z")}
+<!-- RIGHT BICEPS BRACHII -->
+${z("bicep","M 77 60 C 84 64 86 78 85 90 C 83 96 79 98 75 98 C 71 96 69 92 69 86 C 70 72 72 60 77 60 Z")}
+<!-- LEFT FOREARM -->
+${z("forearm","M 25 98 C 18 102 15 116 17 128 C 18 132 22 134 25 134 C 29 133 31 129 31 124 C 31 110 29 100 25 98 Z")}
+<!-- RIGHT FOREARM -->
+${z("forearm","M 75 98 C 82 102 85 116 83 128 C 82 132 78 134 75 134 C 71 133 69 129 69 124 C 69 110 71 100 75 98 Z")}
+<!-- RECTUS ABDOMINIS -->
+${z("core","M 33 72 L 50 70 L 67 72 L 65 90 C 58 93 54 94 50 94 C 46 94 42 93 35 90 Z")}
+<!-- LEFT EXTERNAL OBLIQUE -->
+${z("core","M 23 60 L 33 72 L 35 90 C 28 88 22 84 21 76 C 20 68 20 62 23 60 Z")}
+<!-- RIGHT EXTERNAL OBLIQUE -->
+${z("core","M 77 60 L 67 72 L 65 90 C 72 88 78 84 79 76 C 80 68 80 62 77 60 Z")}
+<!-- PELVIS FRONT (neutral) -->
+${s("M 21 90 C 24 100 27 108 28 112 L 40 116 L 50 118 L 60 116 L 72 112 C 73 108 76 100 79 90 L 65 90 Q 56 94 50 94 Q 44 94 35 90 Z")}
+<!-- LEFT QUADRICEPS -->
+${z("quad","M 28 112 C 25 120 24 134 25 148 C 26 158 29 166 33 170 L 44 172 L 50 160 L 50 118 L 40 116 Z")}
+<!-- RIGHT QUADRICEPS -->
+${z("quad","M 72 112 C 75 120 76 134 75 148 C 74 158 71 166 67 170 L 56 172 L 50 160 L 50 118 L 60 116 Z")}
+<!-- LEFT TIBIALIS ANTERIOR / SHIN FRONT -->
+${z("calf","M 33 170 L 44 172 L 46 198 C 44 206 40 208 36 206 C 32 204 31 198 31 190 C 31 180 31 172 33 170 Z")}
+<!-- RIGHT TIBIALIS ANTERIOR -->
+${z("calf","M 67 170 L 56 172 L 54 198 C 56 206 60 208 64 206 C 68 204 69 198 69 190 C 69 180 69 172 67 170 Z")}
+<!-- FEET -->
+<ellipse cx="40" cy="212" rx="9" ry="5" fill="${n}" stroke="${sc}" stroke-width="${sw}"/>
+<ellipse cx="60" cy="212" rx="9" ry="5" fill="${n}" stroke="${sc}" stroke-width="${sw}"/>
+<!-- LINEWORK: midline, pec boundary, ab grid, elbow, knee -->
+${l("M 50 28 L 50 70")}${l("M 50 70 L 50 90")}
+${l("M 23 60 Q 50 68 77 60")}
+${l("M 33 72 L 50 70 L 67 72")}
+${l("M 35 79 Q 50 80 65 79")}${l("M 35 85 Q 50 86 65 85")}
+${l("M 50 118 L 50 160")}
+${l("M 14 90 Q 23 96 31 90")}${l("M 86 90 Q 77 96 69 90")}
+${l("M 25 170 Q 33 176 44 172")}${l("M 75 170 Q 67 176 56 172")}
+${l("M 44 172 Q 47 175 50 172 Q 53 175 56 172")}
+</svg>`;
   } else {
-    // Shoulders (posterior deltoid)
-    zone("shoulder",   -0.218, 0.208, 0.072, 0.055);
-    zone("shoulder",    0.218, 0.208, 0.072, 0.055);
-    // Upper back / traps (spans the shoulder band)
-    zone("upper_back",  0,     0.224, 0.168, 0.060);
-    // Lats (wide fan shape over mid-torso sides)
-    zone("lat",        -0.162, 0.308, 0.085, 0.094);
-    zone("lat",         0.162, 0.308, 0.085, 0.094);
-    // Triceps (back of upper arm)
-    zone("tricep",     -0.262, 0.285, 0.040, 0.092);
-    zone("tricep",      0.262, 0.285, 0.040, 0.092);
-    // Lower back / erectors
-    zone("lower_back",  0,     0.366, 0.112, 0.064);
-    // Glutes (fills pelvis/hip region)
-    zone("glute",      -0.112, 0.438, 0.112, 0.065);
-    zone("glute",       0.112, 0.438, 0.112, 0.065);
-    // Hamstrings (back of thigh)
-    zone("hamstring",  -0.106, 0.596, 0.076, 0.126);
-    zone("hamstring",   0.106, 0.596, 0.076, 0.126);
-    // Calves (back of shin — gastrocnemius)
-    zone("calf",       -0.090, 0.792, 0.054, 0.090);
-    zone("calf",        0.090, 0.792, 0.054, 0.090);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 220">
+<!-- HEAD (back) -->
+<circle cx="50" cy="9.5" r="9" fill="${n}" stroke="${oc}" stroke-width="${sw}"/>
+<!-- NECK -->
+<path d="M 45 18 L 55 18 L 56 26 L 44 26 Z" fill="${n}" ${a}/>
+<!-- TRAPEZIUS (full diamond — upper_back) -->
+${z("upper_back","M 44 18 L 56 18 L 80 32 L 80 46 L 66 62 L 50 68 L 34 62 L 20 46 L 20 32 Z")}
+<!-- LEFT LATISSIMUS DORSI (drawn before infraspinatus so scapula zone appears on top) -->
+${z("lat","M 14 64 C 16 82 18 98 22 114 L 32 118 L 36 82 L 36 64 Z")}
+<!-- RIGHT LATISSIMUS DORSI -->
+${z("lat","M 86 64 C 84 82 82 98 78 114 L 68 118 L 64 82 L 64 64 Z")}
+<!-- LEFT POSTERIOR DELTOID -->
+${z("shoulder","M 20 32 C 13 34 11 40 11 48 C 11 56 14 62 20 64 L 27 62 C 25 56 24 48 24 42 Z")}
+<!-- RIGHT POSTERIOR DELTOID -->
+${z("shoulder","M 80 32 C 87 34 89 40 89 48 C 89 56 86 62 80 64 L 73 62 C 75 56 76 48 76 42 Z")}
+<!-- LEFT INFRASPINATUS / TERES (scapula — upper_back, drawn above lat) -->
+${z("upper_back","M 20 64 L 27 62 L 34 62 L 36 80 C 30 82 24 78 21 72 Z")}
+<!-- RIGHT INFRASPINATUS / TERES -->
+${z("upper_back","M 80 64 L 73 62 L 66 62 L 64 80 C 70 82 76 78 79 72 Z")}
+<!-- LEFT TRICEPS BRACHII -->
+${z("tricep","M 20 64 C 13 68 10 82 11 96 C 12 102 16 104 20 104 C 24 102 27 98 27 92 C 27 78 26 66 20 64 Z")}
+<!-- RIGHT TRICEPS -->
+${z("tricep","M 80 64 C 87 68 90 82 89 96 C 88 102 84 104 80 104 C 76 102 73 98 73 92 C 73 78 74 66 80 64 Z")}
+<!-- LEFT FOREARM (back) -->
+${z("forearm","M 20 104 C 14 108 11 122 12 134 C 13 138 17 140 21 140 C 25 139 27 135 27 130 C 27 116 25 106 20 104 Z")}
+<!-- RIGHT FOREARM (back) -->
+${z("forearm","M 80 104 C 86 108 89 122 88 134 C 87 138 83 140 79 140 C 75 139 73 135 73 130 C 73 116 75 106 80 104 Z")}
+<!-- LOWER BACK / ERECTOR SPINAE -->
+${z("lower_back","M 34 68 L 66 68 L 68 118 L 32 118 Z")}
+<!-- LEFT GLUTEUS MAXIMUS -->
+${z("glute","M 32 118 L 50 118 L 50 160 C 44 160 38 156 32 148 C 28 138 28 128 32 118 Z")}
+<!-- RIGHT GLUTEUS MAXIMUS -->
+${z("glute","M 68 118 L 50 118 L 50 160 C 56 160 62 156 68 148 C 72 138 72 128 68 118 Z")}
+<!-- LEFT HAMSTRINGS -->
+${z("hamstring","M 32 148 C 28 158 26 170 26 182 C 27 192 31 198 36 202 L 46 202 L 50 160 Z")}
+<!-- RIGHT HAMSTRINGS -->
+${z("hamstring","M 68 148 C 72 158 74 170 74 182 C 73 192 69 198 64 202 L 54 202 L 50 160 Z")}
+<!-- LEFT GASTROCNEMIUS (CALF) -->
+${z("calf","M 36 202 C 32 208 31 214 33 218 C 36 220 40 220 43 218 C 44 214 45 208 46 202 Z")}
+<!-- RIGHT GASTROCNEMIUS -->
+${z("calf","M 64 202 C 68 208 69 214 67 218 C 64 220 60 220 57 218 C 56 214 55 208 54 202 Z")}
+<!-- FEET (back) -->
+<ellipse cx="40" cy="219" rx="9" ry="2.5" fill="${n}" stroke="${sc}" stroke-width="${sw}"/>
+<ellipse cx="60" cy="219" rx="9" ry="2.5" fill="${n}" stroke="${sc}" stroke-width="${sw}"/>
+<!-- LINEWORK: spine, trap boundary, scapula edges, erectors, glute division, knee, elbow -->
+${l("M 50 26 L 50 118")}
+${l("M 34 62 Q 50 70 66 62")}
+${l("M 27 38 C 23 44 22 52 24 60")}${l("M 73 38 C 77 44 78 52 76 60")}
+${l("M 27 38 L 36 62")}${l("M 73 38 L 64 62")}
+${l("M 34 68 L 34 118")}${l("M 66 68 L 66 118")}
+${l("M 50 118 L 50 160")}
+${l("M 26 202 Q 36 208 46 202")}${l("M 74 202 Q 64 208 54 202")}
+${l("M 10 96 Q 20 104 27 96")}${l("M 90 96 Q 80 104 73 96")}
+</svg>`;
   }
 }
 
@@ -1048,29 +1084,26 @@ export default function ClientSession() {
       const gap = Math.round(heatMapW * 0.08);
       const sideW = (heatMapW - gap) / 2;
 
-      // Body height: constrain so total width (BODY_W_RATIO * bodyH) fits in sideW
-      const maxBodyH = heatMapH * 0.92;
-      const maxBodyHFromW = sideW / BODY_W_RATIO;
-      const bodyH = Math.min(maxBodyH, maxBodyHFromW);
+      // SVG body size: height constrained by available area, preserving 100×220 aspect
+      const svgH = Math.min(heatMapH * 0.94, sideW * 0.96 * SVG_ASPECT);
+      const svgW = svgH / SVG_ASPECT;
 
-      // Silhouette vertical offset to center in heat map area
-      const bodyTop = heatMapTop + (heatMapH - bodyH) / 2;
-
-      // Center x of each silhouette
-      const frontCx = cx + sideW * 0.5;
-      const backCx  = cx + sideW + gap + sideW * 0.5;
+      // Position each SVG centred in its half-column
+      const frontX = cx + (sideW - svgW) / 2;
+      const backX  = cx + sideW + gap + (sideW - svgW) / 2;
+      const svgTop = heatMapTop + (heatMapH - svgH) / 2;
 
       // Labels: FRONT / BACK
       ctx.fillStyle = "rgba(255,255,255,0.22)";
       ctx.font = "600 26px 'Inter', system-ui, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("FRONT", frontCx, bodyTop - 20);
-      ctx.fillText("BACK", backCx, bodyTop - 20);
+      ctx.fillText("FRONT", frontX + svgW / 2, svgTop - 18);
+      ctx.fillText("BACK",  backX  + svgW / 2, svgTop - 18);
       ctx.textAlign = "left";
 
-      // Draw the two silhouettes
-      drawBodySilhouette(ctx, frontCx, bodyTop, bodyH, true,  stimulus);
-      drawBodySilhouette(ctx, backCx,  bodyTop, bodyH, false, stimulus);
+      // Render the anatomical SVG diagrams onto the canvas
+      await drawSVGOnCanvas(ctx, renderBodySVG(true,  stimulus), frontX, svgTop, svgW, svgH);
+      await drawSVGOnCanvas(ctx, renderBodySVG(false, stimulus), backX,  svgTop, svgW, svgH);
 
       // Divider above bottom callout
       const divY = heatMapBot + 20;
