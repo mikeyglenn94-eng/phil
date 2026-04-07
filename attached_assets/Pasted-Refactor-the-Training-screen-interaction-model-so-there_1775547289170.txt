@@ -1,0 +1,416 @@
+Refactor the Training screen interaction model so there is only ONE clear natural-language entry point for the user.
+
+CORE PRODUCT PRINCIPLE
+This product should feel like querying a trusted coach, not using a collection of AI tools.
+It must stay grounded in our existing training philosophy, our pre-built program library, and our coaching logic.
+It must NOT feel like a random GPT wrapper.
+
+The coach should consistently apply:
+- our existing programming philosophy
+- our existing exercise and progression standards
+- our existing library content where relevant
+- Ockham’s razor
+- simplicity over novelty
+- clarity over feature sprawl
+
+======================================
+GOAL
+======================================
+
+Unify the current fragmented interactions on the Training screen into one single coach interface.
+
+Right now we have multiple competing interaction methods:
+- free text command box for scheduling / edits
+- “Build From Library”
+- “Build Through AI”
+
+This is too cluttered and creates a messy mental model.
+
+We want ONE primary interaction:
+- “Ask your coach”
+
+Everything else should either:
+- be removed from primary view
+- be folded into the coach workflow
+- or become a backend capability the coach can use automatically
+
+======================================
+NON-NEGOTIABLE OUTCOME
+======================================
+
+The user should not need to decide between:
+- library
+- AI
+- command box
+- builder
+
+They should just ask.
+
+The system should decide whether to:
+- pull from the library
+- adapt an existing template
+- edit a current plan
+- create a new week
+- shift sessions around
+- explain reasoning
+- review training structure
+
+The interface should feel like:
+one coach, one brain, one place to ask.
+
+======================================
+1. PRIMARY UI CHANGE
+======================================
+
+Replace the current fragmented action area with one unified input area.
+
+Primary label / identity:
+- “Ask your coach”
+
+Possible placeholder text:
+- “Ask your coach…”
+- “Plan, adjust or review your training”
+- “Build or edit your training plan”
+
+Choose the best one for the current visual design, but keep the tone coach-led, not robotic.
+
+Do NOT use language like:
+- AI
+- assistant
+- generator
+- build through AI
+- smart builder
+
+The visible primary action area should become:
+- a single natural language input
+- optionally with a few compact suggested actions or chips beneath it
+
+Examples of suggested chips:
+- “Plan my week”
+- “Adjust schedule”
+- “Progress this plan”
+- “Review my training”
+
+These are shortcuts into the same coach system, not separate tools.
+
+======================================
+2. REMOVE / DEMOTE DUPLICATE ENTRY POINTS
+======================================
+
+A. REMOVE “Build Through AI” from the main interface entirely.
+
+It should no longer exist as a visible separate action.
+
+B. DEMOTE “Build From Library”
+Do NOT delete the library or its functionality.
+Instead:
+- remove it as a competing top-level CTA
+- make it a backend capability the coach can use automatically
+- optionally allow access through a subtle secondary path such as:
+  - inside a menu
+  - inside coach workflow
+  - or behind an advanced / browse option if truly needed
+
+The library is still critical, but users should not have to think in terms of “library vs AI”.
+
+======================================
+3. PRESERVE AND STRENGTHEN EXISTING COACH LOGIC
+======================================
+
+This is extremely important.
+
+Do NOT turn the coach into a generic chatbot.
+
+The coach must remain:
+- educated
+- opinionated
+- constrained by our training philosophy
+- grounded in our existing program library and progression methods
+- practical
+- simple
+
+The coach should:
+- use pre-built library content where suitable
+- adapt rather than invent when a good internal template already exists
+- preserve the logic and standards we have already built
+- avoid random novelty for its own sake
+- favour simple, robust training structures over over-engineered plans
+
+Apply Ockham’s razor at all times:
+- use the simplest effective training solution
+- avoid unnecessary variation
+- avoid complexity that does not clearly improve adherence or outcomes
+- do not generate fancy plans just because the system can
+
+======================================
+4. COACH CAPABILITIES WITH ONE ENTRY POINT
+======================================
+
+The single “Ask your coach” interface should handle four broad categories of request:
+
+A. PLAN
+Examples:
+- “Build me a 4 day upper/lower split”
+- “Plan next week for 3 strength sessions and 2 runs”
+- “Make me a simple hybrid plan”
+
+B. ADJUST
+Examples:
+- “Move Friday’s session to Saturday”
+- “I missed Monday, fix the rest of the week”
+- “Swap this exercise because my elbow is flaring up”
+
+C. PROGRESS
+Examples:
+- “Repeat this week for 4 weeks with progression”
+- “Add progression to my squat work”
+- “Make next week slightly harder”
+
+D. REVIEW / EXPLAIN
+Examples:
+- “Is this week balanced?”
+- “Why is this too much upper body?”
+- “What am I missing here?”
+- “Explain the progression”
+
+All of these must route through the same coach layer.
+
+======================================
+5. INTENT ROUTING
+======================================
+
+Build clear intent routing behind the scenes.
+
+When the user submits a request, the system should classify whether the intent is primarily:
+- plan creation
+- schedule adjustment
+- plan progression
+- plan review
+- library retrieval / adaptation
+- explanation / coaching guidance
+
+Then route to the correct internal logic.
+
+Important:
+The user should not see this routing complexity.
+It should feel seamless.
+
+======================================
+6. LIBRARY AS BACKEND INTELLIGENCE
+======================================
+
+Keep the pre-built library as a core asset.
+
+The coach should use the library first when appropriate.
+
+Preferred behaviour:
+- if a suitable library template exists, start there
+- then adapt it to the user’s context
+- only create from scratch when library coverage is weak or the request is highly specific
+
+Examples:
+User says:
+- “Give me a 4 day strength plan”
+Coach should:
+- first look for the closest relevant internal template
+- then adapt it
+
+User should feel:
+- they are getting the benefit of our proven systems
+not
+- random text generation
+
+Do not expose internal implementation details unless useful.
+
+======================================
+7. COACH PERSONALITY / RESPONSE MODEL
+======================================
+
+The coach should sound:
+- experienced
+- calm
+- concise
+- slightly opinionated
+- practical
+- trustworthy
+
+The coach should NOT sound:
+- robotic
+- overly enthusiastic
+- generic
+- verbose
+- uncertain when it should have an opinion
+
+Avoid phrases like:
+- “Here’s an AI-generated plan”
+- “Based on your prompt, I generated…”
+- “As an AI…”
+
+Prefer:
+- direct coaching language
+- short reasoning
+- clear actions
+- structured output
+
+======================================
+8. OCKHAM’S RAZOR RULES
+======================================
+
+This needs to be explicit in the logic.
+
+When building or modifying training, the coach should prefer:
+- fewer moving parts
+- fewer unnecessary exercise swaps
+- fewer progression variables at once
+- repeatable session structures
+- practical weekly rhythm
+- plans that are easy to follow consistently
+
+Examples of what to avoid:
+- excessive exercise variety
+- too many progression methods at once
+- unnecessary complexity in periodisation
+- changing things just to make it look clever
+- over-customising when a simple template works
+
+The coach should ask:
+- what is the simplest effective structure here?
+- what is easiest to adhere to?
+- what preserves momentum?
+
+======================================
+9. UI DETAILS
+======================================
+
+Training screen should feel cleaner after this refactor.
+
+Visible top interaction area should include:
+- one input area for “Ask your coach”
+- optionally a few small suggested prompt chips
+- no duplicate AI / library CTA clutter
+
+Keep the visual design minimal.
+Do not add more cards or complexity.
+
+If a separate browse experience for the library remains necessary:
+- tuck it away subtly
+- do not let it compete with the main coach input
+
+======================================
+10. COACH RESPONSE UX
+======================================
+
+The coach should not just dump text.
+
+Responses should be structured by request type.
+
+For example:
+
+If user asks to build a plan:
+- provide a concise summary
+- show the proposed structure
+- show any key assumptions
+- allow confirm / apply
+
+If user asks to adjust schedule:
+- show exactly what will change
+- allow confirm / apply
+
+If user asks to review:
+- provide short analysis
+- identify key issue or approval
+- suggest the simplest fix
+
+If user asks for progression:
+- explain how progression will be applied
+- keep progression logic consistent with our existing methods
+
+The coach should feel execution-oriented, not chatty.
+
+======================================
+11. GUARDRAILS
+======================================
+
+The coach must not:
+- invent a brand new philosophy that conflicts with existing programming standards
+- ignore the pre-built library when it is relevant
+- create flashy but impractical plans
+- overcomplicate sessions
+- bloat the interface
+- expose multiple competing workflows again
+
+If the user asks for something that conflicts with our philosophy:
+- coach should gently constrain or redirect
+- explain the simpler, more effective alternative
+
+Example:
+If user asks for a wildly overcomplicated structure,
+the coach should simplify and explain why.
+
+======================================
+12. SUGGESTED TECHNICAL APPROACH
+======================================
+
+Please refactor the current training interaction layer into a unified coach orchestration flow.
+
+Possible implementation pieces:
+- CoachInput component
+- CoachIntentRouter
+- LibraryMatcher
+- CoachPlanBuilder
+- CoachPlanEditor
+- CoachReviewEngine
+- CoachResponseRenderer
+
+Suggested helper responsibilities:
+- classifyCoachIntent(input, context)
+- matchLibraryTemplate(request, userContext)
+- adaptTemplateToUser(template, userContext, request)
+- buildPlanFromPhilosophy(request, userContext)
+- generateCoachResponse(intent, result, reasoning)
+- getSuggestedCoachPrompts(context)
+
+If existing build / scheduling / library logic already exists:
+- reuse it
+- route through it
+- do not duplicate functionality
+
+======================================
+13. COPY CHANGES
+======================================
+
+Update visible copy across the Training screen to remove explicit AI framing.
+
+Replace / remove labels like:
+- “Build Through AI”
+- “AI builder”
+- “Generate with AI”
+
+Use coach-led language instead:
+- “Ask your coach”
+- “Plan my week”
+- “Review this block”
+- “Adjust schedule”
+
+The product should feel like the intelligence is built in, not bolted on.
+
+======================================
+14. ACCEPTANCE CRITERIA
+======================================
+
+After this refactor:
+- there is one clear primary interaction area on the Training screen
+- “Build Through AI” is removed from the main UI
+- the library still exists and still works, but no longer competes as a separate top-level workflow
+- users can plan, adjust, progress, and review training through one coach interface
+- the coach remains grounded in our existing training philosophy and pre-built library
+- the coach applies Ockham’s razor consistently
+- the UI feels cleaner and less cluttered
+- the experience feels like querying a trusted coach, not using a random GPT tool
+
+At the end, show me:
+1. which files/components were changed
+2. how the unified coach flow routes requests
+3. how the library is preserved and used behind the scenes
+4. what guardrails keep the coach aligned with our existing philosophy
+5. any assumptions made where current functionality had to be merged or renamed

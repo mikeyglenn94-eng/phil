@@ -538,6 +538,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const cmdRecRef = useRef<any>(null);
   const [cmdSaving, setCmdSaving] = useState(false);
   const [cmdParsing, setCmdParsing] = useState(false);
+  const [coachInlineResponse, setCoachInlineResponse] = useState<string | null>(null);
   const [pendingReschedule, setPendingReschedule] = useState<{
     programmeId: number; programmeName: string; sessions: Session[]; dayLabels: string[];
   } | null>(null);
@@ -1072,6 +1073,83 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     } finally {
       setCmdParsing(false);
     }
+  };
+
+  // ── Unified coach input routing ──────────────────────────────────────────────
+  // Classifies a natural-language input so we can route it to the right backend.
+  // "plan"     → open the programme/session builder (AI dialog) pre-filled
+  // "library"  → open the library browser pre-filled
+  // "review"   → call coaching endpoint and show inline answer
+  // "schedule" → default: send to calendar command parser
+  function classifyCoachIntent(input: string): "plan" | "library" | "review" | "schedule" {
+    const lower = input.toLowerCase();
+    if (/\b(build|create|generate|plan|make me|give me|design|programme|program)\b/.test(lower)) return "plan";
+    if (/\b(find|search|browse|show me|look for|library|template|from library)\b/.test(lower)) return "library";
+    if (/\b(review|check|is this|balanced|analyse|analyze|explain|what.s missing|what am i missing)\b/.test(lower)) return "review";
+    return "schedule";
+  }
+
+  const handleCoachInput = async () => {
+    const input = cmdInput.trim();
+    if (!input) return;
+    setCoachInlineResponse(null);
+
+    const intent = classifyCoachIntent(input);
+
+    // ── Plan: open the builder pre-filled with the natural language description ──
+    if (intent === "plan") {
+      setDescribeText(input);
+      setAiMode("programme");
+      setBuildMode("describe");
+      setGeneratedPreview(null);
+      setFromScratchTitle("");
+      setStrengthStyle(null);
+      setQuickAddName("");
+      setQuickAddDesc("");
+      setQuickAddType("strength");
+      setQuickAddError("");
+      setAssignStartDate(format(new Date(), "yyyy-MM-dd"));
+      setAssignDialogOpen(true);
+      setCmdInput("");
+      return;
+    }
+
+    // ── Library: open the library browser pre-filled and auto-search ──
+    if (intent === "library") {
+      setBrainQuery(input);
+      setBrainResults([]);
+      setBrainIntent(null);
+      setBrainOpen(true);
+      setCmdInput("");
+      setTimeout(() => void searchBrain(input), 150);
+      return;
+    }
+
+    // ── Review: call coaching endpoint with training context ──
+    if (intent === "review") {
+      setCmdParsing(true);
+      try {
+        const sessionCount = (clientProgrammes ?? []).reduce((n, p) => n + (p.sessions?.length ?? 0), 0);
+        const programmeNames = (clientProgrammes ?? []).map(p => p.title).join(", ") || "none";
+        const context = `Client training plans: ${programmeNames}. Total scheduled sessions: ${sessionCount}.`;
+        const res = await fetch(`/api/clients/${clientId}/coaching`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: input, context }),
+        });
+        const data = await res.json();
+        setCoachInlineResponse(data.answer ?? "I couldn't analyse that — try asking something more specific.");
+        setCmdInput("");
+      } catch {
+        setCoachInlineResponse("Couldn't reach the coaching service. Check your connection.");
+      } finally {
+        setCmdParsing(false);
+      }
+      return;
+    }
+
+    // ── Default: calendar schedule command ──
+    await handleRescheduleCmd();
   };
 
   const applyReschedule = async () => {
@@ -2422,56 +2500,74 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               </div>
               <Button
                 size="sm"
-                variant="outline"
-                className="rounded-xl text-xs h-8 px-2.5 gap-1 border-violet-300 text-violet-700 hover:bg-violet-50"
+                variant="ghost"
+                className="rounded-xl text-xs h-8 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
                 onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
-                title="Build From Library — search curated programmes, WODs & runs"
+                title="Browse programme library"
               >
-                <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Build From Library</span>
-              </Button>
-              <Button
-                size="sm"
-                className="rounded-xl text-xs h-8 px-2.5 gap-1"
-                onClick={() => { setAssignStartDate(format(new Date(), "yyyy-MM-dd")); setAiMode("programme"); setBuildMode("describe"); setGeneratedPreview(null); setDescribeText(""); setFromScratchTitle(""); setStrengthStyle(null); setQuickAddName(""); setQuickAddDesc(""); setQuickAddType("strength"); setQuickAddError(""); setAssignDialogOpen(true); }}
-                title="Build a session or programme using AI"
-              >
-                <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Build Through AI</span>
+                <BookMarked className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Library</span>
               </Button>
             </div>
           </div>
 
-          {/* AI Reschedule Command Bar */}
-          <div className="shrink-0 px-4 py-2 border-b bg-muted/30 flex flex-col gap-2">
+          {/* ── Ask your coach ─────────────────────────────────────── */}
+          <div className="shrink-0 px-4 pt-3 pb-2 border-b bg-background flex flex-col gap-2">
+            {/* Suggested prompt chips — only shown when input is empty and no pending action */}
+            {!cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && !coachInlineResponse && (
+              <div className="flex flex-wrap gap-1.5">
+                {(["Plan my week", "Adjust schedule", "Progress this plan", "Review my training"] as const).map(chip => (
+                  <button
+                    key={chip}
+                    onClick={() => setCmdInput(chip)}
+                    className="text-[11px] px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-muted transition-colors text-muted-foreground"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={cmdListening ? (cmdInterim || cmdInput) : cmdInput}
-                onChange={e => setCmdInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") void handleRescheduleCmd(); }}
-                placeholder='e.g. "copy this week into 4 weeks +1 set −10% reps" · "move Mon/Wed/Fri → Tue/Thu/Sun"'
+                onChange={e => { setCmdInput(e.target.value); setCoachInlineResponse(null); }}
+                onKeyDown={e => { if (e.key === "Enter") void handleCoachInput(); }}
+                placeholder="Ask your coach — plan, adjust, review or progress your training…"
                 disabled={cmdListening}
-                className="flex-1 text-xs bg-background border rounded-lg px-3 py-1.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
+                className="flex-1 text-sm bg-muted/30 border rounded-xl px-3.5 py-2 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 focus:bg-background transition-colors"
               />
               <button
                 type="button"
                 onClick={toggleCmdListening}
-                title={cmdListening ? "Stop" : "Voice command"}
-                className={`p-1.5 rounded-lg transition-colors shrink-0 ${cmdListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                title={cmdListening ? "Stop listening" : "Voice input"}
+                className={`p-2 rounded-xl transition-colors shrink-0 ${cmdListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
               >
-                {cmdListening ? <Square className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                {cmdListening
+                  ? <><Square className="w-3.5 h-3.5" /><span className="sr-only">Stop</span></>
+                  : <><Mic className="w-3.5 h-3.5" /><span className="sr-only">Voice</span></>
+                }
               </button>
               <Button
                 size="sm"
-                variant="outline"
-                className="text-xs h-7 px-3 rounded-lg shrink-0"
-                onClick={() => void handleRescheduleCmd()}
+                className="rounded-xl h-9 px-3 shrink-0"
+                onClick={() => void handleCoachInput()}
                 disabled={!cmdInput.trim() || cmdParsing}
               >
-                {cmdParsing ? <Loader2 className="w-3 h-3 animate-spin" /> : "Apply"}
+                {cmdParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
               </Button>
             </div>
+
+            {/* Inline coach review response */}
+            {coachInlineResponse && (
+              <div className="flex items-start gap-2.5 bg-muted/50 border rounded-xl px-3.5 py-3">
+                <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                <p className="text-[13px] leading-relaxed text-foreground flex-1">{coachInlineResponse}</p>
+                <button onClick={() => setCoachInlineResponse(null)} className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             {pendingReschedule && (
               <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 <p className="text-xs text-amber-800 leading-snug flex-1">
@@ -2887,13 +2983,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         </div>
       )}
 
-      {/* Build Through AI Dialog */}
+      {/* Build Your Plan Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setQuickAddWodOptions(null); setSavingAiSession(null); } }}>
         <DialogContent className="max-w-md max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />
-              Build Through AI
+              Build Your Plan
             </DialogTitle>
             <DialogDescription className="sr-only">Build a session or programme using AI for {client?.name ?? "this client"}</DialogDescription>
           </DialogHeader>
