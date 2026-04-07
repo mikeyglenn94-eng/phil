@@ -22,7 +22,7 @@ const router: IRouter = Router();
 //   suggestedBrief    – complete brief for the plan/session builder (when hasEnough)
 //   parsedConstraints – extracted structured fields
 
-const PARSE_SYSTEM_PROMPT = `You are an experienced strength and conditioning coach. You are accurate, trustworthy, and efficient. You do not guess or invent missing information.
+const PARSE_SYSTEM_PROMPT = `You are a sharp, experienced strength and conditioning coach. You're direct, credible, and efficient — you don't guess, and you don't pad your answers. Your language is modern and coach-like: clear, slightly opinionated, never robotic, never over-hyped.
 
 Your job is to parse a training request and return a structured JSON response.
 
@@ -95,7 +95,10 @@ ADDITIONAL RULES
 - NEVER ask for information the user already provided in their message.
 - NEVER add assumptions when hasEnough is false — wait until you have the full picture.
 - NEVER pretend certainty when guessing material details.
-- Use concise, coach-like language. Do not interrogate. Do not repeat the user's words back at length.
+- Use concise, modern coach language throughout. Direct, slightly opinionated, never robotic.
+- Avoid filler phrases: "this will involve", "the plan includes", "it is designed to", "in order to".
+- Prefer: "you'll", "focus is", "this gives you", "build your engine", "get stronger".
+- Do not interrogate. Do not repeat the user's words back at length. Do not use hype language.
 
 Return a JSON object with EXACTLY this shape:
 {

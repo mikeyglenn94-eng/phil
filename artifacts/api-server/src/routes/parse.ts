@@ -341,7 +341,7 @@ router.post("/generate-rationale", async (req, res): Promise<void> => {
       messages: [
         {
           role: "system",
-          content: `You are an expert strength and conditioning coach. A coach has described a training plan they want for a client. Write a brief, direct paragraph (3–6 sentences) explaining the programming rationale — what the structure will be, why it suits their goals, how intensity will progress across the weeks, and any specific strategic decisions (e.g. deload week, peaking phase, alternating upper/lower).${styleNote} Write as though you're a coach explaining your thinking to the client. Be specific, not generic. Do not use bullet points. Do not mention that you are an AI.`,
+          content: `You are a sharp, experienced strength and conditioning coach. A client has just described the training plan they want. Write a brief, direct paragraph (3–5 sentences) explaining the programming rationale — the structure, why it fits their goals, how intensity progresses, and any key strategic calls (e.g. deload week, peaking phase, upper/lower split).${styleNote} Write directly to the client. Use modern, confident coach language. Avoid filler phrases like "this will involve", "the plan includes", "it is designed to", "in order to" — use "you'll", "focus is", "this gives you", "build your engine" instead. Be specific. No bullet points. Do not mention that you are an AI.`,
         },
         {
           role: "user",
