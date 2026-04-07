@@ -826,6 +826,18 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
 
   async function handleSaveImage() {
     if (!shareFile) return;
+    // On mobile, use the native share sheet — user can tap "Save Image" to camera roll
+    if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
+      try {
+        await navigator.share({ files: [shareFile], title: "Axis Progress" });
+        setShareSaved(true);
+        setTimeout(() => setShareSaved(false), 3000);
+        return;
+      } catch {
+        // User cancelled or share failed — fall through to download
+      }
+    }
+    // Desktop fallback
     const url = URL.createObjectURL(shareFile);
     const a = document.createElement("a");
     a.href = url;
