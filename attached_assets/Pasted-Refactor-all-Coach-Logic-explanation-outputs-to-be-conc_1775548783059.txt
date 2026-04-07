@@ -1,0 +1,94 @@
+Refactor all “Coach Logic” / explanation outputs to be concise, scannable, and bullet-based.
+
+CORE PRINCIPLE
+Coach explanations must be easy to scan in under 5 seconds.
+Do not use paragraphs.
+Do not write long-form explanations.
+Do not try to prove intelligence through verbosity.
+
+======================================
+FORMATTING RULES
+======================================
+
+1. No paragraphs
+- never output long blocks of text
+- always use bullets or short structured sections
+
+2. Use clear sections when needed:
+- “Why this works”
+- “Structure”
+- “Progression”
+- “Assumptions” (if relevant)
+
+3. Bullet rules:
+- max 4–6 bullets per section
+- one idea per bullet
+- keep each bullet short (ideally one line)
+
+4. Use simple visual structure:
+- arrows (→)
+- short labels
+- line breaks
+- indentation if useful
+
+Example format:
+
+Why this works:
+- Hills → build power + running economy
+- Steady run → improve endurance + pace control
+
+Structure:
+- Week 1 → baseline
+- Week 2 → increase volume
+- Week 3 → sharpen
+
+Progression:
+- same session structure each week
+- increase volume, not complexity
+
+======================================
+CONTENT RULES
+======================================
+
+- remove filler language:
+  - “in order to”
+  - “this allows you to”
+  - “so that you can”
+  - “this approach ensures”
+
+- prioritise cause → effect:
+  - “Hills → improve power”
+  - not “Hills are included to help improve power”
+
+- avoid over-explaining physiology
+- focus on:
+  - what is happening
+  - why it matters
+  - how it progresses
+
+======================================
+WHEN TO SHOW COACH LOGIC
+======================================
+
+- show it after building a plan or session
+- keep it short enough that users actually read it
+- do not overwhelm the user with too many sections
+
+======================================
+RESPONSE LENGTH GUARDRAIL
+======================================
+
+- total explanation should usually fit within:
+  - 6–12 lines max
+- if longer, it must be broken into clearly separated sections
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+After this change:
+- no coach explanation appears as a paragraph block
+- all explanations are scannable
+- users can understand the plan logic in seconds
+- explanations feel sharp, not verbose
+- the product feels more premium and intentional

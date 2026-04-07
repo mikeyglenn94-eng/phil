@@ -2701,11 +2701,26 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               </div>
             )}
 
-            {/* Inline coach review response (text answer from coaching endpoint) */}
+            {/* Inline coach review response (structured bullet output from coaching endpoint) */}
             {coachInlineResponse && (
               <div className="flex items-start gap-2.5 bg-muted/50 border rounded-xl px-3.5 py-3">
                 <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                <p className="text-[13px] leading-relaxed text-foreground flex-1">{coachInlineResponse}</p>
+                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                  {coachInlineResponse.split("\n").map((line, i) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return <div key={i} className="h-1.5" />;
+                    const isBullet = trimmed.startsWith("- ");
+                    const isHeader = !isBullet && trimmed.endsWith(":");
+                    return (
+                      <div key={i} className={`flex items-start gap-1.5 ${isBullet ? "ml-2" : ""}`}>
+                        {isBullet && <span className="text-primary/60 mt-px shrink-0 select-none">·</span>}
+                        <span className={`text-[13px] leading-snug ${isHeader ? "font-semibold text-foreground" : isBullet ? "text-foreground/85" : "text-foreground"}`}>
+                          {isBullet ? trimmed.slice(2) : trimmed}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
                 <button onClick={() => setCoachInlineResponse(null)} className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5">
                   <X className="w-3.5 h-3.5" />
                 </button>

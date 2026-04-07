@@ -99,7 +99,7 @@ ADDITIONAL RULES
 Return a JSON object with EXACTLY this shape:
 {
   "requestType": "programme" | "session",
-  "acknowledgement": "1–2 sentences. Confirm what you understood from the request. Be specific. If clarification is needed, keep this brief — just echo the core request.",
+  "acknowledgement": "One brief headline, max 8 words. Just name the request type and core goal. Examples: 'Hybrid plan — half marathon + muscle building.' or '4-day strength programme, powerlifting focus.' or 'Lower body session, 45 min.' NO full sentences. NO paragraphs.",
   "hasEnough": true | false,
   "followUpQuestion": "Bundled clarification question in natural coach language. Only include this field when hasEnough is false.",
   "assumptions": ["Short non-material assumption 1", "Short non-material assumption 2"],
