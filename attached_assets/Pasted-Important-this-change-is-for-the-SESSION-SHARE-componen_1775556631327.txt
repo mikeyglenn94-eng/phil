@@ -1,0 +1,82 @@
+Important: this change is for the SESSION SHARE component only.
+
+Do not change, remove, or overwrite anything in the dashboard share, dashboard cards, progress share, or any other share surface.
+Only redesign the specific session share screen shown in the current Share Activity view.
+
+Context:
+The current session share still shows the failed anatomical body visual.
+That body graphic needs to be removed from SESSION SHARE only.
+The dashboard share has already been handled separately and should remain untouched.
+
+Redesign the SESSION SHARE card from scratch with a much simpler, progress-based format.
+
+GOAL:
+Make session share feel premium, clear, and worth sharing by focusing on the best performance from that specific workout.
+
+SESSION SHARE RULES:
+- This is about one workout only
+- No weekly summary
+- No body heatmap
+- No complicated visuals
+- No anatomy graphics
+- No charts unless extremely minimal
+- Focus on one clear session win
+
+Use this structure for SESSION SHARE only:
+
+1. Top row
+- Session type on the left, e.g. SBD
+- Date on the right, small and subtle
+
+2. Main hero section
+- Exercise name as the key movement from that session
+- Weight × reps as the largest element on the card
+  Example:
+  Bench Press
+  60kg × 10
+
+3. Supporting session progress metrics
+Use only 2 to 3 of these max:
+- Estimated 1RM
+- Change vs last time this exercise was performed
+- Rep PR at this weight
+- Volume for this lift today
+- Average reps across work sets for this lift today
+
+4. Optional one-line insight
+Examples:
+- +5kg vs last Bench Press session
+- Rep PR at this load
+- Highest estimated 1RM this month
+Keep it short and tied to this session only
+
+5. Visual style
+- Premium dark background is fine for session share
+- Strong typography hierarchy
+- Plenty of spacing
+- No squashed lines
+- No boxes inside boxes
+- No body diagram
+- No gimmicks
+
+6. Layout priority
+The visual focal point should be:
+- the exercise
+- the weight × reps
+Everything else should support that
+
+7. Important protection
+Do not apply this redesign to:
+- dashboard share
+- weekly summary share
+- progress share
+- any existing dashboard components
+
+Only replace the current session share card shown in Share Activity.
+
+Success criteria:
+- instantly readable in 1 to 2 seconds
+- clearly tied to one training session
+- clearly shows a meaningful performance win
+- no anatomy visual at all
+- dashboard share remains untouched

@@ -118,125 +118,6 @@ function getMuscleStimulus(
   return result;
 }
 
-// Anatomy PNG: 5671×5671, three panels side-by-side (front | side | back), each 1/3 of width.
-// Panel aspect ratio: height = 3 × width  (5671 / (5671/3) = 3.0)
-const PANEL_ASPECT = 3.0;
-
-let _anatomyImg: HTMLImageElement | null = null;
-function loadAnatomyImage(): Promise<HTMLImageElement | null> {
-  if (_anatomyImg) return Promise.resolve(_anatomyImg);
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload  = () => { _anatomyImg = img; resolve(img); };
-    img.onerror = () => resolve(null);
-    img.src = "/anatomy-body.png";
-  });
-}
-
-// Overlay polygon coordinates — normalized [0,1]×[0,1] within each panel crop.
-// Front panel = left 1/3 of image.  Back panel = right 1/3 of image.
-// Estimated from the stock figure proportions; can be refined visually.
-type Poly = [number, number][];
-interface ZoneRegion { key: string; polys: Poly[]; }
-
-const FRONT_ZONES: ZoneRegion[] = [
-  { key: "shoulder", polys: [
-    [[0.07,0.18],[0.25,0.16],[0.29,0.23],[0.25,0.31],[0.08,0.31]],  // left ant. deltoid
-    [[0.93,0.18],[0.75,0.16],[0.71,0.23],[0.75,0.31],[0.92,0.31]],  // right
-  ]},
-  { key: "chest", polys: [
-    [[0.25,0.18],[0.50,0.17],[0.50,0.37],[0.27,0.39],[0.20,0.31]],  // left pec
-    [[0.75,0.18],[0.50,0.17],[0.50,0.37],[0.73,0.39],[0.80,0.31]],  // right pec
-  ]},
-  { key: "bicep", polys: [
-    [[0.07,0.31],[0.23,0.31],[0.21,0.50],[0.08,0.50]],              // left
-    [[0.93,0.31],[0.77,0.31],[0.79,0.50],[0.92,0.50]],              // right
-  ]},
-  { key: "forearm", polys: [
-    [[0.09,0.50],[0.21,0.50],[0.19,0.64],[0.12,0.64]],             // left
-    [[0.91,0.50],[0.79,0.50],[0.81,0.64],[0.88,0.64]],             // right
-  ]},
-  { key: "core", polys: [
-    [[0.27,0.37],[0.73,0.37],[0.70,0.59],[0.30,0.59]],             // abs + obliques
-  ]},
-  { key: "quad", polys: [
-    [[0.28,0.60],[0.50,0.60],[0.48,0.80],[0.28,0.80]],             // left thigh
-    [[0.72,0.60],[0.50,0.60],[0.52,0.80],[0.72,0.80]],             // right thigh
-  ]},
-  { key: "calf", polys: [
-    [[0.30,0.80],[0.47,0.80],[0.45,0.93],[0.31,0.93]],             // left shin
-    [[0.70,0.80],[0.53,0.80],[0.55,0.93],[0.69,0.93]],             // right shin
-  ]},
-];
-
-const BACK_ZONES: ZoneRegion[] = [
-  { key: "shoulder", polys: [
-    [[0.07,0.18],[0.25,0.16],[0.28,0.23],[0.25,0.31],[0.07,0.31]], // left post. deltoid
-    [[0.93,0.18],[0.75,0.16],[0.72,0.23],[0.75,0.31],[0.93,0.31]], // right
-  ]},
-  { key: "upper_back", polys: [
-    [[0.27,0.16],[0.73,0.16],[0.80,0.28],[0.70,0.41],[0.50,0.45],[0.30,0.41],[0.20,0.28]], // trapezius
-  ]},
-  { key: "lat", polys: [
-    [[0.08,0.31],[0.30,0.33],[0.37,0.59],[0.27,0.62],[0.09,0.57]], // left lat
-    [[0.92,0.31],[0.70,0.33],[0.63,0.59],[0.73,0.62],[0.91,0.57]], // right lat
-  ]},
-  { key: "tricep", polys: [
-    [[0.07,0.31],[0.22,0.31],[0.20,0.51],[0.07,0.51]],             // left
-    [[0.93,0.31],[0.78,0.31],[0.80,0.51],[0.93,0.51]],             // right
-  ]},
-  { key: "forearm", polys: [
-    [[0.09,0.51],[0.20,0.51],[0.18,0.64],[0.12,0.64]],             // left
-    [[0.91,0.51],[0.80,0.51],[0.82,0.64],[0.88,0.64]],             // right
-  ]},
-  { key: "lower_back", polys: [
-    [[0.35,0.54],[0.65,0.54],[0.65,0.63],[0.35,0.63]],             // erectors
-  ]},
-  { key: "glute", polys: [
-    [[0.28,0.62],[0.72,0.62],[0.70,0.73],[0.30,0.73]],             // glutes
-  ]},
-  { key: "hamstring", polys: [
-    [[0.28,0.73],[0.50,0.73],[0.48,0.85],[0.29,0.85]],             // left
-    [[0.72,0.73],[0.50,0.73],[0.52,0.85],[0.71,0.85]],             // right
-  ]},
-  { key: "calf", polys: [
-    [[0.30,0.85],[0.47,0.85],[0.45,0.94],[0.31,0.94]],             // left gastroc
-    [[0.70,0.85],[0.53,0.85],[0.55,0.94],[0.69,0.94]],             // right gastroc
-  ]},
-];
-
-async function drawAnatomyPanel(
-  ctx: CanvasRenderingContext2D,
-  isFront: boolean,
-  stimulus: Map<string, "high" | "medium">,
-  destX: number, destY: number, destW: number, destH: number,
-): Promise<void> {
-  const img = await loadAnatomyImage();
-  if (img) {
-    const iw = img.naturalWidth;   // 5671
-    const ih = img.naturalHeight;  // 5671
-    const pw = iw / 3;             // panel width in source image
-    const sx = isFront ? 0 : pw * 2;
-    ctx.drawImage(img, sx, 0, pw, ih, destX, destY, destW, destH);
-  }
-
-  const zones = isFront ? FRONT_ZONES : BACK_ZONES;
-  for (const zone of zones) {
-    const level = stimulus.get(zone.key);
-    if (!level) continue;
-    ctx.fillStyle = level === "high"
-      ? "rgba(99,102,241,0.68)"
-      : "rgba(139,92,246,0.50)";
-    for (const poly of zone.polys) {
-      ctx.beginPath();
-      ctx.moveTo(destX + poly[0][0] * destW, destY + poly[0][1] * destH);
-      for (let i = 1; i < poly.length; i++)
-        ctx.lineTo(destX + poly[i][0] * destW, destY + poly[i][1] * destH);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-}
 
 export default function ClientSession() {
   const [, params] = useRoute("/client/programmes/:programmeId/sessions/:sessionId");
@@ -1033,95 +914,127 @@ export default function ClientSession() {
     cy += 120;
 
     if (!isCondition) {
-      // ── STRENGTH — muscle heat map ────────────────────────────────────────
+      // ── STRENGTH — performance card ───────────────────────────────────────
 
-      // Calculate muscle stimulus from logged sets
-      const stimulus = getMuscleStimulus(allExercises, logs, nameOverrides);
-
-      // Layout: two silhouettes side-by-side in the card content area
-      // Reserve bottom zone for optional top-set / comment callout
-      const bottomZoneH = (opts.showTopSet || opts.showComment) ? 200 : 60;
-      const heatMapTop = cy;
-      const heatMapBot = cardTop + cardH - bottomZoneH;
-      const heatMapH = heatMapBot - heatMapTop;
-      const heatMapW = right - cx;
-
-      // Each silhouette is allocated half the width with a gap
-      const gap = Math.round(heatMapW * 0.08);
-      const sideW = (heatMapW - gap) / 2;
-
-      // Panel size: each crop is 1/3 wide × full height → aspect ratio 3:1 (h = 3×w)
-      const bodyH = Math.min(heatMapH * 0.94, sideW * PANEL_ASPECT);
-      const bodyW = bodyH / PANEL_ASPECT;
-
-      // Centre each panel in its half-column
-      const frontX = cx + (sideW - bodyW) / 2;
-      const backX  = cx + sideW + gap + (sideW - bodyW) / 2;
-      const bodyTop = heatMapTop + (heatMapH - bodyH) / 2;
-
-      // Labels: FRONT / BACK
-      ctx.fillStyle = "rgba(255,255,255,0.22)";
-      ctx.font = "600 26px 'Inter', system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("FRONT", frontX + bodyW / 2, bodyTop - 18);
-      ctx.fillText("BACK",  backX  + bodyW / 2, bodyTop - 18);
-      ctx.textAlign = "left";
-
-      // Draw anatomy PNG panels with muscle-zone overlays
-      await drawAnatomyPanel(ctx, true,  stimulus, frontX, bodyTop, bodyW, bodyH);
-      await drawAnatomyPanel(ctx, false, stimulus, backX,  bodyTop, bodyW, bodyH);
-
-      // Divider above bottom callout
-      const divY = heatMapBot + 20;
-      if (opts.showTopSet || opts.showComment) {
-        ctx.strokeStyle = "rgba(255,255,255,0.08)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(cx, divY); ctx.lineTo(right, divY); ctx.stroke();
-      }
-
-      // Optional: Top set callout
-      if (opts.showTopSet) {
-        let bestVol = 0;
-        let bestLabel = "";
-        for (const ex of allExercises) {
-          const exSets = logs[ex.id] || [];
-          for (const s of exSets) {
-            if (s.weight !== null && s.reps !== null && s.weight > 0 && s.reps > 0) {
-              const vol = s.weight * s.reps;
-              if (vol > bestVol) {
-                bestVol = vol;
-                const eName = nameOverrides[ex.id] || ex.name;
-                bestLabel = `${eName} · ${s.weight}kg × ${s.reps}`;
-              }
+      // Find the best single set (highest volume = weight × reps)
+      let heroExName = "", heroExId = "";
+      let heroWeight = 0, heroReps = 0, heroVol = 0;
+      for (const ex of allExercises) {
+        const eName = nameOverrides[ex.id] || ex.name;
+        for (const s of (logs[ex.id] || [])) {
+          if (s.weight && s.reps && s.weight > 0 && s.reps > 0) {
+            const v = s.weight * s.reps;
+            if (v > heroVol) {
+              heroVol = v; heroWeight = s.weight; heroReps = s.reps;
+              heroExName = eName; heroExId = ex.id;
             }
           }
         }
-        if (bestLabel) {
-          let calloutCy = divY + 50;
-          ctx.fillStyle = "rgba(255,255,255,0.25)";
-          ctx.font = "600 26px 'Inter', system-ui, sans-serif";
-          ctx.fillText("BEST SET", cx, calloutCy);
-          calloutCy += 44;
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "600 40px 'Inter', system-ui, sans-serif";
-          let bl = bestLabel;
-          while (ctx.measureText(bl).width > cardW - 120 && bl.length > 4)
-            bl = bl.slice(0, -1);
-          if (bl !== bestLabel) bl += "…";
-          ctx.fillText(bl, cx, calloutCy);
+      }
+
+      // Supporting data
+      const est1RM = heroReps > 1
+        ? Math.round(heroWeight * (1 + heroReps / 30))
+        : heroWeight;
+      const exVolToday = (logs[heroExId] || []).reduce((sum, s) =>
+        (s.weight && s.reps) ? sum + s.weight * s.reps : sum, 0);
+
+      // Previous best for this exercise
+      const prevKey = heroExName.toLowerCase().trim();
+      const prevData = prevLogs[prevKey];
+      let prevBestW = 0, prevBestR = 0, prevBestV = 0;
+      if (prevData) {
+        for (const s of prevData.sets) {
+          if (s.weight && s.reps) {
+            const v = s.weight * s.reps;
+            if (v > prevBestV) { prevBestV = v; prevBestW = s.weight; prevBestR = s.reps; }
+          }
         }
       }
 
-      // Optional: session comment
-      if (opts.showComment && sessionComment.trim()) {
-        const comment = sessionComment.trim();
-        const commentCy = cardTop + cardH - 58;
-        ctx.fillStyle = "rgba(255,255,255,0.38)";
-        ctx.font = "italic 36px 'Inter', system-ui, sans-serif";
-        let cl = `"${comment}"`;
-        while (ctx.measureText(cl).width > cardW - 120 && cl.length > 4) cl = cl.slice(0, -1);
-        if (cl !== `"${comment}"`) cl += '…"';
-        ctx.fillText(cl, cx, commentCy);
+      // One-line insight tied to this session
+      let insight = "";
+      if (prevBestW > 0 && heroWeight > prevBestW)
+        insight = `+${heroWeight - prevBestW}kg vs last time`;
+      else if (prevBestR > 0 && heroReps > prevBestR && heroWeight >= prevBestW)
+        insight = `+${heroReps - prevBestR} reps vs last time`;
+      else if (prevBestV > 0 && heroVol > prevBestV)
+        insight = `Best set yet for ${heroExName}`;
+
+      if (heroExName) {
+        // ── "BEST SET" label ───────────────────────────────────────────────
+        ctx.fillStyle = "rgba(99,102,241,0.90)";
+        ctx.font = "700 30px 'Inter', system-ui, sans-serif";
+        ctx.fillText("BEST SET", cx, cy + 56);
+
+        // ── Exercise name ──────────────────────────────────────────────────
+        ctx.fillStyle = "rgba(255,255,255,0.48)";
+        ctx.font = "500 58px 'Inter', system-ui, sans-serif";
+        let eName = heroExName;
+        while (ctx.measureText(eName).width > cardW - 120 && eName.length > 4)
+          eName = eName.slice(0, -1);
+        if (eName !== heroExName) eName += "…";
+        ctx.fillText(eName, cx, cy + 138);
+
+        // ── Hero: weight × reps ────────────────────────────────────────────
+        const heroText = `${heroWeight}kg × ${heroReps}`;
+        let hfs = 152;
+        ctx.font = `800 ${hfs}px 'Inter', system-ui, sans-serif`;
+        while (ctx.measureText(heroText).width > cardW - 80 && hfs > 72) {
+          hfs -= 6;
+          ctx.font = `800 ${hfs}px 'Inter', system-ui, sans-serif`;
+        }
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(heroText, cx, cy + 138 + hfs + 28);
+        const heroBottom = cy + 138 + hfs + 28;
+
+        // ── Thin divider ───────────────────────────────────────────────────
+        const div2Y = heroBottom + 56;
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(cx, div2Y); ctx.lineTo(right, div2Y); ctx.stroke();
+
+        // ── Supporting metrics (up to 3) ───────────────────────────────────
+        const metrics: { label: string; value: string }[] = [];
+        if (est1RM > 0)    metrics.push({ label: "EST. 1RM",    value: `${est1RM}kg` });
+        if (exVolToday > 0) metrics.push({ label: "VOLUME",      value: `${Math.round(exVolToday).toLocaleString()}kg` });
+        if (prevBestW > 0)  metrics.push({ label: "LAST TIME",   value: `${prevBestW}kg × ${prevBestR}` });
+        const shown = metrics.slice(0, 3);
+
+        if (shown.length) {
+          const mTop = div2Y + 68;
+          const mW   = (right - cx) / shown.length;
+          for (let i = 0; i < shown.length; i++) {
+            const mx = cx + i * mW;
+            ctx.fillStyle = "rgba(255,255,255,0.28)";
+            ctx.font = "600 24px 'Inter', system-ui, sans-serif";
+            ctx.fillText(shown[i].label, mx, mTop);
+            ctx.fillStyle = "rgba(255,255,255,0.86)";
+            ctx.font = "600 50px 'Inter', system-ui, sans-serif";
+            ctx.fillText(shown[i].value, mx, mTop + 62);
+          }
+        }
+
+        // ── Insight line (anchored near bottom) ───────────────────────────
+        const hasComment = opts.showComment && sessionComment.trim();
+        if (insight) {
+          const insightY = cardTop + cardH - (hasComment ? 136 : 72);
+          ctx.fillStyle = "rgba(99,102,241,0.88)";
+          ctx.font = "500 36px 'Inter', system-ui, sans-serif";
+          ctx.fillText(`↑ ${insight}`, cx, insightY);
+        }
+
+        // ── Comment (optional, bottom of card) ────────────────────────────
+        if (hasComment) {
+          const comment = sessionComment.trim();
+          const commentY = cardTop + cardH - 68;
+          ctx.fillStyle = "rgba(255,255,255,0.34)";
+          ctx.font = "italic 36px 'Inter', system-ui, sans-serif";
+          let cl = `"${comment}"`;
+          while (ctx.measureText(cl).width > cardW - 120 && cl.length > 4) cl = cl.slice(0, -1);
+          if (cl !== `"${comment}"`) cl += '…"';
+          ctx.fillText(cl, cx, commentY);
+        }
       }
 
     } else {
@@ -2087,23 +2000,10 @@ export default function ClientSession() {
               </div>
             </div>
 
-            {/* Strength-only toggles */}
-            {shareIsStrength && (
+            {/* Strength-only toggle */}
+            {shareIsStrength && sessionComment.trim() && (
               <div className="px-5 pb-1">
-                <p className="text-sm font-semibold mb-3">Show on card</p>
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => setShareShowTopSet(v => !v)}
-                    className={[
-                      "flex-1 flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm font-medium transition-all",
-                      shareShowTopSet
-                        ? "bg-primary/10 border-primary text-primary"
-                        : "bg-muted/40 border-border text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    <span>Best set</span>
-                    {shareShowTopSet && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
-                  </button>
                   <button
                     onClick={() => setShareShowComment(v => !v)}
                     className={[
@@ -2113,13 +2013,10 @@ export default function ClientSession() {
                         : "bg-muted/40 border-border text-muted-foreground",
                     ].join(" ")}
                   >
-                    <span>Comment</span>
+                    <span>Include comment</span>
                     {shareShowComment && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2.5 text-center">
-                  Preview updates as you toggle · Muscle intensity based on logged volume
-                </p>
               </div>
             )}
 
