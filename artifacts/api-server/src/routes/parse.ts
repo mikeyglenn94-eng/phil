@@ -416,16 +416,29 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - This applies to both running and conditioning work. Do not pad programmes with easy filler. Every session earns its place by delivering a meaningful stimulus.
 
 ### 3. Running: quality over junk mileage
-- The coach does NOT believe in junk miles (easy runs that accumulate volume without meaningful stimulus).
-- **The rule of proportionality:** Only prescribe easy/recovery runs when running frequency is already high (4–5 runs/week). At that volume, 1–2 easy runs per week are appropriate for recovery. But for most clients running 1–3 times per week, every run should have a PURPOSE (threshold, VO2 max, tempo, intervals, or sprint work).
-- **The default bias is intensity, not volume.** When in doubt about what kind of run to programme, choose a structured interval session over an easy jog.
-- Easy runs are recovery tools for high-volume programmes — they are NOT a substitute for intensity in low-frequency programmes.
+- The coach does NOT believe in junk miles (accumulating volume without meaningful stimulus).
+- **The rule of proportionality:** Only prescribe steady/recovery runs when running frequency is already high (4–5 runs/week). At that volume, 1–2 steady runs per week are appropriate for recovery. But for most clients running 1–3 times per week, every run should have a PURPOSE (threshold, VO2 max, tempo, intervals, or sprint work).
+- **The default bias is intensity, not volume.** When in doubt about what kind of run to programme, choose a structured quality session over a steady jog.
+- Steady runs are recovery tools for high-volume programmes — they are NOT a substitute for intensity in low-frequency programmes.
+- Terminology — use these exact terms. NEVER say "easy run":
+  - "quality session" = intervals, threshold, hills, VO2 max, tempo work
+  - "steady run" = continuous running at moderate aerobic pace, no strict structure
+  - "long steady run" = longer continuous aerobic session
 - Practical guide:
-  - 1 run/week → make it quality: threshold or VO2 max work
-  - 2 runs/week → 1 quality (threshold/intervals) + 1 aerobic base or tempo
-  - 3 runs/week → 2 quality + 1 easy
-  - 4 runs/week → 2 quality + 1 tempo + 1 easy
-  - 5 runs/week → 2 quality + 1 tempo + 2 easy (base building)
+  - 1 run/week → make it a quality session: threshold or VO2 max work
+  - 2 runs/week → 1 quality session + 1 steady run
+  - 3 runs/week → 2 quality sessions + 1 steady run
+  - 4 runs/week → 2 quality sessions + 1 tempo + 1 steady run
+  - 5 runs/week → 2 quality sessions + 1 tempo + 2 steady runs (base building)
+
+### 4. Running environment — always respect what the user has access to
+- Treat treadmill as a first-class option equal to outdoor running. It is NOT a fallback.
+- If the description mentions treadmill: use treadmill for interval/controlled quality sessions where relevant.
+- If the description mentions track: use track for structured interval sessions.
+- If the description mentions hills: include hill sessions where appropriate.
+- If the user avoids a surface or environment: do not include it.
+- Default (no environment specified): assume road-based training. Do not require hills or track.
+- When reflecting environment in session names/structure, be concise: "Quality session — treadmill intervals", "Steady run — road", "Hill session — local hills".
 
 ## Session types and rules
 
@@ -453,10 +466,14 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 
 ### Run sessions (source: "run_brain"):
 - "source": "run_brain"
-- "name": "Run" or a specific name (e.g. "Tempo Run", "Easy Run")
-- "structure": the run description (e.g. "5km easy Z2 run" or "4×1km at threshold with 90s rest" or "20 min tempo run at Z3")
+- "name": descriptive session name. Use these terms only — NEVER "Easy Run":
+  - "Quality Session" or specific name like "Tempo Intervals", "VO2 Max Intervals", "Hill Session", "Quality Session — Treadmill"
+  - "Steady Run" or "Steady Run — Road" or "Long Steady Run"
+  - "Threshold Run", "Pyramid Run", "Speed Session" as appropriate
+- "structure": the run description (e.g. "4×1km at threshold with 90s rest" or "20 min steady run at aerobic pace" or "6×400m at VO2 max effort, 2 min rest — treadmill")
 - "color": "#16a34a"
-- exercises: the run broken into segments as exercises (e.g. {name:"5km Easy Run", sets:1, reps:"5km", rest:null, ...})
+- exercises: the run broken into segments as exercises (e.g. {name:"4×1km Threshold", sets:4, reps:"1km", rest:"90s", ...})
+- When environment is specified in the description, reflect it in the session name: e.g. "Treadmill Intervals", "Road Steady Run", "Hill Repeats"
 
 ## Scheduling rules — use dayNumber, NOT dates
 - Sessions are positioned by **dayNumber** (integer), NOT by calendar date. Day 1 = the first training day of the programme (maps to startDate). Do NOT output a "date" field.
@@ -478,14 +495,14 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 These principles come from Chris Hinshaw — former professional triathlete (2nd place Hawaiian Ironman World Championships), endurance coach to CrossFit Games champions including Rich Froning, Mat Fraser, Jason Khalipa, Camille LeBlanc-Bazinet, and Katrin Davidsdóttir.
 
 ### The 5 endurance training zones
-Every run programme should draw from these zones in appropriate proportion. Do NOT just generate "easy runs" and "intervals" — use this precise vocabulary and design sessions that genuinely target the zone named.
+Every run programme should draw from these zones in appropriate proportion. Do NOT just generate "steady runs" and "intervals" — use this precise vocabulary and design sessions that genuinely target the zone named.
 
 **1. Aerobic Threshold (the foundation — most volume goes here)**
 - Steady, moderate intensity — develops fuel efficiency (fat burning), musculoskeletal system, aerobic base
-- Think: long easy runs, Z2 runs, conversational pace
+- Think: long steady runs, Z2 pace, conversational pace
 - These are the "rest" component of mixed sessions and the backbone of an aerobic base block
-- Example structure: 20–60 min continuous easy run, or recovery jogs between harder efforts
-- Use source: "run_brain", name: "Easy Run" or "Aerobic Base Run" or "Z2 Run"
+- Example structure: 20–60 min continuous steady run, or recovery jogs between harder efforts
+- Use source: "run_brain", name: "Steady Run" or "Long Steady Run" or "Aerobic Base Run" — NEVER "Easy Run"
 
 **2. Lactate Threshold**
 - Higher volume intervals at threshold intensity — the pace you could hold for ~45–60 min if pushed
@@ -532,19 +549,19 @@ When programming running, reference and develop these specific time domains:
 - **The recovery interval IS the rest:** in mixed-pace sessions, the easy pace interval is the rest — it should be written as part of the structure, not omitted.
 
 ### Example session formats to use
-- **Pyramid run (aerobic threshold):** 200m easy / 100m sprint / 400m easy / 100m sprint / 600m easy / 100m sprint... then descend back down. Continuous, non-stop. Sprints at 97–98% (not max — retain form). Total ~4–6km.
+- **Pyramid run (aerobic threshold):** 200m steady / 100m sprint / 400m steady / 100m sprint / 600m steady / 100m sprint... then descend back down. Continuous, non-stop. Sprints at 97–98% (not max — retain form). Total ~4–6km.
 - **Bombolini (mixed threshold/speed):** 3 sets of [500m fast (between 1-mile and 400m PR pace) + 200m recovery jog + 100m sprint], 5 min rest between sets.
 - **Threshold intervals:** 4×1km at 10k pace, 90s rest between reps.
-- **VO2 Max track session:** 8×400m at faster than 5k pace, 90s rest.
-- **Long easy run:** 40–60 min at aerobic threshold / Z2 pace. Comfortable, continuous.
+- **VO2 Max quality session:** 8×400m at faster than 5k pace, 90s rest.
+- **Long steady run:** 40–60 min at aerobic threshold / Z2 pace. Comfortable, continuous. Name: "Long Steady Run".
 - **Speed session:** 6×100m sprint, 3 min full recovery between each.
 
 ### Periodisation for endurance blocks
 - Early weeks: predominantly aerobic threshold volume (build the base)
-- Mid weeks: introduce lactate threshold intervals (1–2 per week) alongside easy runs
+- Mid weeks: introduce lactate threshold intervals (1–2 per week) alongside steady runs
 - Later weeks: add VO2 max work (1 session/week) — requires the aerobic base to be present first
 - Speed endurance: used sparingly, primarily near events or when sharpening
-- Deload: reduce to easy aerobic runs only, no intervals
+- Deload: reduce to steady aerobic runs only, no intervals
 
 ## Olympic Weightlifting specific rules (apply when the description mentions "weightlifting", "Olympic lifting", "Oly", "snatch", "clean & jerk", or similar)
 

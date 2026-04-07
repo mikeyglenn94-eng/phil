@@ -1,0 +1,102 @@
+Extend the running logic to handle full environment access and preferences, including treadmill as a first-class option.
+
+CORE PRINCIPLE
+Running sessions must reflect real-world training environments and user preferences.
+The coach must not assume access to hills or track.
+The coach must treat treadmill as an equal option, not a fallback.
+
+======================================
+RUNNING ENVIRONMENT MODEL
+======================================
+
+Support the following environments:
+
+- road / outdoor flat
+- hills available
+- track available
+- treadmill available
+
+Also support user preferences, such as:
+- prefers treadmill for intervals
+- prefers outdoor running
+- avoids hills
+- avoids track
+
+======================================
+CLARIFICATION QUESTION
+======================================
+
+When building a plan that includes running, ask a single bundled question:
+
+“Before I build the running sessions, quick check:
+- What do you have access to: road, hills, track, treadmill?
+- Any preferences there? For example, using treadmill for intervals or avoiding hills
+- Do you want a mix of structured sessions and steady runs, or keep everything structured?”
+
+Do not split this into multiple questions.
+
+======================================
+INTERPRETATION RULES
+======================================
+
+- if treadmill is available and preferred:
+  - use treadmill for interval / controlled sessions
+
+- if track is available and preferred:
+  - use track for intervals
+
+- if hills are available and acceptable:
+  - include hill sessions where appropriate
+
+- if user avoids a modality:
+  - do not include it
+
+- if multiple environments are available:
+  - choose the simplest and most consistent setup
+
+======================================
+DEFAULTS (NO USER INPUT)
+======================================
+
+If user does not specify:
+
+- assume road-based training
+- do not require hills or track
+- include:
+  - 1 quality session
+  - 1 steady run
+
+======================================
+RUN TYPE TERMINOLOGY
+======================================
+
+Use:
+- “quality session” (intervals / hills / threshold)
+- “steady run” (continuous, no strict pace)
+- “long steady run”
+
+Do NOT use “easy run”.
+
+======================================
+OUTPUT INTEGRATION
+======================================
+
+When presenting plans or previews, reflect environment where relevant:
+
+Examples:
+- “Intervals → treadmill-based”
+- “Steady runs → road”
+- “Hill session → local hills”
+
+Keep this subtle and concise.
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+After this change:
+- coach accounts for treadmill, track, hills, and road
+- coach respects user preferences
+- treadmill is treated as a primary option
+- running sessions feel realistic and executable
+- default plans remain simple and accessible

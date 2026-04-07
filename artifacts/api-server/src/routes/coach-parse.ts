@@ -44,11 +44,13 @@ FOR A PROGRAMME:
 ✗ Primary goal — always required if not stated (lose fat? build muscle? improve 5K? general fitness?)
 ✗ Equipment access — required (home gym, commercial gym, bodyweight, specific kit)
 ✗ Available / unavailable training days — required (affects scheduling)
+✗ Running environment — required when running is part of the plan. Ask as a bundled question covering: access (road / hills / track / treadmill), preferences (e.g. prefers treadmill for intervals, avoids hills), and session mix preference (structured + steady, or all structured). Bundle this into one natural question — do NOT send as a separate follow-up. If the user has already provided any of this, do not re-ask it.
 
 FOR A SESSION:
 ✗ Session type/focus — always required if not clear (strength? run? recovery?)
 ✗ Equipment — required if it would fundamentally change the session design
 ✗ Injuries or movement constraints — always ask if not mentioned (coach cannot safely skip this)
+✗ Running environment — required if building a run session. Bundle with other missing info.
 
 FOR ANY REQUEST:
 ✗ Whether they want a full programme, a single week, or a single session — if genuinely unclear
@@ -78,6 +80,28 @@ These do NOT require clarification. Assume sensibly and list them in the assumpt
 - Progression style — assume linear unless stated otherwise
 - Session duration — assume 45–60 min if not stated and duration is not material to the request
 - Rest day placement — fill in around stated available/unavailable days
+- Running environment default (if running is included and user hasn't specified) — assume road-based, no hills or track required. Default to 1 quality session + 1 steady run per week. Note this assumption clearly.
+
+═══════════════════════════════════════════
+RUNNING ENVIRONMENT INTERPRETATION
+═══════════════════════════════════════════
+
+When running is included and the user provides environment info, apply these rules:
+- treadmill available and preferred → use treadmill for interval / controlled quality sessions
+- track available and preferred → use track for intervals
+- hills available and acceptable → include hill sessions where appropriate
+- user avoids a modality → do not include it
+- multiple environments available → choose the simplest and most consistent setup
+
+Terminology — use these terms ONLY, never "easy run":
+- "quality session" for intervals, threshold, hills, VO2 max work
+- "steady run" for continuous running, no strict pace
+- "long steady run" for longer aerobic runs
+
+When building planSummary or suggestedBrief, reflect the environment concisely where relevant:
+- "intervals → treadmill-based"
+- "steady runs → road"
+- "hill session → local hills"
 
 ═══════════════════════════════════════════
 TRAINING PHILOSOPHY (use when building assumptions)
@@ -86,7 +110,7 @@ TRAINING PHILOSOPHY (use when building assumptions)
 - Straight sets before advanced techniques. Linear progression first.
 - Strength: compound-first (squat, hinge, press, pull patterns).
 - Hybrid: keep strength and running on separate days when possible.
-- Running: easy aerobic base + one quality session per week is enough.
+- Running: 1 quality session + 1 steady run per week is a solid default. No junk mileage.
 - Simple and consistent beats clever and inconsistent.
 
 ═══════════════════════════════════════════
@@ -128,7 +152,9 @@ Return a JSON object with EXACTLY this shape:
     "schedulingConstraints": null or string[],
     "exercisePreferences": null or string,
     "simplicity": null or "simple" or "moderate" or "advanced",
-    "performancePriorities": null or string
+    "performancePriorities": null or string,
+    "runningEnvironment": null or string[],
+    "runningPreferences": null or string
   }
 }
 
@@ -137,6 +163,8 @@ planSummary rules:
 - Max 6 bullets total. One idea per bullet. No sets/reps. No detailed exercise selection.
 - Always include: duration, days per week, high-level session split, structure note, progression note.
 - Use short phrases: "6 weeks", "4 days per week", "2 strength → full-body", "gradual load increase".
+- When running is included, reflect the environment concisely in the session split bullet (e.g. "2 runs → quality on treadmill, steady on road").
+- Never use "easy run" — use "quality session", "steady run", or "long steady run".
 - For sessions (not programmes): use "planSummary" to describe the session structure instead (e.g. "45 min", "lower body focus", "compound-first", "5 exercises").`;
 
 router.post("/coach-parse", async (req, res) => {
