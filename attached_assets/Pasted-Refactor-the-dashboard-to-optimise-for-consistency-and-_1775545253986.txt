@@ -1,0 +1,412 @@
+Refactor the dashboard to optimise for consistency and adherence first, while still showing real performance progress.
+
+PRODUCT PRINCIPLE
+A good week should feel rewarding.
+A single workout should not redefine the user.
+
+The dashboard should encourage:
+1. showing up
+2. completing planned training
+3. maintaining balance between lifting and running
+4. gradual performance improvement over time
+
+Do NOT optimise the score for one-off PRs or random hard sessions.
+
+======================================
+DASHBOARD STRUCTURE
+======================================
+
+Remove the “Recent Sessions” section from the dashboard entirely.
+That belongs in a separate History or Sessions screen, not the home dashboard.
+
+Rebuild the dashboard in this hierarchy:
+
+1. Fitness Score (hero metric)
+2. Weekly Win
+3. Consistency / Adherence card
+4. Core Performance Cards
+5. Secondary Metrics
+6. Dashboard customisation controls
+
+======================================
+1. FITNESS SCORE
+======================================
+
+Add a hero metric called “Fitness Score”.
+
+Purpose:
+- give the user a simple top-line signal of whether they are moving in the right direction
+- reward consistency and adherence more than isolated performance spikes
+- still reflect long-term progress in running and strength
+
+UI REQUIREMENTS
+- large prominent number
+- show weekly change:
+  - “+4 vs last week”
+  - “-2 vs last week”
+  - “No change vs last week”
+- optional monthly comparison in smaller text
+- add a short explanation line underneath like:
+  - “Driven by full consistency and stronger running trend”
+  - “Held back by missed sessions this week”
+
+IMPORTANT
+The score should feel alive week to week, but not dramatic.
+Use medium responsiveness.
+
+Expected score movement bands:
+- 0 to +2 = maintenance week
+- +3 to +5 = solid week
+- +6 to +8 = genuinely strong week
+- 0 to -2 = slight drop
+- -3 to -5 = weak week
+Avoid larger swings unless there is repeated behaviour over multiple weeks.
+
+Do NOT let a single session spike the score heavily.
+
+======================================
+2. FITNESS SCORE LOGIC
+======================================
+
+Build the score so it prioritises consistency and adherence.
+
+Use this conceptual weighting:
+- 40% consistency / adherence
+- 35% performance trend
+- 25% balance / activity momentum
+
+Implement the score as a weekly score, then smooth it before displaying.
+
+A. CONSISTENCY / ADHERENCE COMPONENT (40%)
+This should be the most important part.
+
+Use:
+- sessions completed vs planned sessions
+- whether the user completed both lifting and running in the week, if both are part of their plan
+- whether the user maintained their streak
+- whether they had meaningful training activity across the week
+
+Scoring ideas:
+- 100% of planned sessions completed = strong positive contribution
+- 75% = moderate positive
+- 50% = neutral to slightly negative
+- below 50% = negative
+- bonus if both modalities were completed in the week when relevant
+- bonus for maintaining a weekly adherence streak
+
+If the user has no explicit plan:
+- fall back to frequency-based consistency
+- compare this week’s meaningful sessions with the user’s recent baseline
+
+B. PERFORMANCE TREND COMPONENT (35%)
+This should matter, but move more slowly than adherence.
+
+Include:
+- estimated 5K trend
+- squat e1RM trend
+- bench e1RM trend
+- deadlift e1RM trend
+
+Rules:
+- use changes versus prior equivalent period
+- use rolling trend where possible, not one isolated session
+- use only available lifts the user actually trains
+- do not punish users for missing lifts they do not do
+- do not let one unexpected PR swing the whole score too much
+
+C. BALANCE / ACTIVITY MOMENTUM COMPONENT (25%)
+Reward balanced, ongoing training.
+
+Include:
+- total meaningful lift sessions this week
+- total meaningful run sessions this week
+- distance run trend
+- volume lifted trend
+
+This should act as a smaller supporting signal, not the main driver.
+
+======================================
+3. SMOOTHING AND GUARDRAILS
+======================================
+
+This is critical.
+
+Implement guardrails so the score feels credible:
+
+- cap weekly displayed movement so it does not swing too hard
+- smooth raw score changes before display
+- reward repeated good weeks more than one-off spikes
+- do not overreact to one missed workout
+- do not overreact to one PR or one hard run
+
+Implementation suggestion:
+- calculate raw weekly component scores
+- combine them into a raw score
+- apply exponential smoothing or weighted rolling smoothing
+- then cap the visible week-to-week change to a sensible maximum
+
+Suggested visible weekly cap:
+- normally max +8 or -5 per week
+
+======================================
+4. WEEKLY WIN
+======================================
+
+Add a card directly below Fitness Score called “Weekly Win”.
+
+Purpose:
+- give the user one emotionally satisfying summary of progress
+- make the dashboard feel rewarding and shareable
+
+Logic:
+Pick the strongest positive signal from the week.
+
+Possible examples:
+- “Estimated 5K improved by 43 seconds”
+- “Squat e1RM up 5kg”
+- “Completed every planned session”
+- “4-week consistency streak maintained”
+- “Best running week in a month”
+
+Fallback if nothing major improved:
+- “Consistent week completed”
+- “Baseline maintained this week”
+
+Do NOT generate cheesy text.
+Keep it short, clean, and factual.
+
+======================================
+5. CONSISTENCY / ADHERENCE CARD
+======================================
+
+Add a dedicated card for consistency and adherence.
+
+Show:
+- completed sessions / planned sessions
+- weekly streak
+- optional status like:
+  - “Lift + Run both completed”
+  - “All planned sessions completed”
+  - “1 planned session missed”
+
+This should be one of the most prominent cards on the dashboard.
+
+If the user does not have a formal plan:
+- show completed meaningful sessions this week
+- compare to last week or recent average
+
+======================================
+6. CORE PERFORMANCE CARDS
+======================================
+
+Add or keep these core cards:
+
+RUNNING
+- Estimated 5K Time
+
+STRENGTH
+- Squat e1RM
+- Bench e1RM
+- Deadlift e1RM
+
+Each card should show:
+- current period value
+- comparison vs previous equivalent period
+- simple trend indicator
+- clear handling where lower is better for time-based metrics
+
+For Estimated 5K Time:
+- do NOT use naive average pace across all runs
+- exclude interval sessions, fartlek, walk-run, and fragmented workouts where possible
+- prioritise continuous steady runs
+- require minimum continuous distance of at least 3km
+- use pace stability where available
+- prefer strongest predictor from 3km to 10km
+- if insufficient qualifying data, show:
+  “Not enough steady running data yet”
+
+For e1RM:
+- calculate from best recent working set
+- ignore warm-up sets
+- use sensible rep range, ideally 1 to 10
+- use Epley unless a utility already exists
+- map only appropriate exercise variants
+
+======================================
+7. SECONDARY METRICS
+======================================
+
+Keep these as smaller, lower-priority cards:
+
+- Distance Run
+- Volume Lifted
+
+Comparison style:
+- this week vs last week
+- this month vs last month
+
+Remove Total Reps from the dashboard.
+
+Reason:
+- too noisy
+- low signal
+- not meaningful enough for home screen prioritisation
+
+======================================
+8. CUSTOMISATION
+======================================
+
+Add dashboard customisation with persistent preferences.
+
+User can toggle on/off:
+- Fitness Score explanation line
+- Weekly Win
+- Consistency card
+- Estimated 5K Time
+- Squat e1RM
+- Bench e1RM
+- Deadlift e1RM
+- Distance Run
+- Volume Lifted
+
+Requirements:
+- settings accessible via “Edit Dashboard”
+- use modal, drawer, or settings panel
+- all toggles ON by default except optional explanation extras if needed
+- hidden cards disappear completely
+- grid reflows cleanly
+- preferences persist per user
+
+If a user does not train deadlift, they should be able to remove it entirely.
+
+======================================
+9. HELPER FUNCTIONS / UTILITIES
+======================================
+
+Please create clean modular helper functions for:
+
+Date ranges
+- getCurrentWeekRange()
+- getPreviousWeekRange()
+- getCurrentMonthRange()
+- getPreviousMonthRange()
+
+Comparison logic
+- compareMetricPeriods(current, previous, metricType)
+- formatMetricDelta(current, previous, metricType)
+
+Running logic
+- getEligibleSteadyRuns(runs)
+- estimate5KFromRuns(runs)
+- getRunningTrendScore(currentPeriodRuns, previousPeriodRuns)
+
+Strength logic
+- getBestLiftSetForExercise(exerciseLogs, exerciseName)
+- estimate1RM(weight, reps)
+- getStrengthTrendScore(currentLiftData, previousLiftData)
+
+Adherence logic
+- getPlannedVsCompletedSessions(userId, period)
+- getConsistencyScore(userId, period)
+- getAdherenceStreak(userId)
+
+Fitness Score logic
+- calculateRawFitnessScore(inputs)
+- smoothFitnessScore(currentRaw, previousDisplayed)
+- explainFitnessScoreChange(inputs)
+
+Preferences
+- getDashboardPreferences(userId)
+- saveDashboardPreferences(userId, preferences)
+
+======================================
+10. FITNESS SCORE FORMULA BEHAVIOUR
+======================================
+
+Build the formula around adherence-first logic.
+
+Suggested implementation approach:
+
+Step 1:
+Calculate component scores on a 0 to 100 basis:
+- consistencyScore
+- performanceTrendScore
+- balanceScore
+
+Step 2:
+Combine them:
+fitnessRaw =
+  consistencyScore * 0.40 +
+  performanceTrendScore * 0.35 +
+  balanceScore * 0.25
+
+Step 3:
+Smooth the raw score against the previous displayed score
+
+Step 4:
+Apply weekly movement caps
+
+Step 5:
+Round to a clean display number
+
+IMPORTANT:
+The visible score should usually move modestly.
+Repeated good weeks should compound.
+One extreme session should not dominate.
+
+======================================
+11. UX RULES
+======================================
+
+- make the dashboard feel like a home screen, not a training spreadsheet
+- focus on improvement, adherence, and confidence
+- use concise labels
+- use green only for genuinely positive change
+- use neutral grey for flat / no meaningful change
+- use red sparingly, mostly for adherence misses or clear regression
+- treat lower time as better for running metrics
+- ensure mobile-first layout
+- keep the visual style clean and minimal
+- do not overcrowd the screen
+
+======================================
+12. EDGE CASES
+======================================
+
+Handle these properly:
+- no previous week data
+- no previous month data
+- no formal plan set by user
+- only interval runs, no steady runs
+- user only lifts or only runs
+- user does not perform deadlift
+- missing pace data but distance and duration exist
+- mixed exercise naming conventions
+- partial weeks and months
+- temporary down weeks should not crash the score
+
+======================================
+13. ACCEPTANCE CRITERIA
+======================================
+
+The finished dashboard should:
+- remove Recent Sessions from the home screen
+- make Fitness Score the hero metric
+- prioritise consistency and adherence over one-off performance spikes
+- show a Weekly Win
+- show a clear Consistency / Adherence card
+- show core performance markers:
+  - Estimated 5K
+  - Squat e1RM
+  - Bench e1RM
+  - Deadlift e1RM
+- keep Distance Run and Volume Lifted as secondary metrics
+- allow users to hide optional cards
+- persist preferences
+- feel responsive weekly without becoming noisy or gameable
+- reward repeated good weeks more than isolated sessions
+
+Please implement this cleanly, preserve existing dashboard styling where possible, and show me:
+1. which files/components were changed
+2. how Fitness Score is calculated
+3. any assumptions made where data availability was limited

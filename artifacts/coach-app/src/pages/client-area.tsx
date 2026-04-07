@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, TrendingUp, Timer, Footprints } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3 } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
 } from "@workspace/api-client-react";
 import type { NutritionEntry, Programme, Session } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import DashboardTab, { type AnalyticsData } from "./dashboard-tab";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -84,15 +85,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     queryFn: async () => {
       const res = await fetch(`/api/clients/${clientId}/analytics`);
       if (!res.ok) throw new Error("Failed to fetch analytics");
-      return res.json() as Promise<{
-        sessions: {
-          sessionId: string; date: string; name: string; source: string | null;
-          totalVolume: number; totalReps: number; totalDistance: number; avgPace: string | null;
-          exerciseBreakdown: { name: string; sets: { reps: number | null; weight: number | null }[]; volume: number; reps: number }[];
-        }[];
-        byWeek: { weekStart: string; totalVolume: number; totalReps: number; totalDistance: number; avgPace: string | null; sessionCount: number; strengthSessions: number; runSessions: number }[];
-        byMonth: { month: string; totalVolume: number; totalReps: number; totalDistance: number; avgPace: string | null; sessionCount: number; strengthSessions: number; runSessions: number }[];
-      }>;
+      return res.json() as Promise<AnalyticsData>;
     },
     enabled: !!clientId,
   });
@@ -2090,162 +2083,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       </div>
 
       {/* Dashboard Tab */}
-      {activeTab === "dashboard" && (() => {
-        const now = new Date();
-        const todayStr = format(now, "yyyy-MM-dd");
-        const thisMonthStr = todayStr.slice(0, 7);
-        const thisWeekStart = format(startOfWeek(now, { weekStartsOn: 1 }), "yyyy-MM-dd");
-        const lastWeekStart = format(startOfWeek(addWeeks(now, -1), { weekStartsOn: 1 }), "yyyy-MM-dd");
-        const lastMonthStr = format(addWeeks(now, -4), "yyyy-MM").slice(0, 7);
+      {activeTab === "dashboard" && (
+        <DashboardTab
+          analytics={analytics}
+          isLoading={analyticsLoading}
+          clientId={clientId}
+        />
+      )}
 
-        const thisWeek = analytics?.byWeek.find(w => w.weekStart === thisWeekStart);
-        const lastWeek = analytics?.byWeek.find(w => w.weekStart === lastWeekStart);
-        const thisMonth = analytics?.byMonth.find(m => m.month === thisMonthStr);
-        const lastMonth = analytics?.byMonth.find(m => m.month === lastMonthStr);
-
-        const recentSessions = [...(analytics?.sessions ?? [])].reverse().slice(0, 8);
-
-        const fmtVol = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${Math.round(v)}kg`;
-        const fmtDist = (d: number) => d >= 1 ? `${d.toFixed(1)} km` : d > 0 ? `${Math.round(d * 1000)} m` : "—";
-        const pctChange = (curr: number, prev: number) => {
-          if (!prev) return null;
-          const pct = Math.round(((curr - prev) / prev) * 100);
-          return pct;
-        };
-
-        const StatCard = ({ title, value, sub, icon, delta }: { title: string; value: string; sub?: string; icon: React.ReactNode; delta?: number | null }) => (
-          <div className="bg-card border rounded-2xl px-4 py-3.5 flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{title}</span>
-              <span className="text-muted-foreground/60">{icon}</span>
-            </div>
-            <span className="text-2xl font-bold leading-tight">{value}</span>
-            {(sub || delta != null) && (
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                {delta != null && (
-                  <span className={`font-semibold ${delta >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                    {delta >= 0 ? "↑" : "↓"}{Math.abs(delta)}%
-                  </span>
-                )}
-                {sub && <span>{sub}</span>}
-              </div>
-            )}
-          </div>
-        );
-
-        return (
-          <div className="max-w-lg mx-auto px-4 pt-5 pb-20 space-y-6">
-            {analyticsLoading ? (
-              <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-            ) : !analytics || analytics.sessions.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground">
-                <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No logged sessions yet</p>
-                <p className="text-sm mt-1">Complete a session to see your stats here.</p>
-              </div>
-            ) : (
-              <>
-                {/* This week */}
-                <section>
-                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3">This Week</h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    <StatCard
-                      title="Volume Lifted"
-                      value={thisWeek?.totalVolume ? fmtVol(thisWeek.totalVolume) : "—"}
-                      sub={`vs ${lastWeek?.totalVolume ? fmtVol(lastWeek.totalVolume) : "0"} last wk`}
-                      delta={thisWeek && lastWeek ? pctChange(thisWeek.totalVolume, lastWeek.totalVolume) : null}
-                      icon={<TrendingUp className="w-4 h-4" />}
-                    />
-                    <StatCard
-                      title="Total Reps"
-                      value={thisWeek?.totalReps ? String(thisWeek.totalReps) : "—"}
-                      sub={`${thisWeek?.strengthSessions ?? 0} strength session${(thisWeek?.strengthSessions ?? 0) !== 1 ? "s" : ""}`}
-                      icon={<Dumbbell className="w-4 h-4" />}
-                    />
-                    <StatCard
-                      title="Distance Run"
-                      value={thisWeek?.totalDistance ? fmtDist(thisWeek.totalDistance) : "—"}
-                      sub={`vs ${lastWeek?.totalDistance ? fmtDist(lastWeek.totalDistance) : "0"} last wk`}
-                      delta={thisWeek && lastWeek ? pctChange(thisWeek.totalDistance, lastWeek.totalDistance) : null}
-                      icon={<Footprints className="w-4 h-4" />}
-                    />
-                    <StatCard
-                      title="Avg Pace"
-                      value={thisWeek?.avgPace ?? "—"}
-                      sub={thisWeek?.avgPace ? "min / km" : "no runs logged"}
-                      icon={<Timer className="w-4 h-4" />}
-                    />
-                  </div>
-                </section>
-
-                {/* This month */}
-                <section>
-                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3">This Month</h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    <StatCard
-                      title="Volume Lifted"
-                      value={thisMonth?.totalVolume ? fmtVol(thisMonth.totalVolume) : "—"}
-                      sub={`vs ${lastMonth?.totalVolume ? fmtVol(lastMonth.totalVolume) : "0"} prev mo`}
-                      delta={thisMonth && lastMonth ? pctChange(thisMonth.totalVolume, lastMonth.totalVolume) : null}
-                      icon={<TrendingUp className="w-4 h-4" />}
-                    />
-                    <StatCard
-                      title="Total Reps"
-                      value={thisMonth?.totalReps ? String(thisMonth.totalReps) : "—"}
-                      sub={`${thisMonth?.strengthSessions ?? 0} sessions`}
-                      icon={<Dumbbell className="w-4 h-4" />}
-                    />
-                    <StatCard
-                      title="Distance Run"
-                      value={thisMonth?.totalDistance ? fmtDist(thisMonth.totalDistance) : "—"}
-                      sub={`${thisMonth?.runSessions ?? 0} run session${(thisMonth?.runSessions ?? 0) !== 1 ? "s" : ""}`}
-                      delta={thisMonth && lastMonth ? pctChange(thisMonth.totalDistance, lastMonth.totalDistance) : null}
-                      icon={<Footprints className="w-4 h-4" />}
-                    />
-                    <StatCard
-                      title="Avg Pace"
-                      value={thisMonth?.avgPace ?? "—"}
-                      sub={thisMonth?.avgPace ? "min / km" : "no runs logged"}
-                      icon={<Timer className="w-4 h-4" />}
-                    />
-                  </div>
-                </section>
-
-                {/* Recent sessions */}
-                <section>
-                  <h2 className="text-xs font-bold text-muted-foreground tracking-widest uppercase mb-3">Recent Sessions</h2>
-                  <div className="space-y-2">
-                    {recentSessions.map(s => {
-                      const badge = getSessionTypeBadge(s as any);
-                      const isRun = s.source === "run_brain" || s.source === "endurance_cycle";
-                      return (
-                        <div key={s.sessionId} className="bg-card border rounded-xl px-4 py-3 flex items-start gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badge.className}`}>{badge.label}</span>
-                              <span className="text-[10px] text-muted-foreground">{format(parseISO(s.date), "EEE d MMM")}</span>
-                            </div>
-                            <p className="text-sm font-semibold truncate">{s.name}</p>
-                            {isRun ? (
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {s.totalDistance > 0 ? `${fmtDist(s.totalDistance)}${s.avgPace ? ` · ${s.avgPace}/km` : ""}` : "No distance logged"}
-                              </p>
-                            ) : (
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {s.totalVolume > 0 ? `${fmtVol(s.totalVolume)} lifted · ${s.totalReps} reps` : s.totalReps > 0 ? `${s.totalReps} reps` : "No data logged"}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              </>
-            )}
-          </div>
-        );
-      })()}
 
       {/* Nutrition Tab */}
       {activeTab === "nutrition" && (
