@@ -1,0 +1,147 @@
+Refactor the WOD recording system to support proper workout formats and outcome-based logging.
+
+CORE PRINCIPLE
+WODs should be recorded as:
+1. workout definition (what the workout is)
+2. result (what the user achieved)
+
+Do NOT treat WODs as a list of exercises with reps.
+Do NOT log the prescription as the result.
+
+======================================
+SUPPORTED WOD FORMATS
+======================================
+
+Add explicit support for:
+
+- AMRAP
+- FOR TIME
+- EMOM
+- ROUNDS FOR TIME
+- CHIPPER
+- INTERVAL (work/rest)
+
+Each format must have:
+- clear structure definition
+- correct result type
+
+======================================
+DATA MODEL
+======================================
+
+Split WOD into:
+
+1. Workout Definition
+- format
+- duration or time cap
+- movement list
+- reps / calories / distance per movement
+- optional weights
+
+2. Result
+Depends on format:
+
+AMRAP:
+- rounds completed (integer)
+- additional reps (integer)
+
+FOR TIME:
+- completion time (mm:ss)
+
+ROUNDS FOR TIME:
+- completion time
+
+EMOM:
+- completed (boolean)
+OR
+- total reps / calories (if scored)
+
+INTERVAL:
+- total output
+OR
+- per interval output (optional advanced)
+
+======================================
+UI CHANGES
+======================================
+
+Display WOD clearly:
+
+Example:
+
+WOD
+
+AMRAP 19
+
+19 Wall Balls (9kg)
+19 Cal Row
+
+--------------------------------------
+
+Then show:
+
+Result input
+
+Based on format:
+
+AMRAP:
+- input: rounds
+- input: reps
+
+FOR TIME:
+- input: time
+
+EMOM:
+- toggle completed OR input score
+
+Do NOT show movement reps as editable “results”.
+
+======================================
+AI GENERATION
+======================================
+
+Update AI so it can generate all formats:
+
+- AMRAP
+- FOR TIME
+- EMOM
+- ROUNDS FOR TIME
+- CHIPPER
+- INTERVAL
+
+AI output must clearly define:
+- format
+- duration / cap
+- structure
+
+======================================
+VALIDATION RULES
+======================================
+
+- result must match format type
+- prevent invalid combinations (e.g. time for AMRAP without rounds)
+- ensure required fields exist before saving
+
+======================================
+HELPERS
+======================================
+
+Create helpers:
+
+- parseWodFormat(aiOutput)
+- buildWodDefinition(data)
+- getWodResultInputs(format)
+- validateWodResult(format, result)
+- formatWodForDisplay(definition)
+- formatWodResultForDisplay(result)
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+After this change:
+- users can log all major WOD formats
+- results are outcome-based, not prescription-based
+- UI clearly separates workout vs result
+- AI can generate varied WOD formats
+- data supports clean sharing later

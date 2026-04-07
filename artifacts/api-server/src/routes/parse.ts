@@ -1153,14 +1153,28 @@ router.post("/parse-wod-session", async (req, res): Promise<void> => {
 
   const systemPrompt = `You are an expert conditioning coach. Design TWO different WOD workout options from the user's movements and constraints.
 
+Supported formats: amrap, for_time, emom, rounds_for_time, chipper, interval.
+
 Rules:
-- Design SPECIFIC workouts — decide the reps, distances, and timing yourself based on the movements and duration given
-- Option 1: AMRAP format (as many rounds as possible in the stated time, or 20 min if unspecified)
-- Option 2: EMOM format (every minute on the minute — design appropriate minute structure and total duration)
-- For each option write a concise human-readable STRUCTURE string that a coach would write on a whiteboard (e.g. "AMRAP 20: 15 Wall Balls (9kg), 200m Run, 10 Burpees")
-- Choose sensible rep/distance counts that fit within the time domain — AMRAP rounds should take 60-90s per round; EMOM minutes should be achievable in ~35-45s
-- Each option gets a list of BLOCKS (movements with amounts) for the exercise list
-- Return ONLY valid JSON, no markdown fences
+- Choose the TWO most appropriate formats for the movements given. Default to AMRAP + one other (for_time, emom, or rounds_for_time).
+- Design SPECIFIC workouts — decide reps, distances, weights, and timing yourself.
+- Write a concise human-readable STRUCTURE string as a coach would write on a whiteboard:
+    AMRAP:          "AMRAP 20: 15 Wall Balls (9kg), 200m Run, 10 Burpees"
+    FOR TIME:       "For Time: 21-15-9 Thrusters (43kg), Pull-ups"
+    EMOM:           "EMOM 18: Min 1: 12 Wall Balls | Min 2: 200m Run | Min 3: 8 Burpees"
+    ROUNDS FOR TIME:"5 Rounds for Time: 400m Run, 15 Box Jumps, 10 Dumbbell Snatches (22kg)"
+    CHIPPER:        "Chipper for Time: 50 Wall Balls, 40 Box Jumps, 30 Pull-ups, 20 Thrusters"
+    INTERVAL:       "10 Rounds: 30s Max Effort Row / 30s Rest"
+- AMRAP rounds should complete in 60-90s per round. EMOM minutes achievable in 35-45s.
+- Return ONLY valid JSON, no markdown fences.
+
+Result type per format (helps the app know what to ask the user):
+  amrap          → rounds + additional_reps
+  for_time       → finish_time
+  emom           → completed (bool) + optional score
+  rounds_for_time → finish_time
+  chipper        → finish_time
+  interval       → total_output (text)
 
 Response format:
 {
@@ -1169,20 +1183,21 @@ Response format:
       "format": "amrap",
       "name": "AMRAP 20",
       "structure": "AMRAP 20: 15 Wall Balls (9kg), 200m Run, 10 Burpees",
+      "resultType": "rounds_reps",
       "blocks": [
-        { "movement": "Wall Balls", "amount": 15, "unit": "reps" },
+        { "movement": "Wall Balls", "amount": 15, "unit": "reps", "weight": "9kg" },
         { "movement": "Run", "amount": 200, "unit": "m" },
         { "movement": "Burpees", "amount": 10, "unit": "reps" }
       ]
     },
     {
-      "format": "emom",
-      "name": "EMOM 18",
-      "structure": "EMOM 18 (3-movement rotation): Min 1: 12 Wall Balls / Min 2: 200m Run / Min 3: 8 Burpees",
+      "format": "for_time",
+      "name": "For Time",
+      "structure": "For Time: 21-15-9 Thrusters (43kg), Pull-ups",
+      "resultType": "finish_time",
       "blocks": [
-        { "movement": "Wall Balls", "amount": 12, "unit": "reps" },
-        { "movement": "Run", "amount": 200, "unit": "m" },
-        { "movement": "Burpees", "amount": 8, "unit": "reps" }
+        { "movement": "Thrusters", "amount": "21-15-9", "unit": "reps", "weight": "43kg" },
+        { "movement": "Pull-ups", "amount": "21-15-9", "unit": "reps" }
       ]
     }
   ]
@@ -1203,30 +1218,28 @@ Response format:
 
     const now = Date.now();
     const sessionOptions = options.map((opt: any, oi: number) => {
-      const blocks: { movement: string; amount: number; unit: string }[] = opt.blocks ?? [];
-      const exercises = blocks.map((block, idx) => ({
-        id: `ex-${now}-${oi}-${idx}`,
-        name: block.movement.charAt(0).toUpperCase() + block.movement.slice(1),
-        sets: null,
-        reps: null,
-        rpe: null,
-        rest: null,
-        tempo: null,
-        notes: `${block.amount} ${block.unit}`,
-        rawText: `${block.amount} ${block.unit} ${block.movement}`,
-        weekProgression: [],
-        clientComment: null,
-        perSetReps: null,
-        perSetRpe: null,
-        setWeights: null,
-        setReps: null,
-        weight: null,
-      }));
+      const blocks: { movement: string; amount: any; unit: string; weight?: string }[] = opt.blocks ?? [];
+      const exercises = blocks.map((block, idx) => {
+        // Build a clear display note: "15 reps (9kg)" or "200m"
+        const amtStr = String(block.amount);
+        const unitStr = block.unit || "reps";
+        const weightStr = block.weight ? ` (${block.weight})` : "";
+        const notes = `${amtStr} ${unitStr}${weightStr}`;
+        return {
+          id: `ex-${now}-${oi}-${idx}`,
+          name: block.movement.charAt(0).toUpperCase() + block.movement.slice(1),
+          sets: null, reps: null, rpe: null, rest: null, tempo: null,
+          notes,
+          rawText: `${notes} ${block.movement}`,
+          weekProgression: [], clientComment: null,
+          perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
+        };
+      });
       return {
         name: name?.trim() || opt.name || "WOD",
         source: "wod_brain",
-        structure: opt.structure ?? description.trim(),
         format: opt.format ?? "other",
+        structure: opt.structure ?? description.trim(),
         exercises,
       };
     });

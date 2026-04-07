@@ -119,6 +119,50 @@ function getMuscleStimulus(
 }
 
 
+// ── WOD helpers ───────────────────────────────────────────────────────────────
+
+type WodFormat = "amrap" | "for_time" | "emom" | "rounds_for_time" | "chipper" | "interval" | "other";
+type WodResult = { rounds?: string; reps?: string; time?: string; completed?: boolean; score?: string };
+
+function detectWodFormat(sess: any): WodFormat {
+  const f = ((sess.format || sess.wodDefinition?.format) ?? "").toLowerCase().replace(/[\s-]/g, "_");
+  if (f === "amrap") return "amrap";
+  if (f.includes("for_time")) return "for_time";
+  if (f === "emom") return "emom";
+  if (f.includes("rounds")) return "rounds_for_time";
+  if (f === "chipper") return "chipper";
+  if (f === "interval") return "interval";
+  const s = (sess.structure || "").toUpperCase();
+  if (/\bAMRAP\b/.test(s)) return "amrap";
+  if (/FOR\s+TIME/.test(s)) return "for_time";
+  if (/\bEMOM\b/.test(s)) return "emom";
+  if (/ROUNDS\s+FOR\s+TIME/.test(s)) return "rounds_for_time";
+  if (/\bCHIPPER\b/.test(s)) return "chipper";
+  if (/\bINTERVAL\b/.test(s)) return "interval";
+  return "other";
+}
+
+function formatWodResultForDisplay(result: WodResult, fmt: WodFormat): string {
+  if (!result || !Object.keys(result).length) return "";
+  if (fmt === "amrap") {
+    const r = result.rounds ? `${result.rounds} rounds` : "";
+    return result.reps ? `${r} + ${result.reps} reps` : r;
+  }
+  if (fmt === "for_time" || fmt === "chipper" || fmt === "rounds_for_time") return result.time || "";
+  if (fmt === "emom") return result.completed !== undefined ? (result.completed ? "Completed ✓" : "Did not complete") : (result.score || "");
+  return result.score || result.time || "";
+}
+
+function validateWodResult(fmt: WodFormat, result: WodResult): boolean {
+  if (fmt === "amrap") return !!result.rounds && Number(result.rounds) >= 0;
+  if (fmt === "for_time" || fmt === "chipper" || fmt === "rounds_for_time") return !!result.time;
+  if (fmt === "emom") return result.completed !== undefined;
+  if (fmt === "interval") return !!result.score;
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function ClientSession() {
   const [, params] = useRoute("/client/programmes/:programmeId/sessions/:sessionId");
   const [, setLocation] = useLocation();
@@ -254,6 +298,9 @@ export default function ClientSession() {
   const sessionCommentRecRef = useRef<any>(null);
   const sessionCommentInterimRef = useRef("");
 
+  // WOD result state
+  const [wodResult, setWodResult] = useState<WodResult>({});
+
   // Run interval logging state
   const [runIntervals, setRunIntervals] = useState<RunInterval[]>([{ distance: "", pace: "" }]);
 
@@ -277,6 +324,8 @@ export default function ClientSession() {
     setComments(savedComments);
     // Init session-level comment
     setSessionComment((session as any).clientComment || "");
+    // Init WOD result
+    setWodResult((session as any).wodResult || {});
     // Init run intervals
     const savedRunLog = (session as any).runLog as Array<{ distance?: number | null; pace?: string | null }> | undefined;
     if (savedRunLog && savedRunLog.length > 0) {
@@ -762,7 +811,9 @@ export default function ClientSession() {
               }));
             return { ...base, runLog: runLog.length > 0 ? runLog : null };
           }
-          return base;
+          // WOD — persist structured result
+          const hasResult = Object.values(wodResult).some(v => v !== undefined && v !== "" && v !== null);
+          return { ...base, wodResult: hasResult ? wodResult : null };
         }
         const originalExercises = (s.exercises || [])
           .filter((ex: Exercise) => !deletedExIds.has(ex.id))
@@ -1295,41 +1346,166 @@ export default function ClientSession() {
         const label = src === "run_brain" ? "Run Brain" : src === "endurance_cycle" ? "Endurance Cycle" : "WOD Brain";
         return (
         <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
-          {/* Workout block */}
-          <div className={`rounded-2xl border p-5 space-y-4 ${isGreen ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
-            <div className="flex items-center gap-2">
-              {isGreen
-                ? <Zap className="w-4 h-4 text-green-600 shrink-0" />
-                : <Clock className="w-4 h-4 text-purple-600 shrink-0" />
-              }
-              <span className={`text-xs font-bold uppercase tracking-wide ${isGreen ? "text-green-700" : "text-purple-700"}`}>
-                {label}
-              </span>
-            </div>
-            {(session as any).structure && (
-              <p className={`text-sm italic leading-relaxed ${isGreen ? "text-green-900" : "text-purple-900"}`}>
-                {(session as any).structure}
-              </p>
-            )}
-            <ol className="space-y-2">
-              {(session.exercises || []).map((ex, i) => (
-                <li key={ex.id} className="flex items-baseline gap-3">
-                  <span className={`text-sm font-bold shrink-0 w-5 ${isGreen ? "text-green-600" : "text-purple-600"}`}>{i + 1}.</span>
-                  <div>
-                    <span className="text-sm font-semibold text-foreground capitalize">{ex.name}</span>
-                    {ex.notes && <span className="text-sm text-muted-foreground ml-2">{ex.notes}</span>}
+          {/* ── WOD Brain: structured workout definition + result inputs ── */}
+          {src === "wod_brain" && (() => {
+            const wodFmt = detectWodFormat(session as any);
+            const movements = (session.exercises || []);
+
+            // Parse a clean format header from structure or name
+            const structureStr = (session as any).structure as string | undefined;
+            // e.g. "AMRAP 20: 15 Wall Balls ..." → header = "AMRAP 20"
+            const fmtHeader = structureStr
+              ? structureStr.split(":")[0].trim()
+              : (session.name || "WOD");
+
+            return (
+              <>
+                {/* Workout definition card */}
+                <div className="rounded-2xl border border-purple-200 bg-purple-50 overflow-hidden">
+                  {/* Format header */}
+                  <div className="bg-purple-600 px-5 py-3">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Clock className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                      <span className="text-[10px] font-bold text-purple-200 uppercase tracking-widest">WOD Brain</span>
+                    </div>
+                    <p className="text-white font-bold text-xl leading-tight">{fmtHeader}</p>
                   </div>
-                </li>
-              ))}
-            </ol>
-            {(session as any).guidance && (
-              <div className={`border-t pt-3 mt-1 space-y-1.5 ${isGreen ? "border-green-200" : "border-purple-200"}`}>
-                {((session as any).guidance as string).split(/\n\n+/).map((para: string, pi: number) => (
-                  <p key={pi} className={`text-xs leading-relaxed ${isGreen ? "text-green-900/80" : "text-purple-900/80"}`}>{para.trim()}</p>
-                ))}
-              </div>
-            )}
-          </div>
+
+                  {/* Movements */}
+                  <div className="px-5 py-4 space-y-2">
+                    {movements.length > 0 ? movements.map((ex, i) => (
+                      <div key={ex.id} className="flex items-baseline gap-3">
+                        <span className="text-xs font-bold text-purple-400 shrink-0 w-4">{i + 1}.</span>
+                        <span className="text-sm font-semibold text-foreground">
+                          {ex.notes ? `${ex.notes} ` : ""}
+                          <span className="capitalize">{ex.name}</span>
+                        </span>
+                      </div>
+                    )) : structureStr ? (
+                      <p className="text-sm text-purple-900 italic leading-relaxed">
+                        {structureStr.includes(":") ? structureStr.split(":").slice(1).join(":").trim() : structureStr}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {/* Guidance */}
+                  {(session as any).guidance && (
+                    <div className="border-t border-purple-200 px-5 py-3 space-y-1.5">
+                      {((session as any).guidance as string).split(/\n\n+/).map((para: string, pi: number) => (
+                        <p key={pi} className="text-xs text-purple-900/70 leading-relaxed">{para.trim()}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Result input — format-specific */}
+                <div className="rounded-2xl border border-border bg-background p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Your Result</p>
+                    {formatWodResultForDisplay(wodResult, wodFmt) && (
+                      <span className="text-xs font-semibold text-primary bg-primary/10 rounded-full px-2.5 py-0.5">
+                        {formatWodResultForDisplay(wodResult, wodFmt)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* AMRAP → rounds + reps */}
+                  {wodFmt === "amrap" && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Rounds completed</label>
+                          <Input
+                            type="number" inputMode="numeric" min="0" placeholder="e.g. 7"
+                            value={wodResult.rounds ?? ""}
+                            onChange={e => { setWodResult(r => ({ ...r, rounds: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
+                            className="text-center font-bold text-lg h-12"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">+ Additional reps</label>
+                          <Input
+                            type="number" inputMode="numeric" min="0" placeholder="e.g. 12"
+                            value={wodResult.reps ?? ""}
+                            onChange={e => { setWodResult(r => ({ ...r, reps: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
+                            className="text-center font-bold text-lg h-12"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* FOR TIME / CHIPPER / ROUNDS FOR TIME → finish time */}
+                  {(wodFmt === "for_time" || wodFmt === "chipper" || wodFmt === "rounds_for_time") && (
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Finish time (mm:ss)</label>
+                      <Input
+                        type="text" inputMode="text" placeholder="e.g. 12:34"
+                        value={wodResult.time ?? ""}
+                        onChange={e => { setWodResult(r => ({ ...r, time: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
+                        className="text-center font-bold text-xl h-14 tracking-widest"
+                      />
+                    </div>
+                  )}
+
+                  {/* EMOM → completed toggle OR score */}
+                  {wodFmt === "emom" && (
+                    <div className="space-y-3">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => { setWodResult(r => ({ ...r, completed: true })); setSaved(false); scheduleClientAutosave(); }}
+                          className={`flex-1 py-3 rounded-xl border-2 text-sm font-bold transition-all ${wodResult.completed === true ? "bg-emerald-500 border-emerald-500 text-white" : "border-border text-muted-foreground hover:border-emerald-400"}`}
+                        >
+                          Completed ✓
+                        </button>
+                        <button
+                          onClick={() => { setWodResult(r => ({ ...r, completed: false })); setSaved(false); scheduleClientAutosave(); }}
+                          className={`flex-1 py-3 rounded-xl border-2 text-sm font-bold transition-all ${wodResult.completed === false ? "bg-red-500 border-red-500 text-white" : "border-border text-muted-foreground hover:border-red-400"}`}
+                        >
+                          Did not finish
+                        </button>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Score / notes (optional)</label>
+                        <Input
+                          type="text" placeholder="e.g. 18/20 rounds completed, 144 reps"
+                          value={wodResult.score ?? ""}
+                          onChange={e => { setWodResult(r => ({ ...r, score: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* INTERVAL → total output */}
+                  {wodFmt === "interval" && (
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Total output / score</label>
+                      <Input
+                        type="text" placeholder="e.g. 4800m, or 12 cal avg per round"
+                        value={wodResult.score ?? ""}
+                        onChange={e => { setWodResult(r => ({ ...r, score: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
+                        className="text-sm"
+                      />
+                    </div>
+                  )}
+
+                  {/* Other / unknown */}
+                  {wodFmt === "other" && (
+                    <div>
+                      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Score / result</label>
+                      <Input
+                        type="text" placeholder="e.g. 7 rounds + 12 reps, or 14:32"
+                        value={wodResult.score ?? ""}
+                        onChange={e => { setWodResult(r => ({ ...r, score: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
+                        className="text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
 
           {/* Run interval logging */}
           {(src === "run_brain" || src === "endurance_cycle") && (
