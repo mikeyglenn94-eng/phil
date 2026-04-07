@@ -1,0 +1,99 @@
+Improve the plan preview shown before building so users can confidently approve it, without adding clutter.
+
+CORE PRINCIPLE
+The preview should give just enough information for a user to quickly understand:
+- how often they will train
+- what the weekly structure looks like
+- whether it matches their intent
+
+It must remain concise and scannable.
+
+======================================
+PREVIEW STRUCTURE
+======================================
+
+Replace the current minimal preview with a structured bullet summary.
+
+New format:
+
+1. Title
+- keep plan name (e.g. “Hybrid plan — half marathon focus”)
+
+2. Short intro line:
+- “Here’s what I’m going to build:”
+
+3. Bullet summary (max 5–6 bullets total)
+
+Include:
+- duration (e.g. 4 weeks)
+- sessions per week
+- high-level split:
+  - strength sessions (how many + type)
+  - running sessions (how many + type)
+- simple structure note:
+  - e.g. “repeatable weekly structure”
+- simple progression note:
+  - e.g. “gradual weekly increase, no complexity”
+
+Example:
+
+Hybrid plan — half marathon focus
+
+Here’s what I’m going to build:
+
+- 4 weeks  
+- 4 days per week  
+
+- 2 strength sessions → full-body, moderate volume  
+- 2 runs → 1 quality, 1 longer steady  
+
+- repeatable weekly structure  
+- simple progression week to week  
+
+======================================
+RULES
+======================================
+
+- max 5–6 bullets total
+- one idea per bullet
+- no paragraphs
+- no detailed exercise selection
+- no sets / reps
+- no long explanations
+- keep it scannable in under 5 seconds
+
+======================================
+OPTIONAL ENHANCEMENT
+======================================
+
+If user provided clear intent, reflect it:
+
+Example:
+“You asked for: 3 strength + 2 runs”
+“This plan uses: 2 strength + 2 runs for better balance”
+
+Keep this to one short line only.
+
+======================================
+CTA AREA
+======================================
+
+Keep:
+- “Build Plan” button
+- “Cancel”
+
+Optionally add a subtle secondary option:
+- “Adjust before building”
+
+This should not add clutter.
+
+======================================
+ACCEPTANCE CRITERIA
+======================================
+
+After this change:
+- users can understand the plan structure instantly
+- preview feels more trustworthy and intentional
+- no increase in visual clutter
+- no long text blocks
+- users can confidently click “Build Plan” without guessing what they will get

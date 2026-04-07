@@ -547,6 +547,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     hasEnough: boolean;
     followUpQuestion?: string;
     assumptions?: string[];
+    planSummary?: string[];
+    intentNote?: string;
     suggestedBrief?: string;
     parsedConstraints: Record<string, unknown>;
   }
@@ -2628,11 +2630,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
             {/* ── Structured coach response (parse-first plan/session flow) ─── */}
             {coachParseResult && (
-              <div className="flex flex-col gap-2.5 rounded-xl border bg-muted/30 px-3.5 py-3">
-                {/* Acknowledgement + dismiss */}
+              <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 px-3.5 py-3">
+                {/* Title row: acknowledgement + dismiss */}
                 <div className="flex items-start gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                  <p className="text-[13px] leading-relaxed text-foreground flex-1">{coachParseResult.acknowledgement}</p>
+                  <p className="text-[13px] font-semibold text-foreground flex-1 leading-snug">{coachParseResult.acknowledgement}</p>
                   <button
                     onClick={() => { setCoachParseResult(null); setCoachFollowUpInput(""); }}
                     className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
@@ -2641,8 +2643,26 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   </button>
                 </div>
 
-                {/* Assumptions — visible when the coach has enough info */}
-                {coachParseResult.hasEnough && !!coachParseResult.assumptions?.length && (
+                {/* Structured plan preview — shown when coach has enough info */}
+                {coachParseResult.hasEnough && !!coachParseResult.planSummary?.length && (
+                  <div className="flex flex-col gap-2 ml-5">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70 font-medium">Here's what I'm going to build</p>
+                    <ul className="flex flex-col gap-1">
+                      {coachParseResult.planSummary.map((line, i) => (
+                        <li key={i} className="flex items-start gap-1.5 text-[12.5px] text-foreground/80">
+                          <span className="text-primary/50 mt-px shrink-0 select-none font-bold">·</span>
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {coachParseResult.intentNote && (
+                      <p className="text-[11.5px] text-muted-foreground italic mt-0.5">{coachParseResult.intentNote}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Fallback: assumptions list if no planSummary returned */}
+                {coachParseResult.hasEnough && !coachParseResult.planSummary?.length && !!coachParseResult.assumptions?.length && (
                   <ul className="ml-5 space-y-0.5">
                     {coachParseResult.assumptions.map((a, i) => (
                       <li key={i} className="flex items-start gap-1.5 text-[12px] text-muted-foreground">
@@ -2653,7 +2673,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   </ul>
                 )}
 
-                {/* Follow-up question — shown when the coach needs one piece of info */}
+                {/* Follow-up question — shown when the coach needs more info */}
                 {!coachParseResult.hasEnough && coachParseResult.followUpQuestion && (
                   <div className="ml-5 flex flex-col gap-2">
                     <p className="text-[13px] font-medium text-foreground">{coachParseResult.followUpQuestion}</p>
@@ -2672,14 +2692,32 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 {/* Action row */}
                 <div className="flex items-center gap-2 ml-5">
                   {coachParseResult.hasEnough ? (
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs rounded-lg px-3 gap-1.5"
-                      onClick={handleBuildFromParse}
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      {coachParseResult.requestType === "session" ? "Build Session" : "Build Plan"}
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs rounded-lg px-3 gap-1.5"
+                        onClick={handleBuildFromParse}
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        {coachParseResult.requestType === "session" ? "Build Session" : "Build Plan"}
+                      </Button>
+                      <button
+                        onClick={() => {
+                          const brief = coachParseResult.suggestedBrief ?? originalCoachInput;
+                          const isSession = coachParseResult.requestType === "session";
+                          setDescribeText(brief);
+                          setAiMode(isSession ? "session" : "programme");
+                          setBuildMode("describe");
+                          setGeneratedPreview(null);
+                          setAssignDialogOpen(true);
+                          setCoachParseResult(null);
+                          setCoachFollowUpInput("");
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Adjust before building
+                      </button>
+                    </>
                   ) : (
                     <Button
                       size="sm"

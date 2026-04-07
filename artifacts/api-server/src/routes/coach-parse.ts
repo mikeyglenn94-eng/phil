@@ -107,6 +107,15 @@ Return a JSON object with EXACTLY this shape:
   "hasEnough": true | false,
   "followUpQuestion": "Bundled clarification question in natural coach language. Only include this field when hasEnough is false.",
   "assumptions": ["Short non-material assumption 1", "Short non-material assumption 2"],
+  "planSummary": [
+    "6 weeks",
+    "4 days per week",
+    "2 strength sessions → upper/lower, moderate volume",
+    "2 runs → 1 threshold, 1 longer steady",
+    "repeatable weekly structure",
+    "gradual load increase week to week"
+  ],
+  "intentNote": "Only include when what you built differs from what the user explicitly asked for. One short line. Example: 'You mentioned 3 runs — using 2 for better balance with strength work.' Omit this field entirely if there is no meaningful deviation.",
   "suggestedBrief": "Complete natural-language brief for the plan/session builder. Includes all stated constraints plus stated assumptions. Only include this field when hasEnough is true.",
   "parsedConstraints": {
     "daysPerWeek": null or number,
@@ -121,7 +130,14 @@ Return a JSON object with EXACTLY this shape:
     "simplicity": null or "simple" or "moderate" or "advanced",
     "performancePriorities": null or string
   }
-}`;
+}
+
+planSummary rules:
+- Only include when hasEnough is true.
+- Max 6 bullets total. One idea per bullet. No sets/reps. No detailed exercise selection.
+- Always include: duration, days per week, high-level session split, structure note, progression note.
+- Use short phrases: "6 weeks", "4 days per week", "2 strength → full-body", "gradual load increase".
+- For sessions (not programmes): use "planSummary" to describe the session structure instead (e.g. "45 min", "lower body focus", "compound-first", "5 exercises").`;
 
 router.post("/coach-parse", async (req, res) => {
   const { input, followUpAnswer, clientContext } = req.body as {
