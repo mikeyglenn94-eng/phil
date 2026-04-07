@@ -1,0 +1,276 @@
+Do a focused polish pass on the dashboard. Do NOT add new features or new sections. Keep the current structure exactly as it is. This pass is only about making the current states feel intentional, trustworthy, and motivating.
+
+GOAL
+Improve the dashboard by fixing:
+- empty states
+- first-time user states
+- no-data messaging
+- comparison colour logic
+- score explanation wording
+- consistency card wording when week has not started yet or no sessions are logged
+
+Do not bloat the product.
+Do not add charts.
+Do not add more metrics.
+Do not change the dashboard hierarchy.
+
+CURRENT STRUCTURE TO KEEP
+- Fitness Score
+- Why it moved
+- Weekly Win
+- Consistency
+- Performance cards
+- This Week metrics
+- This Month metrics
+- Edit Dashboard
+
+======================================
+1. FITNESS SCORE POLISH
+======================================
+
+Problem:
+The Fitness Score card can feel confusing when there are no sessions yet this week but the card still shows movement versus last week and last month.
+
+Fix:
+When the current week has no logged sessions yet, make the card clearly communicate that the score is carrying over from the previous state.
+
+Rules:
+- if no sessions logged in current week:
+  - keep showing the current displayed Fitness Score
+  - but label the state more clearly
+  - do not make it feel like the score already changed because of this week
+- use wording like:
+  - “No sessions yet this week”
+  - “Waiting for this week’s training”
+  - “Score currently reflects recent training”
+
+Adjust comparison copy so it feels coherent.
+For example:
+- main score stays visible
+- comparison lines can remain, but the state message must make it obvious this is not driven by current-week activity yet
+
+Do not remove weekly and monthly comparisons entirely.
+Just make the meaning clearer.
+
+======================================
+2. WHY IT MOVED POLISH
+======================================
+
+Problem:
+When there is no current-week activity, “Why it moved” currently just repeats the absence of sessions and does not really explain the score state.
+
+Fix:
+Make “Why it moved” explain the score state in a more trustworthy way.
+
+Rules:
+- if no current-week activity:
+  - use language like:
+    - “No new sessions yet, so your score still reflects recent training”
+    - “No training logged this week yet, so score is unchanged from the last update”
+- if score actually changed because a new week rolled over or smoothing applied, explain that honestly and simply
+- do not fake precision
+- do not use jargon
+- do not expose raw formula details
+
+Keep it compact.
+
+======================================
+3. WEEKLY WIN POLISH
+======================================
+
+Keep Weekly Win, but improve fallback wording for low-data weeks.
+
+Rules:
+- if there is a meaningful positive signal, keep using it
+- if no improvement happened but training was completed:
+  - use:
+    - “Baseline maintained this week”
+    - “Consistent week completed”
+- if no sessions yet this week:
+  - use:
+    - “New week, ready to build”
+    - or another short neutral phrase that feels intentional
+- do not sound cheesy or overly motivational
+
+Keep this factual and clean.
+
+======================================
+4. CONSISTENCY CARD POLISH
+======================================
+
+Problem:
+The consistency card feels too dead when it says things like “0/? sessions” and “No sessions logged yet this week”.
+
+Fix:
+Make it feel more useful and intentional.
+
+Rules:
+- if user has a formal plan:
+  - show completed / planned clearly
+  - examples:
+    - “0 / 4 sessions”
+    - subtitle:
+      - “Week just getting started”
+      - “No sessions logged yet”
+      - “3 sessions remaining”
+- if user has no formal plan:
+  - do not show “?”
+  - instead use a more useful fallback
+  - examples:
+    - “0 sessions this week”
+    - subtitle:
+      - “Last week: 3 sessions”
+      - “Start your first session this week”
+- if week has started but no sessions logged:
+  - make wording gently forward-looking
+- if all planned sessions completed:
+  - use positive status copy
+- if some planned sessions missed:
+  - explain simply and clearly
+
+Do not make the card feel punitive.
+
+======================================
+5. PERFORMANCE CARD EMPTY STATES
+======================================
+
+Problem:
+Cards like Estimated 5K, Squat e1RM, and Deadlift e1RM currently say things like “No data” or “Not enough data”, which feels flat and unfinished.
+
+Fix:
+Replace generic no-data copy with intentional progression-state copy.
+
+Rules by card type:
+
+Estimated 5K:
+- if there is not enough qualifying running data:
+  - use:
+    - “Add a steady run to estimate”
+    - or “Need a steady run baseline”
+- avoid generic “Not enough data” where possible
+
+Squat / Bench / Deadlift e1RM:
+- if no data yet:
+  - use:
+    - “Log your first squat session”
+    - “Log your first deadlift session”
+    - etc.
+- if first record exists:
+  - use:
+    - “Baseline set”
+    - “First benchmark”
+  instead of “first record” if it reads better visually
+
+Important:
+Missing data should feel like a next step, not a broken state.
+
+======================================
+6. COMPARISON COLOUR AND DELTA LOGIC
+======================================
+
+Problem:
+Equal values are currently being shown in red in some cases, which implies regression when there is none.
+
+Fix all comparison and colour logic across the dashboard.
+
+Rules:
+- increase = positive only when the metric is one where more is better
+- decrease = positive for time-based metrics like estimated 5K and pace
+- equal = neutral grey
+- no change must never be shown as negative
+- if previous value is missing, do not colour it as positive or negative
+- use neutral treatment for first benchmarks / first records
+
+Apply this consistently to:
+- Fitness Score deltas
+- Estimated 5K deltas
+- e1RM deltas
+- Distance Run
+- Volume Lifted
+- any other comparison metric already on dashboard
+
+======================================
+7. FIRST-TIME USER STATES
+======================================
+
+Add a more intentional experience for first-time or low-data users.
+
+Rules:
+- if user has almost no data:
+  - dashboard should still feel usable and clean
+  - cards should guide the next useful action
+- examples:
+  - Estimated 5K: “Add a steady run to estimate”
+  - Squat e1RM: “Log your first squat session”
+  - Consistency: “Start your first session this week”
+  - Weekly Win: “New week, ready to build”
+
+Do not add onboarding overlays or new features.
+Just improve the text and card states.
+
+======================================
+8. COPY STYLE RULES
+======================================
+
+Keep all copy:
+- concise
+- factual
+- calm
+- coaching-like
+- not cheesy
+- not generic corporate product language
+
+Avoid:
+- “Amazing”
+- “Great job”
+- “Keep crushing it”
+- “You’re on fire”
+- vague filler
+
+Prefer:
+- “Baseline set”
+- “Week just getting started”
+- “No new sessions yet”
+- “Score reflects recent training”
+- “Add a steady run to estimate”
+
+======================================
+9. IMPLEMENTATION DETAILS
+======================================
+
+Please update the relevant formatting and state helpers so this is handled systematically, not with one-off UI hacks.
+
+Create or improve helpers for:
+- empty state copy selection
+- delta direction and colour logic
+- first-benchmark state formatting
+- score explanation copy when no current-week data exists
+- consistency card wording for plan vs no-plan users
+
+Examples of helper responsibilities:
+- getMetricDeltaState(current, previous, metricType)
+- getMetricEmptyState(metricType, context)
+- getWeeklyWinFallback(context)
+- getConsistencySubtitle(context)
+- getFitnessScoreStateMessage(context)
+- getWhyItMovedSummary(context)
+
+======================================
+10. ACCEPTANCE CRITERIA
+======================================
+
+After this polish pass:
+- no empty state should feel broken or accidental
+- no equal comparison should appear negative
+- Fitness Score should make sense even when no sessions are logged yet this week
+- Why it moved should explain score state clearly
+- Consistency should feel useful even with no plan or no sessions yet
+- performance cards should guide the user toward the next meaningful action
+- first benchmarks should feel intentional
+- dashboard should remain minimal and mobile-friendly
+- no new features should be added
+
+At the end, show me:
+1. which files/components were updated
+2. any helper functions added or changed
+3. any assumptions made about no-plan users or low-data states

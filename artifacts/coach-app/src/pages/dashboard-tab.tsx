@@ -150,6 +150,106 @@ function TimeDeltaBadge({ current, previous }: { current: string | null; previou
   );
 }
 
+// ── Copy / state helpers ──────────────────────────────────────────
+
+/** True when no sessions have been logged in the current ISO week. */
+function noSessionsThisWeek(thisWeekData: { sessionCount?: number; completedCount?: number } | undefined): boolean {
+  if (!thisWeekData) return true;
+  const count = (thisWeekData.sessionCount ?? 0) + (thisWeekData.completedCount ?? 0);
+  return count === 0;
+}
+
+/**
+ * Returns a state message for the Fitness Score card when nothing has been
+ * logged yet this week so the reader understands the score is carried over.
+ */
+function getFitnessScoreStateMessage(noSessions: boolean): string | null {
+  return noSessions ? "Score reflects recent training — no sessions logged yet this week" : null;
+}
+
+/**
+ * Summary line shown in the collapsed "Why it moved" bar.
+ * Uses neutral language when there is no current-week activity.
+ */
+function getWhyItMovedSummary(noSessions: boolean, explanation: string): string {
+  return noSessions
+    ? "No new sessions yet — score reflects your recent training"
+    : explanation;
+}
+
+/**
+ * Override Weekly Win copy when there are no current-week sessions so it
+ * feels forward-looking rather than stale.
+ */
+function getWeeklyWinDisplay(weeklyWin: string, noSessions: boolean): string {
+  if (!noSessions) return weeklyWin;
+  // Only override low-signal fallbacks — genuine achievements are kept.
+  const lower = weeklyWin.toLowerCase();
+  if (
+    lower.includes("baseline maintained") ||
+    lower.includes("no sessions") ||
+    lower === ""
+  ) {
+    return "New week, ready to build";
+  }
+  return weeklyWin;
+}
+
+interface ConsistencyContent {
+  primaryValue: string;   // e.g. "0 / 4" or "3"
+  suffix: string;         // e.g. "sessions"
+  sub: string;
+  showBar: boolean;
+}
+
+/**
+ * Returns display values for the Consistency card.
+ * Handles plan vs no-plan, and every progression state within a week.
+ */
+function getConsistencyContent(
+  adherence: AnalyticsData["adherence"],
+  lastWeekSessionCount: number,
+): ConsistencyContent {
+  const { completed, planned } = adherence.thisWeek;
+  const hasPlan = planned > 0;
+
+  if (hasPlan) {
+    const remaining = planned - completed;
+    let sub: string;
+    if (completed === 0) {
+      sub = "Week just getting started";
+    } else if (completed >= planned) {
+      sub = "All sessions complete";
+    } else {
+      sub = `${remaining} session${remaining !== 1 ? "s" : ""} remaining`;
+    }
+    return { primaryValue: `${completed} / ${planned}`, suffix: "sessions", sub, showBar: true };
+  }
+
+  // No formal plan
+  if (completed === 0) {
+    const sub = lastWeekSessionCount > 0
+      ? `Last week: ${lastWeekSessionCount} session${lastWeekSessionCount !== 1 ? "s" : ""}`
+      : "Start your first session this week";
+    return { primaryValue: `${completed}`, suffix: "sessions this week", sub, showBar: false };
+  }
+
+  const sub = lastWeekSessionCount > 0
+    ? `Last week: ${lastWeekSessionCount} session${lastWeekSessionCount !== 1 ? "s" : ""}`
+    : "";
+  return { primaryValue: `${completed}`, suffix: "sessions this week", sub, showBar: false };
+}
+
+/** Per-lift empty state copy. */
+function getLiftEmptyState(lift: "squat" | "bench" | "deadlift"): string {
+  if (lift === "squat")    return "Log your first squat";
+  if (lift === "bench")    return "Log your first bench";
+  return "Log your first deadlift";
+}
+
+/** Sub-label for the first benchmark (replaces generic "first record"). */
+const FIRST_BENCHMARK_LABEL = "Baseline set";
+
 // ── Score driver logic ────────────────────────────────────────────
 
 type Polarity = "positive" | "neutral" | "negative";
@@ -458,6 +558,12 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
 
   const scoreDrivers = computeScoreDrivers(analytics, thisWeekData);
 
+  const noSessions         = noSessionsThisWeek(thisWeekData);
+  const fitnessStateMsg    = getFitnessScoreStateMessage(noSessions);
+  const whyMovedSummary    = getWhyItMovedSummary(noSessions, fitnessScore.explanation);
+  const weeklyWinText      = getWeeklyWinDisplay(weeklyWin, noSessions);
+  const consistencyContent = getConsistencyContent(adherence, lastWeekData?.sessionCount ?? 0);
+
   return (
     <div className="max-w-lg mx-auto px-4 pt-5 pb-24 space-y-5">
 
@@ -484,7 +590,12 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
           </div>
         </div>
 
-        {prefs.showFitnessExplanation && (
+        {fitnessStateMsg && (
+          <p className="mt-3 text-[11px] text-muted-foreground border-t pt-3">
+            {fitnessStateMsg}
+          </p>
+        )}
+        {!fitnessStateMsg && prefs.showFitnessExplanation && (
           <p className="mt-3 text-[12px] text-muted-foreground italic border-t pt-3">
             {fitnessScore.explanation}
           </p>
@@ -500,7 +611,7 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-[11px] text-muted-foreground font-medium">Why it moved</span>
             <span className="text-[11px] text-muted-foreground/70 truncate hidden sm:block">
-              — {fitnessScore.explanation}
+              — {whyMovedSummary}
             </span>
           </div>
           <ChevronDown
@@ -510,7 +621,7 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
 
         {drilldownOpen && (
           <div className="px-4 pb-4 pt-1 space-y-4 border-t">
-            <p className="text-[11px] text-muted-foreground pt-2 italic">{fitnessScore.explanation}</p>
+            <p className="text-[11px] text-muted-foreground pt-2 italic">{whyMovedSummary}</p>
             {scoreDrivers.map(driver => (
               <DriverRow key={driver.label} driver={driver} />
             ))}
@@ -524,7 +635,7 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
           <Trophy className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
           <div>
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Weekly Win</p>
-            <p className="text-sm font-semibold leading-snug">{weeklyWin}</p>
+            <p className="text-sm font-semibold leading-snug">{weeklyWinText}</p>
           </div>
         </div>
       )}
@@ -539,15 +650,12 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
 
           <div className="flex items-end gap-2">
             <span className="text-3xl font-black tabular-nums leading-none">
-              {adherence.thisWeek.completed}
-              <span className="text-lg font-medium text-muted-foreground">
-                /{adherence.thisWeek.planned > 0 ? adherence.thisWeek.planned : "?"}
-              </span>
+              {consistencyContent.primaryValue}
             </span>
-            <span className="mb-0.5 text-sm text-muted-foreground">sessions</span>
+            <span className="mb-0.5 text-sm text-muted-foreground">{consistencyContent.suffix}</span>
           </div>
 
-          {adherenceRatio !== null && (
+          {consistencyContent.showBar && adherenceRatio !== null && (
             <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${adherenceRatio >= 1 ? "bg-emerald-500" : adherenceRatio >= 0.75 ? "bg-emerald-400" : adherenceRatio >= 0.5 ? "bg-amber-400" : "bg-red-400"}`}
@@ -556,11 +664,13 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
             </div>
           )}
 
-          <p className="mt-2 text-[11px] text-muted-foreground">{adherence.status}</p>
+          {consistencyContent.sub && (
+            <p className="mt-2 text-[11px] text-muted-foreground">{consistencyContent.sub}</p>
+          )}
 
           {adherence.streak >= 2 && (
             <p className="mt-1 text-[11px] font-semibold text-emerald-600">
-              {adherence.streak}-week streak 🔥
+              {adherence.streak}-week streak
             </p>
           )}
         </div>
@@ -576,11 +686,16 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
               <StatCard
                 title="Est. 5K"
                 icon={<Footprints className="w-4 h-4" />}
-                value={runMetrics.estimated5K.current ?? ""}
+                value={runMetrics.estimated5K.current ?? "Add a steady run to estimate"}
                 unavailable={!runMetrics.estimated5K.current}
-                {...(!runMetrics.estimated5K.current ? { value: "Not enough data" } : {})}
                 delta={<TimeDeltaBadge current={runMetrics.estimated5K.current} previous={runMetrics.estimated5K.previous} />}
-                sub={runMetrics.estimated5K.previous ? `was ${runMetrics.estimated5K.previous}` : runMetrics.estimated5K.current ? "first estimate" : undefined}
+                sub={
+                  runMetrics.estimated5K.previous
+                    ? `was ${runMetrics.estimated5K.previous}`
+                    : runMetrics.estimated5K.current
+                      ? FIRST_BENCHMARK_LABEL
+                      : undefined
+                }
               />
             )}
 
@@ -588,10 +703,16 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
               <StatCard
                 title="Squat e1RM"
                 icon={<Dumbbell className="w-4 h-4" />}
-                value={strengthMetrics.squat.current !== null ? `${strengthMetrics.squat.current}kg` : "No data"}
+                value={strengthMetrics.squat.current !== null ? `${strengthMetrics.squat.current}kg` : getLiftEmptyState("squat")}
                 unavailable={strengthMetrics.squat.current === null}
                 delta={<DeltaBadge current={strengthMetrics.squat.current} previous={strengthMetrics.squat.previous} kind="higher-better" suffix="kg" />}
-                sub={strengthMetrics.squat.previous !== null ? `was ${strengthMetrics.squat.previous}kg` : strengthMetrics.squat.current !== null ? "first record" : undefined}
+                sub={
+                  strengthMetrics.squat.previous !== null
+                    ? `was ${strengthMetrics.squat.previous}kg`
+                    : strengthMetrics.squat.current !== null
+                      ? FIRST_BENCHMARK_LABEL
+                      : undefined
+                }
               />
             )}
 
@@ -599,10 +720,16 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
               <StatCard
                 title="Bench e1RM"
                 icon={<Dumbbell className="w-4 h-4" />}
-                value={strengthMetrics.bench.current !== null ? `${strengthMetrics.bench.current}kg` : "No data"}
+                value={strengthMetrics.bench.current !== null ? `${strengthMetrics.bench.current}kg` : getLiftEmptyState("bench")}
                 unavailable={strengthMetrics.bench.current === null}
                 delta={<DeltaBadge current={strengthMetrics.bench.current} previous={strengthMetrics.bench.previous} kind="higher-better" suffix="kg" />}
-                sub={strengthMetrics.bench.previous !== null ? `was ${strengthMetrics.bench.previous}kg` : strengthMetrics.bench.current !== null ? "first record" : undefined}
+                sub={
+                  strengthMetrics.bench.previous !== null
+                    ? `was ${strengthMetrics.bench.previous}kg`
+                    : strengthMetrics.bench.current !== null
+                      ? FIRST_BENCHMARK_LABEL
+                      : undefined
+                }
               />
             )}
 
@@ -610,10 +737,16 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
               <StatCard
                 title="Deadlift e1RM"
                 icon={<Dumbbell className="w-4 h-4" />}
-                value={strengthMetrics.deadlift.current !== null ? `${strengthMetrics.deadlift.current}kg` : "No data"}
+                value={strengthMetrics.deadlift.current !== null ? `${strengthMetrics.deadlift.current}kg` : getLiftEmptyState("deadlift")}
                 unavailable={strengthMetrics.deadlift.current === null}
                 delta={<DeltaBadge current={strengthMetrics.deadlift.current} previous={strengthMetrics.deadlift.previous} kind="higher-better" suffix="kg" />}
-                sub={strengthMetrics.deadlift.previous !== null ? `was ${strengthMetrics.deadlift.previous}kg` : strengthMetrics.deadlift.current !== null ? "first record" : undefined}
+                sub={
+                  strengthMetrics.deadlift.previous !== null
+                    ? `was ${strengthMetrics.deadlift.previous}kg`
+                    : strengthMetrics.deadlift.current !== null
+                      ? FIRST_BENCHMARK_LABEL
+                      : undefined
+                }
               />
             )}
           </div>
