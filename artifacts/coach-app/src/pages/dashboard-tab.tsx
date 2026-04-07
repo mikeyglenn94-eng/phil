@@ -541,7 +541,8 @@ function buildDashboardStat(
     const diff = d.previous != null ? +(d.current - d.previous).toFixed(1) : null;
     const delta = diff != null && Math.abs(diff) >= 0.5
       ? (diff > 0 ? `+${diff}kg` : `${diff}kg`) : null;
-    return { label: key.toUpperCase(), primary: `${d.current}kg`, delta };
+    const labelMap: Record<string, string> = { squat: "SQUAT E1RM", bench: "BENCH E1RM", deadlift: "DEADLIFT E1RM" };
+    return { label: labelMap[key], primary: `${d.current}kg`, delta };
   }
   if (key === "est5K") {
     const curr = analytics.runMetrics.estimated5K.current;
@@ -597,119 +598,128 @@ async function generateProgressCard(
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
+
+  // Fully transparent — no background at all
   ctx.clearRect(0, 0, W, H);
 
-  const pad = 56;
-  const cardTop = Math.round(H * 0.38);
-  const cardH = H - cardTop - 40;
-  const cardW = W - pad * 2;
-  const cx = pad + 60;
-  const right = pad + cardW - 60;
+  const cx    = 96;           // left edge
+  const right = W - 96;      // right edge
 
-  function rr(x: number, y: number, w: number, h: number, r: number) {
-    ctx!.beginPath();
-    ctx!.moveTo(x + r, y);
-    ctx!.arcTo(x + w, y, x + w, y + h, r);
-    ctx!.arcTo(x + w, y + h, x, y + h, r);
-    ctx!.arcTo(x, y + h, x, y, r);
-    ctx!.arcTo(x, y, x + w, y, r);
-    ctx!.closePath();
-  }
+  // ── Shadow helpers ────────────────────────────────────────────────
+  const applyTextShadow = () => {
+    ctx.shadowColor    = "rgba(0,0,0,0.50)";
+    ctx.shadowBlur     = 10;
+    ctx.shadowOffsetX  = 0;
+    ctx.shadowOffsetY  = 2;
+  };
+  const clearShadow = () => {
+    ctx.shadowColor   = "transparent";
+    ctx.shadowBlur    = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+  };
 
-  // Card background
-  ctx.fillStyle = "rgba(5,5,16,0.93)";
-  rr(pad, cardTop, cardW, cardH, 52);
-  ctx.fill();
-
-  // Indigo accent bar at top of card
-  const ag = ctx.createLinearGradient(pad, 0, pad + 320, 0);
-  ag.addColorStop(0, "rgba(99,102,241,1)");
-  ag.addColorStop(1, "rgba(139,92,246,0)");
-  ctx.fillStyle = ag;
-  rr(pad, cardTop, 340, 6, 3);
-  ctx.fill();
-
-  let cy = cardTop + 72;
-
-  // Logo square
-  const ls = 72;
-  rr(cx, cy - ls * 0.78, ls, ls, 18);
-  ctx.fillStyle = "rgba(99,102,241,1)";
-  ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.font = `900 ${Math.round(ls * 0.62)}px Georgia, serif`;
-  ctx.textAlign = "center";
-  ctx.fillText("M", cx + ls / 2, cy - ls * 0.78 + ls * 0.72);
-  ctx.textAlign = "left";
-
-  // Date (top-right)
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase();
-  ctx.fillStyle = "rgba(255,255,255,0.40)";
-  ctx.font = "500 30px 'Inter', system-ui, sans-serif";
-  ctx.textAlign = "right";
-  ctx.fillText(`WEEK OF ${dateStr}`, right, cy);
-  ctx.textAlign = "left";
-  cy += 72;
-
-  // Heading
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "700 72px 'Inter', system-ui, sans-serif";
-  ctx.fillText("YOUR PROGRESS", cx, cy);
-  cy += 28;
-
-  // Divider
-  ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(cx, cy + 24); ctx.lineTo(right, cy + 24); ctx.stroke();
-  cy += 96;
-
-  // Stats
+  // ── Resolve stats ─────────────────────────────────────────────────
   const resolved = activeStats
     .map(k => buildDashboardStat(k, analytics, thisWeekData, lastWeekData))
     .filter((s): s is StatDisplay => s !== null);
 
+  // Start position — sit in the lower half so the photo/background shows above
+  let cy = Math.round(H * 0.46);
+
+  // ── Date line ─────────────────────────────────────────────────────
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase();
+  applyTextShadow();
+  ctx.fillStyle  = "rgba(255,255,255,0.55)";
+  ctx.font       = "500 30px 'Inter', system-ui, sans-serif";
+  ctx.textAlign  = "right";
+  ctx.fillText(`WEEK OF ${dateStr}`, right, cy);
+  ctx.textAlign  = "left";
+  clearShadow();
+  cy += 24;
+
+  // ── Main heading ──────────────────────────────────────────────────
+  applyTextShadow();
+  ctx.fillStyle = "#ffffff";
+  ctx.font      = "900 96px 'Inter', system-ui, sans-serif";
+  ctx.fillText("YOUR PROGRESS", cx, cy + 96 * 1.15);
+  clearShadow();
+  cy += Math.round(96 * 1.15) + 28;
+
+  // ── Thin divider ──────────────────────────────────────────────────
+  ctx.strokeStyle = "rgba(255,255,255,0.14)";
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(right, cy);
+  ctx.stroke();
+  cy += 48;
+
+  // ── Empty state ───────────────────────────────────────────────────
   if (resolved.length === 0) {
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    ctx.font = "400 40px 'Inter', system-ui, sans-serif";
+    applyTextShadow();
+    ctx.fillStyle = "rgba(255,255,255,0.32)";
+    ctx.font      = "400 44px 'Inter', system-ui, sans-serif";
     ctx.fillText("Select stats to show on this card", cx, cy);
-  } else if (resolved.length === 1) {
-    const s = resolved[0];
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.font = "600 30px 'Inter', system-ui, sans-serif";
-    ctx.fillText(s.label, cx, cy);
-    cy += 48;
-    const fs = 160;
-    ctx.font = `800 ${fs}px 'Inter', system-ui, sans-serif`;
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "rgba(99,102,241,0.60)"; ctx.shadowBlur = 56;
-    ctx.fillText(s.primary, cx, cy + fs * 0.78);
-    ctx.shadowBlur = 0;
-    if (s.delta) {
-      const vw = ctx.measureText(s.primary).width;
-      const pos = s.delta.startsWith("+");
-      ctx.fillStyle = pos ? "rgba(134,239,172,0.90)" : "rgba(248,113,113,0.90)";
-      ctx.font = "700 60px 'Inter', system-ui, sans-serif";
-      ctx.fillText(s.delta, cx + vw + 20, cy + fs * 0.78 - 40);
-    }
+    clearShadow();
   } else {
-    const rowH = resolved.length <= 2 ? 160 : resolved.length <= 3 ? 130 : 110;
-    for (const s of resolved) {
-      const vfs = resolved.length <= 2 ? 96 : resolved.length <= 3 ? 80 : 70;
-      ctx.fillStyle = "rgba(255,255,255,0.35)";
-      ctx.font = "600 28px 'Inter', system-ui, sans-serif";
-      ctx.fillText(s.label, cx, cy + 28);
+    // ── Hero stat (first, typically Fitness Score) ─────────────────
+    const [hero, ...rest] = resolved;
+
+    // Label
+    applyTextShadow();
+    ctx.fillStyle = "rgba(255,255,255,0.60)";
+    ctx.font      = "600 32px 'Inter', system-ui, sans-serif";
+    ctx.fillText(hero.label, cx, cy);
+    clearShadow();
+    cy += 6;
+
+    // Hero value
+    const heroFs = 196;
+    applyTextShadow();
+    ctx.font      = `900 ${heroFs}px 'Inter', system-ui, sans-serif`;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(hero.primary, cx, cy + Math.round(heroFs * 1.15));
+    const heroVw = ctx.measureText(hero.primary).width;
+
+    // Hero delta (inline, right of value, vertically centred)
+    if (hero.delta) {
+      const pos = hero.delta.startsWith("+");
+      ctx.font      = "700 52px 'Inter', system-ui, sans-serif";
+      ctx.fillStyle = pos ? "rgba(134,239,172,0.94)" : "rgba(248,113,113,0.94)";
+      ctx.fillText(hero.delta, cx + heroVw + 22, cy + Math.round(heroFs * 1.15) - 52);
+    }
+    clearShadow();
+    cy += Math.round(heroFs * 1.15) + 48;
+
+    // ── Supporting stats ──────────────────────────────────────────
+    for (const s of rest) {
+      // Label
+      applyTextShadow();
+      ctx.fillStyle = "rgba(255,255,255,0.58)";
+      ctx.font      = "600 30px 'Inter', system-ui, sans-serif";
+      ctx.fillText(s.label, cx, cy);
+      clearShadow();
+      cy += 6;
+
+      // Value
+      const vfs = 92;
+      applyTextShadow();
+      ctx.font      = `800 ${vfs}px 'Inter', system-ui, sans-serif`;
       ctx.fillStyle = "#ffffff";
-      ctx.font = `700 ${vfs}px 'Inter', system-ui, sans-serif`;
-      ctx.fillText(s.primary, cx, cy + 28 + vfs * 0.8);
+      ctx.fillText(s.primary, cx, cy + Math.round(vfs * 1.15));
+      const vw = ctx.measureText(s.primary).width;
+
+      // Delta
       if (s.delta) {
-        const vw = ctx.measureText(s.primary).width;
         const pos = s.delta.startsWith("+");
-        ctx.fillStyle = pos ? "rgba(134,239,172,0.90)" : "rgba(248,113,113,0.90)";
-        ctx.font = `600 ${Math.round(vfs * 0.5)}px 'Inter', system-ui, sans-serif`;
-        ctx.fillText(s.delta, cx + vw + 14, cy + 28 + vfs * 0.8 - 10);
+        ctx.font      = `600 42px 'Inter', system-ui, sans-serif`;
+        ctx.fillStyle = pos ? "rgba(134,239,172,0.94)" : "rgba(248,113,113,0.94)";
+        ctx.fillText(s.delta, cx + vw + 18, cy + Math.round(vfs * 1.15) - 18);
       }
-      cy += rowH;
+      clearShadow();
+      cy += Math.round(vfs * 1.15) + 32;
     }
   }
 
