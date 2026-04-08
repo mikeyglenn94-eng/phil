@@ -1,0 +1,157 @@
+We need to refine the IRL Sessions availability builder.
+
+Current changes required:
+- remove Location from slot creation
+- add recurring slot creation
+- add the ability to generate a block of 60-minute slots inside a time window, for example 06:00 to 12:00 creating slots at 06:00, 07:00, 08:00, 09:00, 10:00, and 11:00
+- label the time-window mode in the UI as “Hourly block” because that is clearer than “Time window”
+
+Update the IRL Sessions availability feature like this:
+
+1. Remove location from slot creation
+For now, do not ask for or store a location when creating IRL availability slots.
+Remove the Location field from the availability creation UI.
+
+The slot creation form should focus only on:
+- date or recurrence pattern
+- start time or time window
+- end time
+- optional internal note
+
+2. Support single-slot creation
+Keep the ability to create one single 60-minute slot manually.
+
+Example:
+- Date: 10 April 2026
+- Start: 09:00
+- End: 10:00
+
+This should create one bookable 60-minute slot.
+
+3. Support recurring slot creation
+Add a recurring availability option so I can create repeated slots without manually entering each one.
+
+For recurring creation, support:
+- repeat weekly
+- choose one or more weekdays
+- choose a start date
+- choose an end date
+- choose a start time
+- choose an end time
+
+Example:
+- every Monday and Wednesday
+- from 15 April 2026 to 30 June 2026
+- 09:00 to 10:00
+
+This should create one 60-minute slot on each selected weekday across the chosen date range.
+
+4. Support slot bucket generation within a time range
+Add a mode where I can define a larger time window and automatically generate 60-minute slots inside it.
+
+In the UI, label this mode:
+- Hourly block
+
+Example:
+- Date: 10 April 2026
+- Window: 06:00 to 12:00
+- Slot length: fixed at 60 minutes
+
+This should create:
+- 06:00 to 07:00
+- 07:00 to 08:00
+- 08:00 to 09:00
+- 09:00 to 10:00
+- 10:00 to 11:00
+- 11:00 to 12:00
+
+Important:
+- do not create a partial slot if the range does not divide cleanly
+- all generated slots should be 60 minutes
+- for now, slot length is fixed and should not be editable in the UI
+
+5. Combine recurrence with slot buckets
+The recurring system should also support Hourly block generation.
+
+Example:
+- every Tuesday and Thursday
+- from 1 May 2026 to 30 June 2026
+- window: 06:00 to 12:00
+- generate 60-minute slots every hour
+
+This should generate a full set of hourly 60-minute slots on each matching day.
+
+6. UI modes for availability creation
+Update the availability creation UI so it supports these creation modes clearly:
+
+- Single slot
+- Hourly block
+
+Then add an optional repeat setting:
+- Repeat weekly
+
+Keep the UI simple and clean.
+Do not overwhelm the screen.
+
+A good approach would be:
+- first choose creation type:
+  - Single slot
+  - Hourly block
+- then optionally toggle:
+  - Repeat weekly
+
+7. Validation rules
+Add validation so that:
+- end time must be after start time
+- all created slots are exactly 60 minutes
+- duplicate slots are not created
+- conflicting slots are either blocked or clearly flagged
+- generated recurring slots should be previewed before creation if possible
+- if Google Calendar already shows the time as busy, either:
+  - prevent creation, or
+  - flag it clearly before confirming
+
+8. Slot generation logic
+When using Hourly block:
+- split the time range into consecutive 60-minute slots
+- create only full slots
+- example:
+  - 06:00 to 11:00 = 5 slots
+  - 06:30 to 11:30 = 5 slots
+  - 06:00 to 11:30 = 5 slots, not 5.5
+Do not create any short final slot.
+
+9. Admin experience
+The admin / coach should be able to:
+- create a one-off single slot
+- create a one-off hourly block of 60-minute slots
+- create a recurring weekly single slot
+- create a recurring weekly hourly block of 60-minute slots
+- see upcoming created slots
+- filter by Upcoming or All as already started
+
+10. Data model expectations
+Structure the slot model so each generated slot still exists as its own individual slot record.
+Do not store a recurring rule only and derive availability on the fly.
+
+Reason:
+- each slot needs its own booking status
+- each slot needs conflict checks
+- each slot may later be edited, cancelled, or booked independently
+
+If useful, also store a parent batch or series identifier so slots created together can be managed as a group later.
+
+11. Future-proofing
+Structure this so we can later support:
+- delete one slot vs delete whole recurring series
+- blackout dates
+- recurring exceptions
+- multiple coaches
+- different slot lengths later
+
+But for now:
+- remove location
+- all slots are 60 minutes
+- recurring weekly support is needed
+- Hourly block generation is needed
+- use the label “Hourly block” in the UI instead of “Time window”

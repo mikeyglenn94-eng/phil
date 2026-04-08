@@ -11,6 +11,7 @@ export const irlAvailabilitySlotsTable = pgTable("irl_availability_slots", {
   location: text("location"),
   coachNote: text("coach_note"),
   status: text("status").notNull().default("open"),
+  batchId: text("batch_id"),
   googleCalendarEventId: text("google_calendar_event_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

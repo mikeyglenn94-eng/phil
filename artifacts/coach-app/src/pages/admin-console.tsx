@@ -127,11 +127,24 @@ export default function AdminConsole() {
   // IRL slots
   const [slots, setSlots] = useState<IrlSlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
-  const [newSlot, setNewSlot] = useState({ date: "", startTime: "09:00", endTime: "10:00", location: "", coachNote: "" });
   const [showNewSlot, setShowNewSlot] = useState(false);
   const [slotView, setSlotView] = useState<"upcoming" | "all">("upcoming");
   const [editingSlotId, setEditingSlotId] = useState<number | null>(null);
   const [editSlot, setEditSlot] = useState<Partial<IrlSlot>>({});
+  // Creation form state
+  const [createMode, setCreateMode] = useState<"single" | "hourly">("single");
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [slotDate, setSlotDate] = useState("");
+  const [slotStart, setSlotStart] = useState("09:00");
+  const [slotEnd, setSlotEnd] = useState("10:00");
+  const [slotNote, setSlotNote] = useState("");
+  const [recurStart, setRecurStart] = useState("");
+  const [recurEnd, setRecurEnd] = useState("");
+  const [recurWeekdays, setRecurWeekdays] = useState<number[]>([]);
+  const [windowStart, setWindowStart] = useState("06:00");
+  const [windowEnd, setWindowEnd] = useState("12:00");
+  const [previewSlots, setPreviewSlots] = useState<Array<{ date: string; startTime: string; endTime: string }> | null>(null);
+  const [creatingSlots, setCreatingSlots] = useState(false);
 
   // IRL bookings
   const [bookings, setBookings] = useState<IrlBookingRow[]>([]);
@@ -286,26 +299,98 @@ export default function AdminConsole() {
     }
   };
 
+  // ── IRL slot generation ───────────────────────────────────────────────────
+
+  const timeToMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const minutesToTime = (m: number) => {
+    const hh = Math.floor(m / 60).toString().padStart(2, "0");
+    const mm = (m % 60).toString().padStart(2, "0");
+    return `${hh}:${mm}`;
+  };
+  const generatePreviewSlots = (): Array<{ date: string; startTime: string; endTime: string }> => {
+    const results: Array<{ date: string; startTime: string; endTime: string }> = [];
+
+    const buildSlotsForDate = (date: string) => {
+      if (createMode === "single") {
+        results.push({ date, startTime: slotStart, endTime: slotEnd });
+      } else {
+        const winStartMin = timeToMinutes(windowStart);
+        const winEndMin = timeToMinutes(windowEnd);
+        let cur = winStartMin;
+        while (cur + 60 <= winEndMin) {
+          results.push({ date, startTime: minutesToTime(cur), endTime: minutesToTime(cur + 60) });
+          cur += 60;
+        }
+      }
+    };
+
+    if (!repeatWeekly) {
+      if (slotDate) buildSlotsForDate(slotDate);
+    } else {
+      if (!recurStart || !recurEnd || recurWeekdays.length === 0) return [];
+      const start = new Date(recurStart + "T00:00:00");
+      const end = new Date(recurEnd + "T00:00:00");
+      if (end < start) return [];
+      const cur = new Date(start);
+      while (cur <= end) {
+        const jsDay = cur.getDay();
+        const monDay = jsDay === 0 ? 6 : jsDay - 1;
+        if (recurWeekdays.includes(monDay)) {
+          const yyyy = cur.getFullYear();
+          const mm = String(cur.getMonth() + 1).padStart(2, "0");
+          const dd = String(cur.getDate()).padStart(2, "0");
+          buildSlotsForDate(`${yyyy}-${mm}-${dd}`);
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+    return results;
+  };
+
+  const handlePreview = () => {
+    const slots = generatePreviewSlots();
+    if (slots.length === 0) {
+      toast({ title: "No slots generated", description: "Check your settings", variant: "destructive" }); return;
+    }
+    setPreviewSlots(slots);
+  };
+
+  const resetSlotForm = () => {
+    setCreateMode("single"); setRepeatWeekly(false);
+    setSlotDate(""); setSlotStart("09:00"); setSlotEnd("10:00"); setSlotNote("");
+    setRecurStart(""); setRecurEnd(""); setRecurWeekdays([]);
+    setWindowStart("06:00"); setWindowEnd("12:00");
+    setPreviewSlots(null);
+  };
+
   // ── IRL slot actions ──────────────────────────────────────────────────────
 
-  const createSlot = async () => {
-    if (!newSlot.date || !newSlot.startTime || !newSlot.endTime) {
-      toast({ title: "Date, start time, and end time are required", variant: "destructive" }); return;
+  const createSlots = async () => {
+    const toCreate = previewSlots ?? generatePreviewSlots();
+    if (toCreate.length === 0) {
+      toast({ title: "No slots to create", variant: "destructive" }); return;
     }
-    const r = await fetch(`${BASE}/api/admin/irl-slots`, {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify(newSlot),
-    });
-    if (r.ok) {
-      toast({ title: "Slot created" });
-      setNewSlot({ date: "", startTime: "09:00", endTime: "10:00", location: "", coachNote: "" });
-      setShowNewSlot(false);
-      fetchSlots();
-    } else {
-      const d = await r.json();
-      toast({ title: "Error", description: d.error, variant: "destructive" });
-    }
+    setCreatingSlots(true);
+    try {
+      const r = await fetch(`${BASE}/api/admin/irl-slots`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ slots: toCreate, coachNote: slotNote || undefined }),
+      });
+      if (r.ok) {
+        const created = await r.json();
+        toast({ title: `${created.length} slot${created.length !== 1 ? "s" : ""} created` });
+        resetSlotForm();
+        setShowNewSlot(false);
+        fetchSlots();
+      } else {
+        const d = await r.json();
+        toast({ title: "Error", description: d.error, variant: "destructive" });
+      }
+    } finally { setCreatingSlots(false); }
   };
 
   const updateSlot = async (slotId: number) => {
@@ -770,40 +855,162 @@ export default function AdminConsole() {
                   </div>
 
                   {showNewSlot && (
-                    <div className="bg-white/5 rounded-xl border border-white/10 p-5">
-                      <h3 className="text-sm font-medium mb-4">New availability slot (60 min)</h3>
-                      <div className="grid grid-cols-3 gap-3 mb-3">
-                        <div>
-                          <label className="text-white/40 text-xs block mb-1">Date</label>
-                          <Input type="date" value={newSlot.date} onChange={e => setNewSlot(p => ({ ...p, date: e.target.value }))}
-                            className="bg-white/5 border-white/10 text-white h-9 text-sm" />
-                        </div>
-                        <div>
-                          <label className="text-white/40 text-xs block mb-1">Start</label>
-                          <Input type="time" value={newSlot.startTime} onChange={e => setNewSlot(p => ({ ...p, startTime: e.target.value }))}
-                            className="bg-white/5 border-white/10 text-white h-9 text-sm" />
-                        </div>
-                        <div>
-                          <label className="text-white/40 text-xs block mb-1">End</label>
-                          <Input type="time" value={newSlot.endTime} onChange={e => setNewSlot(p => ({ ...p, endTime: e.target.value }))}
-                            className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                    <div className="bg-white/5 rounded-xl border border-white/10 p-5 space-y-4">
+                      <h3 className="text-sm font-medium">New availability (60 min slots)</h3>
+
+                      {/* Creation mode */}
+                      <div>
+                        <label className="text-white/40 text-xs block mb-2">Creation type</label>
+                        <div className="flex gap-1 bg-white/5 rounded-lg p-1 border border-white/10 w-fit">
+                          {(["single", "hourly"] as const).map(m => (
+                            <button key={m} onClick={() => { setCreateMode(m); setPreviewSlots(null); }}
+                              className={`px-4 py-1.5 rounded text-xs font-medium transition-colors ${createMode === m ? "bg-white/15 text-white" : "text-white/40 hover:text-white/60"}`}>
+                              {m === "single" ? "Single slot" : "Hourly block"}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div>
-                          <label className="text-white/40 text-xs block mb-1">Location</label>
-                          <Input placeholder="e.g. MG Gym, London" value={newSlot.location} onChange={e => setNewSlot(p => ({ ...p, location: e.target.value }))}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-9 text-sm" />
-                        </div>
-                        <div>
-                          <label className="text-white/40 text-xs block mb-1">Note (optional)</label>
-                          <Input placeholder="Internal note" value={newSlot.coachNote} onChange={e => setNewSlot(p => ({ ...p, coachNote: e.target.value }))}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-9 text-sm" />
-                        </div>
+
+                      {/* Repeat toggle */}
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { setRepeatWeekly(p => !p); setPreviewSlots(null); }}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${repeatWeekly ? "bg-white" : "bg-white/20"}`}>
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[#0a0a0a] transition-transform ${repeatWeekly ? "translate-x-4" : "translate-x-0.5"}`} />
+                        </button>
+                        <span className="text-xs text-white/60">Repeat weekly</span>
                       </div>
+
+                      {/* Non-repeating: date + time fields */}
+                      {!repeatWeekly && (
+                        <div className={`grid gap-3 ${createMode === "hourly" ? "grid-cols-3" : "grid-cols-3"}`}>
+                          <div>
+                            <label className="text-white/40 text-xs block mb-1">Date</label>
+                            <Input type="date" value={slotDate} onChange={e => { setSlotDate(e.target.value); setPreviewSlots(null); }}
+                              className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                          </div>
+                          {createMode === "single" ? (
+                            <>
+                              <div>
+                                <label className="text-white/40 text-xs block mb-1">Start</label>
+                                <Input type="time" value={slotStart} onChange={e => { setSlotStart(e.target.value); setPreviewSlots(null); }}
+                                  className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                              </div>
+                              <div>
+                                <label className="text-white/40 text-xs block mb-1">End</label>
+                                <Input type="time" value={slotEnd} onChange={e => { setSlotEnd(e.target.value); setPreviewSlots(null); }}
+                                  className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div>
+                                <label className="text-white/40 text-xs block mb-1">Window start</label>
+                                <Input type="time" value={windowStart} onChange={e => { setWindowStart(e.target.value); setPreviewSlots(null); }}
+                                  className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                              </div>
+                              <div>
+                                <label className="text-white/40 text-xs block mb-1">Window end</label>
+                                <Input type="time" value={windowEnd} onChange={e => { setWindowEnd(e.target.value); setPreviewSlots(null); }}
+                                  className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Repeating: weekday selector + date range + time */}
+                      {repeatWeekly && (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-white/40 text-xs block mb-2">Weekdays</label>
+                            <div className="flex gap-1.5">
+                              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => (
+                                <button key={d} onClick={() => { setRecurWeekdays(p => p.includes(i) ? p.filter(x => x !== i) : [...p, i]); setPreviewSlots(null); }}
+                                  className={`w-9 h-9 rounded text-xs font-medium transition-colors ${recurWeekdays.includes(i) ? "bg-white text-[#0a0a0a]" : "bg-white/10 text-white/50 hover:bg-white/20"}`}>
+                                  {d}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-white/40 text-xs block mb-1">From date</label>
+                              <Input type="date" value={recurStart} onChange={e => { setRecurStart(e.target.value); setPreviewSlots(null); }}
+                                className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                            </div>
+                            <div>
+                              <label className="text-white/40 text-xs block mb-1">To date</label>
+                              <Input type="date" value={recurEnd} onChange={e => { setRecurEnd(e.target.value); setPreviewSlots(null); }}
+                                className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                            </div>
+                          </div>
+                          {createMode === "single" ? (
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-white/40 text-xs block mb-1">Start time</label>
+                                <Input type="time" value={slotStart} onChange={e => { setSlotStart(e.target.value); setPreviewSlots(null); }}
+                                  className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                              </div>
+                              <div>
+                                <label className="text-white/40 text-xs block mb-1">End time</label>
+                                <Input type="time" value={slotEnd} onChange={e => { setSlotEnd(e.target.value); setPreviewSlots(null); }}
+                                  className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-white/40 text-xs block mb-1">Window start</label>
+                                <Input type="time" value={windowStart} onChange={e => { setWindowStart(e.target.value); setPreviewSlots(null); }}
+                                  className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                              </div>
+                              <div>
+                                <label className="text-white/40 text-xs block mb-1">Window end</label>
+                                <Input type="time" value={windowEnd} onChange={e => { setWindowEnd(e.target.value); setPreviewSlots(null); }}
+                                  className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Note */}
+                      <div>
+                        <label className="text-white/40 text-xs block mb-1">Note (optional)</label>
+                        <Input placeholder="Internal note" value={slotNote} onChange={e => setSlotNote(e.target.value)}
+                          className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-9 text-sm" />
+                      </div>
+
+                      {/* Preview list */}
+                      {previewSlots && (
+                        <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+                          <div className="text-xs text-white/50 mb-2 font-medium">{previewSlots.length} slot{previewSlots.length !== 1 ? "s" : ""} will be created:</div>
+                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                            {previewSlots.slice(0, 50).map((s, i) => (
+                              <div key={i} className="text-xs text-white/70">
+                                {new Date(s.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · {s.startTime} – {s.endTime}
+                              </div>
+                            ))}
+                            {previewSlots.length > 50 && <div className="text-xs text-white/30">…and {previewSlots.length - 50} more</div>}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={createSlot} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs">Create slot</Button>
-                        <Button size="sm" variant="ghost" onClick={() => setShowNewSlot(false)} className="text-white/40 text-xs">Cancel</Button>
+                        {!previewSlots ? (
+                          <Button size="sm" onClick={handlePreview} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs">
+                            Preview slots
+                          </Button>
+                        ) : (
+                          <>
+                            <Button size="sm" onClick={createSlots} disabled={creatingSlots} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs">
+                              {creatingSlots ? "Creating…" : `Confirm & create ${previewSlots.length} slot${previewSlots.length !== 1 ? "s" : ""}`}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setPreviewSlots(null)} className="text-white/40 text-xs">Edit</Button>
+                          </>
+                        )}
+                        <Button size="sm" variant="ghost" onClick={() => { resetSlotForm(); setShowNewSlot(false); }} className="text-white/40 text-xs">Cancel</Button>
                       </div>
                     </div>
                   )}
@@ -820,13 +1027,12 @@ export default function AdminConsole() {
                                 <span className="text-white/50 text-sm">{slot.startTime} – {slot.endTime}</span>
                                 <SlotStatusBadge status={slot.status} />
                               </div>
-                              {slot.location && <div className="text-white/40 text-xs mt-0.5">{slot.location}</div>}
                               {slot.coachNote && <div className="text-white/30 text-xs mt-0.5 italic">{slot.coachNote}</div>}
                             </div>
                             <div className="flex gap-2">
                               {slot.status !== "booked" && slot.status !== "cancelled" && (
                                 <>
-                                  <Button size="sm" variant="outline" onClick={() => { setEditingSlotId(editingSlotId === slot.id ? null : slot.id); setEditSlot({ date: slot.date, startTime: slot.startTime, endTime: slot.endTime, location: slot.location ?? "", coachNote: slot.coachNote ?? "" }); }}
+                                  <Button size="sm" variant="outline" onClick={() => { setEditingSlotId(editingSlotId === slot.id ? null : slot.id); setEditSlot({ date: slot.date, startTime: slot.startTime, endTime: slot.endTime, coachNote: slot.coachNote ?? "" }); }}
                                     className="border-white/20 text-white/70 hover:text-white hover:bg-white/10 text-xs">Edit</Button>
                                   <Button size="sm" variant="outline" onClick={() => cancelSlot(slot.id)}
                                     className="border-red-500/30 text-red-400/70 hover:text-red-400 hover:bg-red-500/10 text-xs">Cancel</Button>
@@ -857,10 +1063,8 @@ export default function AdminConsole() {
                                     className="bg-white/5 border-white/10 text-white h-8 text-sm" />
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 gap-3 mb-3">
-                                <Input placeholder="Location" value={editSlot.location ?? ""} onChange={e => setEditSlot(p => ({ ...p, location: e.target.value }))}
-                                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-8 text-sm" />
-                                <Input placeholder="Note" value={editSlot.coachNote ?? ""} onChange={e => setEditSlot(p => ({ ...p, coachNote: e.target.value }))}
+                              <div className="mb-3">
+                                <Input placeholder="Note (optional)" value={editSlot.coachNote ?? ""} onChange={e => setEditSlot(p => ({ ...p, coachNote: e.target.value }))}
                                   className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-8 text-sm" />
                               </div>
                               <div className="flex gap-2">
@@ -897,7 +1101,7 @@ export default function AdminConsole() {
                             <option value="">Select slot…</option>
                             {openSlots.map(s => (
                               <option key={s.id} value={s.id}>
-                                {new Date(s.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} {s.startTime}{s.location ? ` — ${s.location}` : ""}
+                                {new Date(s.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} {s.startTime} – {s.endTime}
                               </option>
                             ))}
                           </select>
@@ -935,7 +1139,6 @@ export default function AdminConsole() {
                               {slot && (
                                 <div className="text-white/40 text-xs mt-0.5">
                                   {new Date(slot.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })} · {slot.startTime} – {slot.endTime}
-                                  {slot.location && ` · ${slot.location}`}
                                 </div>
                               )}
                               <div className="text-white/30 text-xs mt-0.5">

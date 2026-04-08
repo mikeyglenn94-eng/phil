@@ -2603,7 +2603,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                         </div>
                         <div className="text-muted-foreground text-xs mt-0.5">
                           {slot.startTime} – {slot.endTime} · 60 min
-                          {slot.location && ` · ${slot.location}`}
                         </div>
                       </div>
                       <Button
@@ -2662,7 +2661,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           </div>
                           {slot && (
                             <div className="text-muted-foreground text-xs mt-0.5">
-                              {slot.startTime} – {slot.endTime}{slot.location && ` · ${slot.location}`}
+                              {slot.startTime} – {slot.endTime}
                             </div>
                           )}
                           <div className="text-muted-foreground text-xs mt-0.5">

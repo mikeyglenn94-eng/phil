@@ -80,20 +80,33 @@ router.get("/admin/irl-slots", adminOrCoach, async (_req: Request, res): Promise
 });
 
 // POST /api/admin/irl-slots
+// Accepts { slots: [{date, startTime, endTime},...], coachNote? }
+// Each slot is exactly 60 min. All slots in a batch share a batchId.
 router.post("/admin/irl-slots", adminOrCoach, async (req: Request, res): Promise<void> => {
-  const { date, startTime, endTime, location, coachNote } = req.body as {
-    date?: string; startTime?: string; endTime?: string; location?: string; coachNote?: string;
+  const body = req.body as {
+    slots?: Array<{ date: string; startTime: string; endTime: string }>;
+    coachNote?: string;
   };
-  if (!date || !startTime || !endTime) {
-    res.status(400).json({ error: "date, startTime, endTime are required" }); return;
+  if (!body.slots || !Array.isArray(body.slots) || body.slots.length === 0) {
+    res.status(400).json({ error: "slots array is required and must be non-empty" }); return;
   }
-  const [slot] = await db.insert(irlAvailabilitySlotsTable).values({
-    date, startTime, endTime,
-    location: location ?? null,
-    coachNote: coachNote ?? null,
-    status: "open",
-  }).returning();
-  res.status(201).json(slot);
+  for (const s of body.slots) {
+    if (!s.date || !s.startTime || !s.endTime) {
+      res.status(400).json({ error: "Each slot must have date, startTime, endTime" }); return;
+    }
+  }
+  const batchId = body.slots.length > 1 ? `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
+  const rows = body.slots.map(s => ({
+    date: s.date,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    location: null,
+    coachNote: body.coachNote ?? null,
+    status: "open" as const,
+    batchId,
+  }));
+  const created = await db.insert(irlAvailabilitySlotsTable).values(rows).returning();
+  res.status(201).json(created);
 });
 
 // PATCH /api/admin/irl-slots/:slotId
