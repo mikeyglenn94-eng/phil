@@ -1,0 +1,93 @@
+We need to clean up the auth flow and admin creation flow.
+
+Current issues:
+- I want an email alert sent to hello@mikeyglenncoaching.com every time a new user signs up
+- it is not obvious enough for normal users how to create an account
+- the public-facing “Create Admin Account” / “First-time setup” screen should now be removed from the normal product flow
+- I already created my admin account and any future admin accounts should only be created from inside the existing admin area
+
+Implement the following:
+
+1. Email alert on every new signup
+Add an automatic email notification to hello@mikeyglenncoaching.com every time a new user account is created.
+
+This should trigger for all normal new user signups.
+
+The notification email should include:
+- user email
+- user name if available
+- role selected or assigned
+- signup timestamp
+- whether the user came through athlete or coach flow
+- linked account status if relevant
+
+Use a clear subject line such as:
+- New user signup: user@email.com
+
+This is an internal admin notification email, not a customer email.
+
+2. Make account creation obvious on the public auth screen
+Update the public sign-in experience so it is very clear how a normal user creates an account.
+
+The auth UI should clearly support both:
+- Sign in
+- Create account
+
+Requirements:
+- athlete should remain the default path
+- there should be a clear Create account option visible from the main auth page
+- do not make users guess whether they are supposed to sign in or register
+- use normal product language, not setup language
+
+A good approach would be:
+- tab or toggle for Sign in / Create account
+- separate but simple forms for each state
+- keep the design minimal and premium
+
+3. Remove public admin bootstrap flow
+The current public-facing “Create Admin Account” / “First-time setup” screen should no longer be part of the normal product flow.
+
+Requirements:
+- hide or remove this screen from the public auth flow
+- do not show “Create Admin Account” to normal users
+- do not show “First-time setup” messaging publicly
+- do not expose admin account creation on the root auth experience
+
+4. Restrict admin creation to admin console only
+Future admin accounts should only be created by an existing admin from داخل the authenticated admin console.
+
+Implement:
+- admin creation only available to logged-in users with admin role
+- remove any public route that allows bootstrap admin creation
+- if the old route still exists technically, protect it with role checks or disable it entirely
+
+5. Update auth copy
+The public auth flow should feel like a normal user login/signup screen, not platform setup.
+
+For example:
+- remove “First-time setup”
+- remove “Create your admin account to get started”
+- replace with standard login/signup copy for athletes and coaches
+
+6. Preserve role-based access
+Do not change the existing role model.
+Keep:
+- athlete
+- coach
+- admin
+
+But make sure public account creation only creates the appropriate normal user account type, not admin accounts.
+
+7. Admin-side user management
+Inside the admin console, keep or add the ability for me to:
+- create another admin if needed
+- change user roles
+- view users
+- manage linked accounts
+
+But this should all live inside the authenticated admin area only.
+
+Goal:
+- normal users can clearly sign in or create an account
+- I get an email alert every time someone signs up
+- admin account creation is hidden from the public and only available inside admin

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, clientsTable } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import { signToken, verifyToken, extractAuth } from "../middlewares/require-auth";
+import { sendAdminSignupAlert } from "../lib/email";
 
 const SALT_ROUNDS = 10;
 const router: IRouter = Router();
@@ -58,6 +59,45 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 // POST /api/auth/logout — stateless JWT; just acknowledge
 router.post("/auth/logout", (_req, res): void => {
   res.json({ ok: true });
+});
+
+// POST /api/auth/register — public self-registration for athletes and coaches
+router.post("/auth/register", async (req, res): Promise<void> => {
+  const { email, password, role } = req.body as { email?: string; password?: string; role?: string };
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password are required" }); return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" }); return;
+  }
+  const allowedRoles = ["athlete", "coach"];
+  const assignedRole = allowedRoles.includes(role ?? "") ? role! : "athlete";
+
+  const normalised = email.toLowerCase().trim();
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, normalised));
+  if (existing) {
+    res.status(409).json({ error: "An account with this email already exists" }); return;
+  }
+  const hash = await bcrypt.hash(password, SALT_ROUNDS);
+  const [user] = await db.insert(usersTable).values({
+    email: normalised,
+    passwordHash: hash,
+    roles: [assignedRole],
+  }).returning();
+
+  const token = signToken({
+    userId: user.id,
+    email: user.email,
+    roles: user.roles as any,
+    clientId: null,
+  });
+
+  sendAdminSignupAlert({ email: user.email, role: assignedRole, timestamp: new Date() });
+
+  res.status(201).json({
+    token,
+    user: { id: user.id, email: user.email, roles: user.roles, clientId: null },
+  });
 });
 
 // POST /api/auth/bootstrap — create first admin if none exists

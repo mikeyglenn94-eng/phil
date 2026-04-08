@@ -4,6 +4,7 @@ import { db, usersTable, clientsTable } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import { requireRole, signToken } from "../middlewares/require-auth";
 import type { Role } from "@workspace/db";
+import { sendAdminSignupAlert } from "../lib/email";
 
 const SALT_ROUNDS = 10;
 const router: IRouter = Router();
@@ -43,6 +44,7 @@ router.post("/admin/users", adminOnly, async (req, res): Promise<void> => {
       passwordHash: hash,
       roles: roles ?? ["athlete"],
     }).returning();
+    sendAdminSignupAlert({ email: user.email, role: (user.roles as string[]).join(", "), timestamp: new Date() });
     res.status(201).json({ id: user.id, email: user.email, roles: user.roles, clientId: user.clientId, status: "login_created" });
   } catch (e: any) {
     if (e.code === "23505") {
@@ -136,6 +138,7 @@ router.post("/admin/athlete-linking/:clientId/create-login", adminOnly, async (r
       roles: ["athlete"],
       clientId,
     }).returning();
+    sendAdminSignupAlert({ email: user.email, role: "athlete (linked to existing profile)", timestamp: new Date() });
     res.status(201).json({ userId: user.id, email: user.email, clientId, status: "login_created" });
   } catch (e: any) {
     if (e.code === "23505") {
