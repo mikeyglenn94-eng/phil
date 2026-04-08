@@ -404,11 +404,11 @@ When the primary goal is strength and the exercise is one of the Big 4 (Back Squ
 **Exception 2 — Olympic lifting movements always use a fixed rep number:**
 Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clean, etc.) must always have a specific rep number, never a range. These are skill-based movements where each rep is performed at high intent with full reset. Programme them as singles, doubles, or triples (e.g. 5×2, 6×1, 4×3) — never as "2-4" or "3-5". The load or percentage is the progression variable, not rep effort.
 
-### 1. Enjoyment drives consistency — variety is not optional
-- Clients who enjoy their training show up. Clients who are bored don't. Variety is therefore a performance tool, not a luxury.
-- Do NOT repeat the same exercise selection for more than 3–4 weeks. After that, rotate to fresh variations (e.g. Back Squat → Front Squat or Pause Squat; Romanian Deadlift → Stiff-Leg Deadlift; Bench Press → Close Grip Bench or Incline Bench).
-- Aim for intra-session variety: across weeks, the exercises within a given session should feel fresh — different variations, different angles, different stimuli — even when the movement pattern is the same.
-- If a block is 4–6 weeks, plan which exercises to use in weeks 1–3 and which variations to rotate in from week 4 onwards. This should be a visible change, not just a small rep range tweak.
+### 1. Progression drives consistency — overload, not novelty
+- Clients who get stronger keep showing up. The most powerful motivator is measurable progress, not variety.
+- Enjoyment comes from seeing numbers go up, hitting new rep PRs, and feeling the programme working — not from constantly changing exercises.
+- By default, keep exercise selection stable across the full block. Progress through overload variables: more weight, more reps, more sets, less rest, harder effort (RPE), or more demanding tempo.
+- The session style section below will specify whether exercise variation is permitted. Follow it strictly.
 
 ### 2. Intensity is the default for regular clients
 - Most clients train 4–5 days per week. On busy days, they may do two sessions — a strength block in the morning and a WOD or run in the afternoon/evening. Same-day pairing is normal and expected in hybrid programmes.
@@ -487,7 +487,7 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - NEVER use weekday names (Mon/Tue/Thu/Sat) to compute dates — use dayNumber integers only.
 - Spread training days sensibly — avoid consecutive days where possible. Same-day pairs are not consecutive-day issues.
 - Schedule for the number of weeks requested. **If no specific duration is mentioned, default to 6 weeks.** Hard maximum of 6 weeks. Never generate only 1 week of sessions unless the user explicitly asks for 1 week.
-- Generate varied sessions week to week — rotate movements, vary rep ranges, increase load (periodisation).
+- Progress sessions week to week through overload variables (more weight, more reps, more sets, tighter rest, higher RPE) — see the session style section for whether exercise variation is permitted.
 - Each session must have a unique id: "session-gen-{unique 8 chars}"
 
 ## Same-day session pairing rules
@@ -800,31 +800,55 @@ IMPORTANT:
 
   const styleSection = strengthStyle === "variety" ? `
 
-## Session style: VARIETY (the coach has requested this)
-Use varied rep schemes and intensity techniques within strength sessions. Apply these across the programme:
+## PROGRESSION MODE: INTERMEDIATE+ VARIATION
 
-- **Wave loading:** sets where the weight undulates up then resets to a heavier wave (e.g. 3 waves of 6/4/2 — wave 1: 70/75/80%, wave 2: 72/77/82%, wave 3: 74/79/84%)
-- **Pyramid sets:** ascending (add weight, reduce reps each set: 12→10→8→6→4) or descending (reduce weight, add reps)
-- **Drop sets:** final set drops weight immediately and continues for more reps (e.g. "10 reps @RPE9, then strip 20% and go to failure")
-- **AMRAP finishers:** last set of a compound movement done for as many reps as possible with good form
-- **Cluster sets:** e.g. 5 reps, rest 15s, 5 reps, rest 15s, 5 reps (all within one "set")
-- **Back-off sets:** after heavy work, reduce load by 15–20% and do a higher rep set
+**Primary lifts (main squat, main press, main hinge) — keep consistent for the full block.**
+These are the exercises where progressive overload compounds most. They must remain the same across all weeks. Do not swap Back Squat for Front Squat, Bench Press for Incline Bench, or Deadlift for Romanian Deadlift within the block. Variation at these positions kills the progressive overload signal.
 
-Mix these intelligently — don't pile every technique into one session. A typical session might use pyramid loading on the primary lift, straight sets on assistance work, and an AMRAP finisher on the last compound movement.
+**Secondary compound movements — mostly stable (2–3 weeks minimum before any change).**
+A swap is only appropriate if there is a clear coaching reason (e.g. addressing a specific weakness that has been identified), not for novelty.
 
-Express these in the exercises using the "reps" field creatively (e.g. "6/4/2 wave × 3", "12-10-8-6", "AMRAP", "cluster: 5+5+5") and use the "notes" field to describe the technique (e.g. "3 waves — wave 1: 70/75/80%, wave 2: 72/77/82%", "drop 20% after last set and go to failure").
+**Accessories — can vary more freely.**
+Accessory exercise changes are acceptable after 2 weeks if there is a good reason. Still do not change for novelty alone — every swap needs a purpose.
 
-Still apply all periodisation principles (overload, phase potentiation, fatigue management) — variety is a tool within the structure, not instead of it.
+**Rep schemes:** Use clean, progressive straight sets. Progress through weight, reps, or sets across weeks.
+
+**Critical rule:** Exercise names in Week 2, 3, and 4 sessions that are strength sessions must match Week 1 for all primary and secondary lifts. Check before finalising output.
 ` : `
 
-## Session style: STRAIGHT SETS (the coach has requested this)
-Use clean, consistent straight sets throughout. Every exercise should have a defined number of sets and a consistent rep target. No drop sets, no pyramids, no complex schemes.
+## PROGRESSION MODE: STRICT PROGRESSION (default — this is the correct way to programme a strength block)
 
-- Sets and reps are simple and consistent: e.g. 4×5, 3×8, 5×3
-- Progressive overload is expressed through increasing weight each week, not changing rep schemes
-- Intensity is expressed via RPE targets in the notes field (e.g. "@RPE8", "leave 1-2 reps in tank")
-- Deload weeks reduce volume (fewer sets) and intensity (lower RPE)
-- The notes field can include load guidance (e.g. "85% of 1RM", "heavy for reps") but no complex technique instructions
+**This is non-negotiable: ALL exercises in ALL strength sessions must remain IDENTICAL across every week of the block.**
+
+Think of Week 1 as defining the block template. Weeks 2, 3, and 4 are progressions of that exact template — same exercises, same session structure, different numbers.
+
+**What changes week to week:**
+- Sets (e.g. 3 sets → 4 sets → 5 sets → 3 sets deload)
+- Reps or rep ranges (e.g. 8-12 → 10-14 → 6-10 → 5-8 deload)
+- Load/intensity (heavier each week, backed off on deload)
+- RPE targets (e.g. @RPE7 → @RPE8 → @RPE8-9 → @RPE6 deload)
+- Rest periods (can tighten as weeks progress)
+- Tempo (can add pauses or slow eccentrics in later weeks)
+
+**What does NOT change:**
+- Exercise name (Back Squat stays Back Squat every single week)
+- Exercise order within the session
+- The exercises in each session
+
+**Correct example — Back Squat across a 4-week block:**
+- Week 1: Back Squat, 4×8-12, @RPE7
+- Week 2: Back Squat, 4×10-14, @RPE8
+- Week 3: Back Squat, 5×6-10, @RPE8-9
+- Week 4: Back Squat, 3×5-8, @RPE6 (deload)
+
+**WRONG — do not do this:**
+- Week 1: Back Squat
+- Week 2: Front Squat ← WRONG. Exercise swap = broken overload.
+- Week 3: Pause Squat ← WRONG. Still the same problem.
+
+**Rep schemes:** Straight sets only. No pyramids, no wave loading, no drop sets unless the description specifically asked for them.
+
+**Final check before outputting:** Scan every strength session. If any exercise name in Week 2+ differs from its Week 1 counterpart, replace it with the Week 1 exercise name. The output is only correct when every week has the same exercises.
 `;
 
   try {

@@ -1,0 +1,136 @@
+We need to fix programme generation so strength programmes behave like real coaching and prioritise progressive overload over novelty.
+
+Current issue:
+When the AI generates a multi-week strength programme, it is changing exercises from week to week. This breaks progressive overload and makes the programme feel less credible.
+
+Implement the following rules and product changes:
+
+1. Core strength progression rule
+For any structured strength-based programme:
+- exercises should remain consistent across the training block by default
+- default block length = 4 weeks
+- do not change exercises week to week unless:
+  - explicitly requested by the user
+  - required for safety, injury, pregnancy, pain, or equipment constraints
+  - the user has enabled a variation setting
+
+The default behaviour should be consistency, not novelty.
+
+2. Progression method
+Across the 4-week block, progression should come from changing:
+- load
+- reps
+- sets
+- tempo
+- rest periods
+- effort / RPE guidance
+
+Do not introduce new exercises just to make later weeks look different.
+
+3. Exercise consistency by category
+- Main lifts must remain the same across the full block
+- Key secondary strength lifts should also remain the same across the full block
+- Accessories should also remain the same by default unless variation mode is enabled
+- If variation mode is enabled, accessory variation can be introduced more freely, but primary strength movements should still stay more stable than accessories
+
+4. Two-step generation flow
+Change programme generation so it does not generate each week like a separate standalone week.
+
+Instead:
+
+Step 1:
+- generate Week 1 first
+- define the full exercise structure for the block
+- identify:
+  - main lifts
+  - secondary lifts
+  - accessories
+- save these exercises as the block template / skeleton
+
+Step 2:
+- generate Weeks 2 to 4 by progressing the Week 1 template
+- reuse the same exercises
+- only change training variables such as sets, reps, load, tempo, rest, and intensity guidance
+
+5. Persistent exercise structure
+Each exercise in Week 1 should have a persistent identifier so it can be reused in later weeks of the block.
+
+Store the programme structure like this:
+- programme block
+  - settings
+  - week 1 template
+  - week 2 progression
+  - week 3 progression
+  - week 4 progression / peak / deload
+
+Weeks 2 to 4 should reference the same exercise entries from Week 1 rather than inventing new exercise selections.
+
+6. Guardrails
+Add validation after programme generation:
+- compare exercises in Weeks 2 to 4 against Week 1
+- if new exercises appear in a strength block where variation is not enabled, flag them as invalid
+- automatically replace them with the original Week 1 exercise or regenerate that section while preserving the original lift selection
+
+This should especially apply to:
+- squat patterns
+- press patterns
+- hinge patterns
+- key rowing / pulling patterns
+- key unilateral strength movements
+
+7. New UI setting for progression style
+We need a setting in the programme generation UI for progression style.
+
+Add:
+- Strict progression (default)
+- Intermediate+ variation
+
+Definitions:
+- Strict progression:
+  - keep exercises the same for the default 4-week block
+  - progress through load, reps, sets, tempo, rest, and intensity
+  - best for most users, especially beginners and general strength goals
+
+- Intermediate+ variation:
+  - still keep primary lifts stable across the block
+  - allow more exercise variation in secondary and accessory work where appropriate
+  - suitable for more advanced users who may benefit from a bit more variation
+
+This setting should be visible during programme generation.
+Default it to Strict progression.
+
+8. Default behaviour
+Unless the coach explicitly changes the setting, all multi-week strength programmes should use:
+- Strict progression
+- 4-week block length
+- same main lifts throughout the block
+- same key secondary lifts throughout the block
+- same accessories throughout the block unless there is a good reason to change them
+
+9. Prompting / generation logic
+Update the AI instructions used for programme generation so they clearly say:
+
+For strength programmes, keep the exercise selection stable across the block by default.
+Do not vary exercises week to week for the sake of novelty.
+Progress the programme through overload variables, not by swapping movements.
+Only introduce variation if the coach explicitly selects Intermediate+ variation or requests exercise changes.
+
+10. Future flexibility
+Design this so we can later support:
+- block lengths longer than 4 weeks
+- planned deload weeks
+- advanced undulating progression
+- exercise swaps at block boundaries rather than within a block
+
+But right now the default should be:
+- 4-week strength block
+- fixed exercise selection
+- progression through training variables
+
+Goal:
+The app should generate strength programmes that feel like they were written by a competent coach:
+- consistent
+- progressive
+- easy to track
+- easy to overload
+- not randomly different every week

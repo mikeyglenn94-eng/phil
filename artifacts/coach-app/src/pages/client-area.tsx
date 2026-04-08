@@ -206,7 +206,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [rationaleReady, setRationaleReady] = useState(false);
   const [generatedPreview, setGeneratedPreview] = useState<{ title: string; sessions: any[]; blockLength?: number | null; sessionsPerWeek?: number | null } | null>(null);
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
-  const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety" | null>(null);
+  const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety">("straight");
   const [runEnv, setRunEnv] = useState<string[]>([]);
   const [generationLimitError, setGenerationLimitError] = useState(false);
 
@@ -3383,23 +3383,23 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   </div>
                   {describeText.trim() && isStrengthDescription(describeText) && (
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Session style</label>
+                      <label className="text-sm font-medium">Progression style</label>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
                           onClick={() => setStrengthStyle("straight")}
                           className={`rounded-xl border px-3 py-3 text-left text-sm transition-all ${strengthStyle === "straight" ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/50"}`}
                         >
-                          <p className="font-semibold">Straight Sets</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Consistent sets &amp; reps, clean progressive overload</p>
+                          <p className="font-semibold">Strict Progression</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Same exercises every week — progress through load, reps &amp; sets. Best for most people.</p>
                         </button>
                         <button
                           type="button"
                           onClick={() => setStrengthStyle("variety")}
                           className={`rounded-xl border px-3 py-3 text-left text-sm transition-all ${strengthStyle === "variety" ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/50"}`}
                         >
-                          <p className="font-semibold">Variety</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Wave loading, pyramids, drop sets, AMRAP finishers</p>
+                          <p className="font-semibold">Intermediate+ Variation</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Primary lifts stay fixed, accessories can rotate. For more advanced athletes.</p>
                         </button>
                       </div>
                     </div>
@@ -3588,7 +3588,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   {!(monthlyLimitHit || generationLimitError) && (
                     <Button
                       onClick={handleGenerateProgramme}
-                      disabled={!describeText.trim() || !assignStartDate || (isStrengthDescription(describeText) && strengthStyle === null)}
+                      disabled={!describeText.trim() || !assignStartDate}
                       className="gap-2"
                     >
                       <Sparkles className="w-4 h-4" /> Generate
