@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
 import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, MapPin } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
+import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format, startOfWeek, addWeeks, addDays, isSameDay, parseISO, differenceInDays } from "date-fns";
@@ -80,6 +81,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { clearClient } = useClientContext();
+  const { logout } = useAuth();
 
   const { data: client, isLoading: clientLoading } = useGetClient(clientId);
   const { data: masterProgrammes } = useListProgrammes(); // master programmes (no clientId)
@@ -2244,7 +2246,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             <Button
               variant="ghost"
               size="sm"
-              onClick={clearClient}
+              onClick={() => { logout(); clearClient(); setLocation("/"); }}
               className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
               title="Sign out"
             >
