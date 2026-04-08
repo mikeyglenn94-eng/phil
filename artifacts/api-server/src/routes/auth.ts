@@ -71,6 +71,11 @@ router.post("/auth/bootstrap", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Password must be at least 8 characters" });
     return;
   }
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (adminEmail && email.toLowerCase().trim() !== adminEmail.toLowerCase()) {
+    res.status(403).json({ error: "This email is not authorised to create the admin account" });
+    return;
+  }
   const existing = await db.select().from(usersTable);
   if (existing.length > 0) {
     res.status(409).json({ error: "Users already exist. Use the admin console to manage accounts." });
