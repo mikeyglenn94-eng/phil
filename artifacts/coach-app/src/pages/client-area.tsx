@@ -224,6 +224,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [irlSubTab, setIrlSubTab] = useState<"book" | "my-bookings" | "credits">("book");
   const [bookingSlotId, setBookingSlotId] = useState<number | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [pendingBookSlot, setPendingBookSlot] = useState<{ id: number; date: string; startTime: string; credits: number } | null>(null);
   const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
   const [generationLimitError, setGenerationLimitError] = useState(false);
 
@@ -2610,21 +2611,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                       <Button
                         size="sm"
                         disabled={irlBalance < 1 || bookingLoading}
-                        onClick={async () => {
-                          if (!confirm(`Book this session?\n\n${new Date(slot.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} at ${slot.startTime}\n\n1 credit will be deducted.`)) return;
-                          setBookingLoading(true);
-                          setBookingSlotId(slot.id);
-                          try {
-                            const r = await fetch("/api/irl-bookings", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json", ...getIrlHeaders() },
-                              body: JSON.stringify({ slotId: slot.id }),
-                            });
-                            const data = await r.json();
-                            if (!r.ok) { toast({ title: "Booking failed", description: data.error, variant: "destructive" }); }
-                            else { toast({ title: "Booked!", description: "Your session has been confirmed." }); await fetchIrlData(); setIrlSubTab("my-bookings"); }
-                          } finally { setBookingLoading(false); setBookingSlotId(null); }
-                        }}
+                        onClick={() => setPendingBookSlot({ id: slot.id, date: slot.date, startTime: slot.startTime, credits: 1 })}
                         className="shrink-0"
                       >
                         {bookingLoading && bookingSlotId === slot.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Book"}
@@ -3406,6 +3393,53 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           {touchGhostLabel}
         </div>
       )}
+
+      {/* IRL Booking Confirmation Modal */}
+      <Dialog open={!!pendingBookSlot} onOpenChange={open => { if (!open) setPendingBookSlot(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirm your booking</DialogTitle>
+          </DialogHeader>
+          {pendingBookSlot && (
+            <div className="space-y-1 py-1">
+              <p className="text-sm font-medium">
+                {new Date(pendingBookSlot.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} at {pendingBookSlot.startTime}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {pendingBookSlot.credits} credit will be deducted from your account.
+              </p>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={() => setPendingBookSlot(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={bookingLoading}
+              onClick={async () => {
+                if (!pendingBookSlot) return;
+                setBookingLoading(true);
+                setBookingSlotId(pendingBookSlot.id);
+                setPendingBookSlot(null);
+                try {
+                  const r = await fetch("/api/irl-bookings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...getIrlHeaders() },
+                    body: JSON.stringify({ slotId: pendingBookSlot.id }),
+                  });
+                  const data = await r.json();
+                  if (!r.ok) { toast({ title: "Booking failed", description: data.error, variant: "destructive" }); }
+                  else { toast({ title: "Booked!", description: "Your session has been confirmed." }); await fetchIrlData(); setIrlSubTab("my-bookings"); }
+                } finally { setBookingLoading(false); setBookingSlotId(null); }
+              }}
+            >
+              {bookingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+              Confirm booking
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Build Your Plan Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setQuickAddWodOptions(null); setSavingAiSession(null); setRunEnv([]); } }}>
