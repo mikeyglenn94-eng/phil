@@ -18,6 +18,7 @@ import sessionLibraryRouter from "./session-library";
 import analyticsRouter from "./analytics";
 import coachingRouter from "./coaching";
 import coachParseRouter from "./coach-parse";
+import irlRouter from "./irl";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use(sessionLibraryRouter);
 router.use(analyticsRouter);
 router.use(coachingRouter);
 router.use(coachParseRouter);
+router.use(irlRouter);
 
 export default router;

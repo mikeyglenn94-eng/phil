@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3 } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, MapPin } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +32,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-type Tab = "dashboard" | "training" | "nutrition";
+type Tab = "dashboard" | "training" | "nutrition" | "irl";
+
+interface IrlSlot { id: number; date: string; startTime: string; endTime: string; location: string | null; coachNote: string | null; status: string; }
+interface IrlBookingRow { booking: { id: number; slotId: number; creditsUsed: number; status: string; cancelledAt: string | null; creditRefunded: boolean; createdAt: string; }; slot: IrlSlot | null; }
+interface IrlLedgerEntry { id: number; delta: number; type: string; note: string | null; createdAt: string; }
 
 function getSessionHighlight(session: Session): string {
   const isConditioning = session.source === "wod_brain" || session.source === "run_brain";
@@ -208,6 +212,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
   const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety">("straight");
   const [runEnv, setRunEnv] = useState<string[]>([]);
+
+  // IRL booking state
+  const [isIrlEnabled, setIsIrlEnabled] = useState(false);
+  const [irlSlots, setIrlSlots] = useState<IrlSlot[]>([]);
+  const [irlBalance, setIrlBalance] = useState(0);
+  const [irlLedger, setIrlLedger] = useState<IrlLedgerEntry[]>([]);
+  const [irlBookings, setIrlBookings] = useState<IrlBookingRow[]>([]);
+  const [irlSubTab, setIrlSubTab] = useState<"book" | "my-bookings" | "credits">("book");
+  const [bookingSlotId, setBookingSlotId] = useState<number | null>(null);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
   const [generationLimitError, setGenerationLimitError] = useState(false);
 
   // Proactive client-side limit check from loaded programmes
@@ -633,6 +648,29 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   // Clear history when switching clients
   useEffect(() => { setCalHistory([]); setCalFuture([]); }, [clientId]);
   useEffect(() => { sessionStorage.setItem("axis_calendar_view", calendarView); }, [calendarView]);
+
+  // IRL data: only fetch in client mode
+  const getIrlHeaders = () => {
+    const t = localStorage.getItem("axis_auth_token");
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  };
+  const fetchIrlData = async () => {
+    const slotRes = await fetch("/api/irl-slots", { headers: getIrlHeaders() });
+    if (slotRes.status === 403 || slotRes.status === 401) { setIsIrlEnabled(false); return; }
+    if (slotRes.ok) {
+      setIsIrlEnabled(true);
+      setIrlSlots(await slotRes.json());
+    }
+    const creditRes = await fetch("/api/irl-credits", { headers: getIrlHeaders() });
+    if (creditRes.ok) {
+      const creditData = await creditRes.json();
+      setIrlBalance(creditData.balance);
+      setIrlLedger(creditData.ledger);
+    }
+    const bookingsRes = await fetch("/api/irl-bookings", { headers: getIrlHeaders() });
+    if (bookingsRes.ok) setIrlBookings(await bookingsRes.json());
+  };
+  useEffect(() => { if (mode === "client") { void fetchIrlData(); } }, [mode, clientId]);
 
   // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
   useEffect(() => {
@@ -2222,6 +2260,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             { id: "dashboard", label: "Dashboard", icon: <BarChart3 className="w-3.5 h-3.5" /> },
             { id: "nutrition",  label: "Nutrition",  icon: <Utensils  className="w-3.5 h-3.5" /> },
             { id: "training",   label: "Training",   icon: <Dumbbell  className="w-3.5 h-3.5" /> },
+            ...(mode === "client" && isIrlEnabled ? [{ id: "irl" as Tab, label: "IRL Sessions", icon: <MapPin className="w-3.5 h-3.5" /> }] : []),
           ] as { id: Tab; label: string; icon: React.ReactNode }[]).map(({ id, label, icon }) => (
             <button
               key={id}
@@ -2510,6 +2549,179 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* IRL Sessions Tab */}
+      {activeTab === "irl" && mode === "client" && isIrlEnabled && (
+        <div className="flex flex-col h-full overflow-y-auto px-4 py-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-base">IRL Sessions</h2>
+              <p className="text-muted-foreground text-xs mt-0.5">Book in-person coaching sessions with your coach</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <div className="text-xs text-muted-foreground">Credits</div>
+                <div className="text-xl font-bold text-primary">{irlBalance}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-tabs */}
+          <div className="flex gap-1 bg-muted rounded-lg p-1">
+            {(["book", "my-bookings", "credits"] as const).map(t => (
+              <button key={t} onClick={() => setIrlSubTab(t)}
+                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${irlSubTab === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                {t === "book" ? "Book" : t === "my-bookings" ? "My Bookings" : "Credits"}
+              </button>
+            ))}
+          </div>
+
+          {/* Book a slot */}
+          {irlSubTab === "book" && (
+            <div className="space-y-3">
+              {irlBalance === 0 && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                  You have no IRL credits. Contact your coach to add credits before booking.
+                </div>
+              )}
+              {irlSlots.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  No sessions available right now. Check back soon.
+                </div>
+              ) : (
+                irlSlots.map(slot => (
+                  <div key={slot.id} className="rounded-xl border bg-card p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-sm">
+                          {new Date(slot.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+                        </div>
+                        <div className="text-muted-foreground text-xs mt-0.5">
+                          {slot.startTime} – {slot.endTime} · 60 min
+                          {slot.location && ` · ${slot.location}`}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        disabled={irlBalance < 1 || bookingLoading}
+                        onClick={async () => {
+                          if (!confirm(`Book this session?\n\n${new Date(slot.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} at ${slot.startTime}\n\n1 credit will be deducted.`)) return;
+                          setBookingLoading(true);
+                          setBookingSlotId(slot.id);
+                          try {
+                            const r = await fetch("/api/irl-bookings", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", ...getIrlHeaders() },
+                              body: JSON.stringify({ slotId: slot.id }),
+                            });
+                            const data = await r.json();
+                            if (!r.ok) { toast({ title: "Booking failed", description: data.error, variant: "destructive" }); }
+                            else { toast({ title: "Booked!", description: "Your session has been confirmed." }); await fetchIrlData(); setIrlSubTab("my-bookings"); }
+                          } finally { setBookingLoading(false); setBookingSlotId(null); }
+                        }}
+                        className="shrink-0"
+                      >
+                        {bookingLoading && bookingSlotId === slot.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Book"}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* My bookings */}
+          {irlSubTab === "my-bookings" && (
+            <div className="space-y-3">
+              {irlBookings.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  <CalendarDays className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  No bookings yet.
+                </div>
+              ) : (
+                irlBookings.map(({ booking, slot }) => {
+                  const isPast = slot ? new Date(slot.date + "T" + (slot.endTime ?? "23:59") + ":00") < new Date() : false;
+                  const canCancel = booking.status === "confirmed" && !isPast;
+                  return (
+                    <div key={booking.id} className={`rounded-xl border p-4 ${booking.status === "cancelled" ? "opacity-50" : ""}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">
+                              {slot ? new Date(slot.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }) : "Session"}
+                            </span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${booking.status === "confirmed" ? "bg-emerald-100 text-emerald-700" : booking.status === "cancelled" ? "bg-red-100 text-red-700" : booking.status === "completed" ? "bg-blue-100 text-blue-700" : "bg-muted text-muted-foreground"}`}>
+                              {booking.status}
+                            </span>
+                            {booking.creditRefunded && <span className="text-xs text-muted-foreground">(credit refunded)</span>}
+                          </div>
+                          {slot && (
+                            <div className="text-muted-foreground text-xs mt-0.5">
+                              {slot.startTime} – {slot.endTime}{slot.location && ` · ${slot.location}`}
+                            </div>
+                          )}
+                          <div className="text-muted-foreground text-xs mt-0.5">
+                            {booking.creditsUsed} credit · booked {new Date(booking.createdAt).toLocaleDateString("en-GB")}
+                          </div>
+                        </div>
+                        {canCancel && (
+                          cancellingBookingId === booking.id ? (
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" className="text-xs text-red-600 border-red-300" onClick={async () => {
+                                const r = await fetch(`/api/irl-bookings/${booking.id}/cancel`, { method: "POST", headers: getIrlHeaders() });
+                                const d = await r.json();
+                                if (!r.ok) toast({ title: "Error", description: d.error, variant: "destructive" });
+                                else { toast({ title: "Cancelled", description: d.creditRefunded ? "Credit refunded." : "No refund — cancelled within 24h." }); await fetchIrlData(); }
+                                setCancellingBookingId(null);
+                              }}>Confirm cancel</Button>
+                              <Button size="sm" variant="ghost" className="text-xs" onClick={() => setCancellingBookingId(null)}>Keep</Button>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="outline" className="text-xs" onClick={() => setCancellingBookingId(booking.id)}>Cancel</Button>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* Credits history */}
+          {irlSubTab === "credits" && (
+            <div className="space-y-3">
+              <div className="rounded-xl border bg-card p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-muted-foreground">Current balance</div>
+                  <div className="text-3xl font-bold text-primary mt-0.5">{irlBalance}</div>
+                  <div className="text-xs text-muted-foreground mt-1">credits</div>
+                </div>
+              </div>
+              {irlLedger.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">No transactions yet</div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1 mb-2">Transaction history</div>
+                  {irlLedger.map(e => (
+                    <div key={e.id} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm">
+                      <div>
+                        <span className={`font-semibold mr-1.5 ${e.delta > 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {e.delta > 0 ? `+${e.delta}` : e.delta}
+                        </span>
+                        <span className="text-muted-foreground text-xs">{e.type.replace(/_/g, " ")}</span>
+                        {e.note && <span className="ml-1 text-muted-foreground/60 text-xs">— {e.note}</span>}
+                      </div>
+                      <span className="text-muted-foreground text-xs shrink-0 ml-2">{new Date(e.createdAt).toLocaleDateString("en-GB")}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -3006,6 +3218,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                       if (mode === "client") {
                                         setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                       } else {
+                                        sessionStorage.setItem("session_editor_returnTo", `/clients/${clientId}`);
                                         setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                       }
                                     }
@@ -3026,6 +3239,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     if (mode === "client") {
                                       setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                     } else {
+                                      sessionStorage.setItem("session_editor_returnTo", `/clients/${clientId}`);
                                       setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                     }
                                   }

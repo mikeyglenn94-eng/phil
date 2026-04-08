@@ -1,0 +1,253 @@
+We need to add IRL session booking for athletes inside the app, but only for athletes who are explicitly marked as IRL clients.
+
+Goal:
+Athletes who are marked as IRL clients should be able to book in-person coaching sessions from their app, but only into genuine open slots. A credit should be deducted from their account when they book. Availability must sync against my Google Calendar so athletes cannot book times that are already occupied.
+
+Important scope decisions for this version:
+- all IRL sessions are 60 minutes
+- credits are deducted at the moment of booking
+- only athletes marked as IRL clients should see IRL booking, IRL credits, or IRL session-related UI
+- online-only clients should not see any of this
+
+Build the following:
+
+1. IRL client flag / eligibility
+Add a way in admin to mark an athlete as an IRL client.
+
+This should be a clear account-level setting, for example:
+- IRL client = true / false
+
+Behaviour:
+- if IRL client = true, the athlete can access IRL booking features
+- if IRL client = false, hide all IRL booking and IRL credit UI from their app
+- this should let us keep the online coaching experience clean and avoid cluttering the app for online-only users
+
+2. Athlete list filter in admin
+In the admin athlete list, add a simple filter so I can quickly segment clients by type.
+
+Add filter options:
+- All
+- Online only
+- IRL enabled
+
+Behaviour:
+- All = show every athlete
+- Online only = show athletes where IRL client = false
+- IRL enabled = show athletes where IRL client = true
+
+This filter should be easy to access from the athlete management screen and help me manage mixed client types without clutter.
+
+3. Core booking model
+Add support for:
+- IRL eligibility flag on athlete account
+- Availability Slots
+- Bookings
+- IRL Credit Balance / IRL Credit Ledger
+- Google Calendar connection for coach availability
+
+4. Session structure
+For now, all IRL sessions are fixed at 60 minutes.
+
+Do not build variable session durations yet.
+Assume:
+- every IRL booking slot is 60 minutes
+- every booking consumes the configured number of credits for that 60-minute session
+
+You can still structure the model so it can support variable durations later, but the UI and current logic should be fixed to 60 minutes for now.
+
+5. Availability Slots
+Create a system where I can manually define bookable availability slots.
+
+Each slot should include:
+- coach
+- date
+- start time
+- end time
+- location
+- status: open, booked, cancelled
+- capacity (default 1, but structure it so group bookings can be supported later)
+- bookable by athlete = true by default for these IRL slots
+
+Important:
+- do not expose every free gap in my calendar automatically
+- only expose slots that I have deliberately made available for booking
+- for now, all slots should be 60-minute slots
+
+6. Google Calendar integration
+Integrate my Google Calendar on the coach/admin side.
+
+Use Google Calendar to:
+- read busy times from my chosen calendar
+- check for conflicts against bookable availability slots
+- hide or block slots that clash with calendar events
+- create a calendar event when an athlete successfully books a slot
+- update or delete the calendar event if the booking is rescheduled or cancelled
+
+Important:
+- Google Calendar should be used as a conflict-checking and event-sync layer
+- the source of truth for what athletes can book should be the app’s own bookable availability slots
+- do not let athletes book every free hole in my calendar
+
+7. Athlete booking flow
+In the athlete app, add an IRL sessions booking area, but only show it for athletes where IRL client = true.
+
+Eligible athletes should be able to:
+- view available IRL slots
+- see their current IRL credit balance
+- choose a slot
+- book it
+
+At booking time the system must verify:
+- the athlete is marked as an IRL client
+- the slot is still available
+- there is no Google Calendar conflict
+- the athlete has enough IRL credits
+
+If valid:
+- create the booking
+- deduct the required IRL credit(s) immediately
+- create the linked calendar event
+- remove the slot from available inventory
+
+If the athlete is not marked as an IRL client:
+- do not show IRL booking screens
+- do not show IRL credits
+- do not expose IRL session actions anywhere in the athlete UI
+
+8. IRL credit system
+Add a proper IRL credit balance system.
+
+This should be separate from anything else in the platform and only apply to IRL clients.
+
+For now, I need to be able to manually add IRL credits to an athlete account from admin.
+
+Use a ledger structure, not just a single number.
+
+Support transaction types such as:
+- manual credit add
+- booking deduction
+- cancellation refund
+- manual adjustment
+
+Important:
+- default credit behaviour = deduct credit when booking is made
+- do not wait until attendance to deduct
+- this creates commitment and keeps booking behaviour clean
+
+9. Cancellation logic
+Build support for cancellation rules.
+
+For this version:
+- keep cancellation support in the model and admin flow
+- structure it so credits can be refunded if cancellation is within policy
+- if cancelled too late, keep the deduction
+
+At minimum:
+- cancelled booking releases the slot if appropriate
+- refund, if given, should be recorded as a ledger entry
+- update or remove linked Google Calendar event
+
+10. Admin controls
+Add management screens in Admin Console for:
+
+A. Athlete IRL settings
+- mark athlete as IRL client = true / false
+- view whether an athlete is IRL-enabled
+- manage their IRL credit balance
+- add IRL credits manually
+- view IRL credit ledger
+
+B. Athlete list management
+- add filter options:
+  - All
+  - Online only
+  - IRL enabled
+
+C. Availability
+- manually create open 60-minute slots
+- edit/cancel slots
+- view whether a slot conflicts with Google Calendar
+
+D. Bookings
+- see upcoming IRL bookings
+- manually create a booking for an athlete
+- cancel/reschedule bookings
+- mark completed / no-show
+
+E. Calendar Integration
+- connect Google Calendar
+- choose which calendar is used for conflict checking
+- structure this so we can later choose whether confirmed bookings write back to the same calendar or to a dedicated bookings calendar
+
+11. Athlete-facing screens
+Only for IRL-enabled athletes, add:
+- IRL Sessions / Book
+- My IRL Bookings
+- IRL Credits
+
+IRL-enabled athletes should be able to:
+- browse available 60-minute slots
+- book a slot
+- view upcoming bookings
+- cancel if allowed
+- see current IRL credit balance
+
+Online-only athletes should not see:
+- IRL Sessions
+- IRL Credits
+- IRL Bookings
+- any mention of credit balances or in-person booking flows
+
+12. Booking safety / concurrency
+Make the booking flow robust against double-booking.
+
+At booking time:
+- lock the slot or use transactional protection
+- re-check availability and calendar conflict immediately before confirming
+- only deduct credits and create booking if the slot is still valid
+
+Order of operations should be safe and consistent:
+- validate eligibility
+- validate slot availability
+- validate calendar conflict
+- validate credit balance
+- create booking
+- deduct credit
+- create calendar event
+- mark slot unavailable
+
+If any step fails, roll back appropriately so no credit is lost and no broken booking is created.
+
+13. Future-proofing
+Structure this so we can later support:
+- recurring weekly availability
+- package purchases and billing
+- multiple coaches
+- group or semi-private sessions
+- reminders and confirmations
+
+Do not overbuild those now, but do not make the data model too narrow.
+
+14. Build priority
+Start with:
+- IRL client flag on athlete accounts
+- athlete list filter: All / Online only / IRL enabled
+- manual IRL credit balances and ledger
+- manual 60-minute availability slots
+- athlete booking flow for IRL-enabled clients only
+- Google Calendar conflict checking
+- credit deduction on booking
+- basic upcoming bookings screens
+
+Then add:
+- calendar event creation
+- cancellation/refund rules
+- rescheduling
+- recurring availability
+- billing later
+
+Important:
+- the source of truth for what can be booked should be app-defined open slots, not every free space in my calendar
+- Google Calendar should protect against conflicts and reflect confirmed bookings
+- IRL booking features should only exist for athletes explicitly marked as IRL clients
+- keep the online-only athlete experience clean

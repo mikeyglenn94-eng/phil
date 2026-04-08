@@ -3,7 +3,6 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -12,7 +11,8 @@ function authHeaders(token: string | null) {
   return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
 
-type NavItem = "users" | "athlete-linking" | "content" | "billing" | "audit";
+type NavItem = "users" | "athlete-linking" | "irl-sessions" | "content" | "billing" | "audit";
+type AthleteFilter = "all" | "online" | "irl";
 
 interface User {
   id: number;
@@ -29,7 +29,44 @@ interface AthleteLink {
   clientName: string;
   loginEmail: string | null;
   userId: number | null;
+  irlClient: boolean;
   status: "no_login" | "login_created" | "active";
+}
+
+interface IrlSlot {
+  id: number;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string | null;
+  coachNote: string | null;
+  status: string;
+  createdAt: string;
+}
+
+interface IrlBookingRow {
+  booking: {
+    id: number;
+    slotId: number;
+    clientId: number;
+    creditsUsed: number;
+    status: string;
+    cancelledAt: string | null;
+    cancellationNote: string | null;
+    creditRefunded: boolean;
+    createdAt: string;
+  };
+  slot: IrlSlot | null;
+  client: { id: number; name: string } | null;
+}
+
+interface CreditLedgerEntry {
+  id: number;
+  delta: number;
+  type: string;
+  note: string | null;
+  createdAt: string;
+  createdBy: string | null;
 }
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -46,6 +83,16 @@ const STATUS_LABELS: Record<string, string> = {
 function RoleBadge({ role }: { role: string }) {
   const c = role === "admin" ? "bg-purple-500/15 text-purple-300" : role === "coach" ? "bg-blue-500/15 text-blue-300" : "bg-white/10 text-white/50";
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${c}`}>{role}</span>;
+}
+
+function SlotStatusBadge({ status }: { status: string }) {
+  const c = status === "open" ? "bg-emerald-500/15 text-emerald-400" : status === "booked" ? "bg-blue-500/15 text-blue-300" : "bg-white/10 text-white/40";
+  return <span className={`text-xs px-2 py-0.5 rounded font-medium ${c}`}>{status}</span>;
+}
+
+function BookingStatusBadge({ status }: { status: string }) {
+  const c = status === "confirmed" ? "bg-emerald-500/15 text-emerald-400" : status === "cancelled" ? "bg-red-500/15 text-red-400" : status === "completed" ? "bg-blue-500/15 text-blue-300" : "bg-white/10 text-white/40";
+  return <span className={`text-xs px-2 py-0.5 rounded font-medium ${c}`}>{status}</span>;
 }
 
 export default function AdminConsole() {
@@ -71,6 +118,31 @@ export default function AdminConsole() {
   const [linkEmail, setLinkEmail] = useState("");
   const [linkPassword, setLinkPassword] = useState("");
   const [athleteSearch, setAthleteSearch] = useState("");
+  const [athleteFilter, setAthleteFilter] = useState<AthleteFilter>("all");
+  const [irlExpandedId, setIrlExpandedId] = useState<number | null>(null);
+  const [irlCreditDelta, setIrlCreditDelta] = useState("");
+  const [irlCreditNote, setIrlCreditNote] = useState("");
+  const [irlBalances, setIrlBalances] = useState<Record<number, { balance: number; ledger: CreditLedgerEntry[] }>>({});
+
+  // IRL slots
+  const [slots, setSlots] = useState<IrlSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [newSlot, setNewSlot] = useState({ date: "", startTime: "09:00", endTime: "10:00", location: "", coachNote: "" });
+  const [showNewSlot, setShowNewSlot] = useState(false);
+  const [slotView, setSlotView] = useState<"upcoming" | "all">("upcoming");
+  const [editingSlotId, setEditingSlotId] = useState<number | null>(null);
+  const [editSlot, setEditSlot] = useState<Partial<IrlSlot>>({});
+
+  // IRL bookings
+  const [bookings, setBookings] = useState<IrlBookingRow[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [expandedBookingId, setExpandedBookingId] = useState<number | null>(null);
+  const [manualBookSlot, setManualBookSlot] = useState("");
+  const [manualBookClient, setManualBookClient] = useState("");
+  const [showManualBook, setShowManualBook] = useState(false);
+  const [irlSubTab, setIrlSubTab] = useState<"slots" | "bookings">("slots");
+
+  // ── Fetch functions ───────────────────────────────────────────────────────
 
   const fetchUsers = async () => {
     setUsersLoading(true);
@@ -88,8 +160,35 @@ export default function AdminConsole() {
     } finally { setAthletesLoading(false); }
   };
 
+  const fetchIrlCredits = async (clientId: number) => {
+    const r = await fetch(`${BASE}/api/admin/clients/${clientId}/irl-credits`, { headers: authHeaders(token) });
+    if (r.ok) {
+      const data = await r.json();
+      setIrlBalances(prev => ({ ...prev, [clientId]: data }));
+    }
+  };
+
+  const fetchSlots = async () => {
+    setSlotsLoading(true);
+    try {
+      const r = await fetch(`${BASE}/api/admin/irl-slots`, { headers: authHeaders(token) });
+      if (r.ok) setSlots(await r.json());
+    } finally { setSlotsLoading(false); }
+  };
+
+  const fetchBookings = async () => {
+    setBookingsLoading(true);
+    try {
+      const r = await fetch(`${BASE}/api/admin/irl-bookings`, { headers: authHeaders(token) });
+      if (r.ok) setBookings(await r.json());
+    } finally { setBookingsLoading(false); }
+  };
+
   useEffect(() => { if (nav === "users") fetchUsers(); }, [nav]);
   useEffect(() => { if (nav === "athlete-linking") fetchAthletes(); }, [nav]);
+  useEffect(() => { if (nav === "irl-sessions") { fetchSlots(); fetchBookings(); } }, [nav]);
+
+  // ── User actions ──────────────────────────────────────────────────────────
 
   const createUser = async () => {
     if (!newUserEmail || !newUserPassword) return;
@@ -125,6 +224,8 @@ export default function AdminConsole() {
     if (r.ok) { toast({ title: "Password reset" }); setResetPw(""); setEditingUser(null); }
   };
 
+  // ── Athlete linking actions ───────────────────────────────────────────────
+
   const createAthleteLogin = async (clientId: number) => {
     if (!linkEmail || !linkPassword) { toast({ title: "Email and password required", variant: "destructive" }); return; }
     const r = await fetch(`${BASE}/api/admin/athlete-linking/${clientId}/create-login`, {
@@ -141,7 +242,7 @@ export default function AdminConsole() {
 
   const updateAthleteLogin = async (clientId: number) => {
     if (!linkEmail && !linkPassword) return;
-    const body: any = {};
+    const body: Record<string, string> = {};
     if (linkEmail) body.email = linkEmail;
     if (linkPassword) body.password = linkPassword;
     const r = await fetch(`${BASE}/api/admin/athlete-linking/${clientId}/update-login`, {
@@ -153,18 +254,148 @@ export default function AdminConsole() {
     else { const d = await r.json(); toast({ title: "Error", description: d.error, variant: "destructive" }); }
   };
 
+  const toggleIrlClient = async (clientId: number, irlClient: boolean) => {
+    const r = await fetch(`${BASE}/api/admin/clients/${clientId}/irl-settings`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ irlClient }),
+    });
+    if (r.ok) {
+      toast({ title: irlClient ? "IRL enabled" : "IRL disabled" });
+      fetchAthletes();
+    } else {
+      toast({ title: "Error updating IRL status", variant: "destructive" });
+    }
+  };
+
+  const addIrlCredits = async (clientId: number) => {
+    const delta = parseInt(irlCreditDelta, 10);
+    if (!delta || isNaN(delta)) { toast({ title: "Enter a valid credit amount", variant: "destructive" }); return; }
+    const r = await fetch(`${BASE}/api/admin/clients/${clientId}/irl-credits`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ delta, type: delta > 0 ? "manual_add" : "manual_adjustment", note: irlCreditNote || null }),
+    });
+    if (r.ok) {
+      toast({ title: delta > 0 ? `+${delta} credits added` : `${delta} credits adjusted` });
+      setIrlCreditDelta(""); setIrlCreditNote("");
+      fetchIrlCredits(clientId);
+    } else {
+      const d = await r.json();
+      toast({ title: "Error", description: d.error, variant: "destructive" });
+    }
+  };
+
+  // ── IRL slot actions ──────────────────────────────────────────────────────
+
+  const createSlot = async () => {
+    if (!newSlot.date || !newSlot.startTime || !newSlot.endTime) {
+      toast({ title: "Date, start time, and end time are required", variant: "destructive" }); return;
+    }
+    const r = await fetch(`${BASE}/api/admin/irl-slots`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(newSlot),
+    });
+    if (r.ok) {
+      toast({ title: "Slot created" });
+      setNewSlot({ date: "", startTime: "09:00", endTime: "10:00", location: "", coachNote: "" });
+      setShowNewSlot(false);
+      fetchSlots();
+    } else {
+      const d = await r.json();
+      toast({ title: "Error", description: d.error, variant: "destructive" });
+    }
+  };
+
+  const updateSlot = async (slotId: number) => {
+    const r = await fetch(`${BASE}/api/admin/irl-slots/${slotId}`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(editSlot),
+    });
+    if (r.ok) { toast({ title: "Slot updated" }); setEditingSlotId(null); fetchSlots(); }
+    else { const d = await r.json(); toast({ title: "Error", description: d.error, variant: "destructive" }); }
+  };
+
+  const cancelSlot = async (slotId: number) => {
+    const r = await fetch(`${BASE}/api/admin/irl-slots/${slotId}`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    if (r.ok) { toast({ title: "Slot cancelled" }); fetchSlots(); }
+  };
+
+  const deleteSlot = async (slotId: number) => {
+    if (!confirm("Delete this slot?")) return;
+    const r = await fetch(`${BASE}/api/admin/irl-slots/${slotId}`, { method: "DELETE", headers: authHeaders(token) });
+    if (r.ok) { toast({ title: "Slot deleted" }); fetchSlots(); }
+    else { const d = await r.json(); toast({ title: "Error", description: d.error, variant: "destructive" }); }
+  };
+
+  // ── IRL booking actions ───────────────────────────────────────────────────
+
+  const createManualBooking = async () => {
+    const slotId = parseInt(manualBookSlot, 10);
+    const clientId = parseInt(manualBookClient, 10);
+    if (!slotId || !clientId) { toast({ title: "Select slot and client", variant: "destructive" }); return; }
+    const r = await fetch(`${BASE}/api/admin/irl-bookings`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ slotId, clientId }),
+    });
+    if (r.ok) {
+      toast({ title: "Booking created" });
+      setManualBookSlot(""); setManualBookClient(""); setShowManualBook(false);
+      fetchBookings(); fetchSlots();
+    } else {
+      const d = await r.json();
+      toast({ title: "Error", description: d.error, variant: "destructive" });
+    }
+  };
+
+  const cancelBooking = async (bookingId: number, refund: boolean) => {
+    if (!confirm(`Cancel booking${refund ? " and refund credits" : " (no refund)"}?`)) return;
+    const r = await fetch(`${BASE}/api/admin/irl-bookings/${bookingId}`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ status: "cancelled", refundCredits: refund }),
+    });
+    if (r.ok) { toast({ title: "Booking cancelled" }); fetchBookings(); fetchSlots(); }
+  };
+
+  const markBookingStatus = async (bookingId: number, status: string) => {
+    const r = await fetch(`${BASE}/api/admin/irl-bookings/${bookingId}`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ status }),
+    });
+    if (r.ok) { toast({ title: `Marked as ${status}` }); fetchBookings(); }
+  };
+
+  // ── Computed ──────────────────────────────────────────────────────────────
+
+  const filteredAthletes = athletes
+    .filter(a => athleteFilter === "all" ? true : athleteFilter === "irl" ? a.irlClient : !a.irlClient)
+    .filter(a =>
+      a.clientName.toLowerCase().includes(athleteSearch.toLowerCase()) ||
+      (a.loginEmail ?? "").toLowerCase().includes(athleteSearch.toLowerCase())
+    );
+
+  const today = new Date().toISOString().slice(0, 10);
+  const visibleSlots = slotView === "upcoming" ? slots.filter(s => s.date >= today) : slots;
+  const irlClients = athletes.filter(a => a.irlClient);
+  const openSlots = slots.filter(s => s.status === "open");
+
   const navItems: { id: NavItem; label: string }[] = [
     { id: "athlete-linking", label: "Athlete Accounts" },
     { id: "users", label: "All Users" },
+    { id: "irl-sessions", label: "IRL Sessions" },
     { id: "content", label: "Brain / Content" },
     { id: "billing", label: "Billing" },
     { id: "audit", label: "Audit Log" },
   ];
-
-  const filteredAthletes = athletes.filter(a =>
-    a.clientName.toLowerCase().includes(athleteSearch.toLowerCase()) ||
-    (a.loginEmail ?? "").toLowerCase().includes(athleteSearch.toLowerCase())
-  );
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex">
@@ -214,12 +445,28 @@ export default function AdminConsole() {
                 <h1 className="text-xl font-semibold">Athlete Accounts</h1>
                 <p className="text-white/40 text-sm mt-1">Link login credentials to existing athlete profiles</p>
               </div>
-              <Input
-                placeholder="Search athletes…"
-                value={athleteSearch}
-                onChange={e => setAthleteSearch(e.target.value)}
-                className="mb-5 bg-white/5 border-white/10 text-white placeholder:text-white/20 max-w-sm"
-              />
+
+              {/* Search + filter */}
+              <div className="flex gap-3 mb-5">
+                <Input
+                  placeholder="Search athletes…"
+                  value={athleteSearch}
+                  onChange={e => setAthleteSearch(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 max-w-xs"
+                />
+                <div className="flex gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
+                  {(["all", "online", "irl"] as AthleteFilter[]).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setAthleteFilter(f)}
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${athleteFilter === f ? "bg-white/15 text-white" : "text-white/40 hover:text-white/60"}`}
+                    >
+                      {f === "all" ? "All" : f === "online" ? "Online only" : "IRL enabled"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {athletesLoading ? (
                 <div className="text-white/30 text-sm">Loading…</div>
               ) : (
@@ -228,23 +475,104 @@ export default function AdminConsole() {
                     <div key={a.clientId} className="bg-white/5 rounded-xl border border-white/10 p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="font-medium">{a.clientName}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{a.clientName}</span>
+                            {a.irlClient && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 font-medium">IRL</span>
+                            )}
+                          </div>
                           <div className="text-white/40 text-sm mt-0.5">{a.loginEmail ?? "No login email"}</div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
                           <span className={`text-xs px-2 py-1 rounded-md font-medium ${STATUS_COLOURS[a.status]}`}>
                             {STATUS_LABELS[a.status]}
                           </span>
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => {
+                              setIrlExpandedId(irlExpandedId === a.clientId ? null : a.clientId);
+                              if (irlExpandedId !== a.clientId) fetchIrlCredits(a.clientId);
+                            }}
+                            className="border-white/20 text-white/70 hover:text-white hover:bg-white/10 text-xs"
+                          >
+                            IRL
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => { setLinkingId(linkingId === a.clientId ? null : a.clientId); setLinkEmail(a.loginEmail ?? ""); setLinkPassword(""); }}
                             className="border-white/20 text-white/70 hover:text-white hover:bg-white/10 text-xs"
                           >
-                            {a.userId ? "Edit" : "Create Login"}
+                            {a.userId ? "Edit Login" : "Create Login"}
                           </Button>
                         </div>
                       </div>
+
+                      {/* IRL settings panel */}
+                      {irlExpandedId === a.clientId && (
+                        <div className="mt-4 pt-4 border-t border-white/10 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-medium">IRL Client</div>
+                              <div className="text-white/40 text-xs mt-0.5">Allow this athlete to access IRL session booking</div>
+                            </div>
+                            <button
+                              onClick={() => toggleIrlClient(a.clientId, !a.irlClient)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${a.irlClient ? "bg-violet-500" : "bg-white/10"}`}
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${a.irlClient ? "translate-x-6" : "translate-x-1"}`} />
+                            </button>
+                          </div>
+
+                          {a.irlClient && (
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm font-medium">IRL Credits</div>
+                                <div className="text-xl font-bold text-violet-300">
+                                  {irlBalances[a.clientId]?.balance ?? "—"}
+                                </div>
+                              </div>
+                              <div className="flex gap-2 mb-3">
+                                <Input
+                                  type="number"
+                                  placeholder="+5 or -1"
+                                  value={irlCreditDelta}
+                                  onChange={e => setIrlCreditDelta(e.target.value)}
+                                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-8 text-sm w-28"
+                                />
+                                <Input
+                                  placeholder="Note (optional)"
+                                  value={irlCreditNote}
+                                  onChange={e => setIrlCreditNote(e.target.value)}
+                                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-8 text-sm flex-1"
+                                />
+                                <Button size="sm" onClick={() => addIrlCredits(a.clientId)} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs h-8">
+                                  Add
+                                </Button>
+                              </div>
+                              {irlBalances[a.clientId]?.ledger?.length > 0 && (
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                  {irlBalances[a.clientId].ledger.map(e => (
+                                    <div key={e.id} className="flex items-center justify-between text-xs text-white/50 py-1 border-b border-white/5">
+                                      <div>
+                                        <span className={`font-medium mr-1.5 ${e.delta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                          {e.delta > 0 ? `+${e.delta}` : e.delta}
+                                        </span>
+                                        <span className="text-white/40">{e.type.replace(/_/g, " ")}</span>
+                                        {e.note && <span className="ml-1 text-white/30">— {e.note}</span>}
+                                      </div>
+                                      <span className="shrink-0 ml-2">{new Date(e.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Login panel */}
                       {linkingId === a.clientId && (
                         <div className="mt-4 pt-4 border-t border-white/10 space-y-3">
                           <div className="grid grid-cols-2 gap-3">
@@ -298,8 +626,6 @@ export default function AdminConsole() {
                 <h1 className="text-xl font-semibold">All Users</h1>
                 <p className="text-white/40 text-sm mt-1">Manage accounts, roles, and passwords</p>
               </div>
-
-              {/* Create user */}
               <div className="bg-white/5 rounded-xl border border-white/10 p-5 mb-6">
                 <h2 className="text-sm font-medium mb-4">Create new user</h2>
                 <div className="grid grid-cols-3 gap-3 mb-3">
@@ -313,7 +639,7 @@ export default function AdminConsole() {
                   />
                   <select
                     value={newUserRole}
-                    onChange={e => setNewUserRole(e.target.value as any)}
+                    onChange={e => setNewUserRole(e.target.value as "athlete" | "coach" | "admin")}
                     className="bg-white/5 border border-white/10 text-white rounded-md px-3 h-9 text-sm"
                   >
                     <option value="athlete">Athlete</option>
@@ -325,7 +651,6 @@ export default function AdminConsole() {
                   Create user
                 </Button>
               </div>
-
               {usersLoading ? (
                 <div className="text-white/30 text-sm">Loading…</div>
               ) : (
@@ -406,6 +731,263 @@ export default function AdminConsole() {
             </div>
           )}
 
+          {/* ── IRL Sessions ─────────────────────────────────────────────── */}
+          {nav === "irl-sessions" && (
+            <div>
+              <div className="mb-6">
+                <h1 className="text-xl font-semibold">IRL Sessions</h1>
+                <p className="text-white/40 text-sm mt-1">Manage in-person availability, bookings, and credits</p>
+              </div>
+
+              {/* Sub-tabs */}
+              <div className="flex gap-1 bg-white/5 rounded-lg p-1 border border-white/10 w-fit mb-6">
+                {(["slots", "bookings"] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setIrlSubTab(t)}
+                    className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${irlSubTab === t ? "bg-white/15 text-white" : "text-white/40 hover:text-white/60"}`}
+                  >
+                    {t === "slots" ? "Availability" : "Bookings"}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Availability Slots ── */}
+              {irlSubTab === "slots" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
+                      {(["upcoming", "all"] as const).map(v => (
+                        <button key={v} onClick={() => setSlotView(v)}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${slotView === v ? "bg-white/15 text-white" : "text-white/40 hover:text-white/60"}`}>
+                          {v === "upcoming" ? "Upcoming" : "All"}
+                        </button>
+                      ))}
+                    </div>
+                    <Button size="sm" onClick={() => setShowNewSlot(!showNewSlot)} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs">
+                      + New slot
+                    </Button>
+                  </div>
+
+                  {showNewSlot && (
+                    <div className="bg-white/5 rounded-xl border border-white/10 p-5">
+                      <h3 className="text-sm font-medium mb-4">New availability slot (60 min)</h3>
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div>
+                          <label className="text-white/40 text-xs block mb-1">Date</label>
+                          <Input type="date" value={newSlot.date} onChange={e => setNewSlot(p => ({ ...p, date: e.target.value }))}
+                            className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-white/40 text-xs block mb-1">Start</label>
+                          <Input type="time" value={newSlot.startTime} onChange={e => setNewSlot(p => ({ ...p, startTime: e.target.value }))}
+                            className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-white/40 text-xs block mb-1">End</label>
+                          <Input type="time" value={newSlot.endTime} onChange={e => setNewSlot(p => ({ ...p, endTime: e.target.value }))}
+                            className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                          <label className="text-white/40 text-xs block mb-1">Location</label>
+                          <Input placeholder="e.g. MG Gym, London" value={newSlot.location} onChange={e => setNewSlot(p => ({ ...p, location: e.target.value }))}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-9 text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-white/40 text-xs block mb-1">Note (optional)</label>
+                          <Input placeholder="Internal note" value={newSlot.coachNote} onChange={e => setNewSlot(p => ({ ...p, coachNote: e.target.value }))}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-9 text-sm" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={createSlot} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs">Create slot</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setShowNewSlot(false)} className="text-white/40 text-xs">Cancel</Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {slotsLoading ? <div className="text-white/30 text-sm">Loading…</div> : (
+                    <div className="space-y-2">
+                      {visibleSlots.length === 0 && <div className="text-white/30 text-sm py-8 text-center">No slots found</div>}
+                      {visibleSlots.map(slot => (
+                        <div key={slot.id} className="bg-white/5 rounded-xl border border-white/10 p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm">{new Date(slot.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span>
+                                <span className="text-white/50 text-sm">{slot.startTime} – {slot.endTime}</span>
+                                <SlotStatusBadge status={slot.status} />
+                              </div>
+                              {slot.location && <div className="text-white/40 text-xs mt-0.5">{slot.location}</div>}
+                              {slot.coachNote && <div className="text-white/30 text-xs mt-0.5 italic">{slot.coachNote}</div>}
+                            </div>
+                            <div className="flex gap-2">
+                              {slot.status !== "booked" && slot.status !== "cancelled" && (
+                                <>
+                                  <Button size="sm" variant="outline" onClick={() => { setEditingSlotId(editingSlotId === slot.id ? null : slot.id); setEditSlot({ date: slot.date, startTime: slot.startTime, endTime: slot.endTime, location: slot.location ?? "", coachNote: slot.coachNote ?? "" }); }}
+                                    className="border-white/20 text-white/70 hover:text-white hover:bg-white/10 text-xs">Edit</Button>
+                                  <Button size="sm" variant="outline" onClick={() => cancelSlot(slot.id)}
+                                    className="border-red-500/30 text-red-400/70 hover:text-red-400 hover:bg-red-500/10 text-xs">Cancel</Button>
+                                </>
+                              )}
+                              {slot.status === "cancelled" && (
+                                <Button size="sm" variant="outline" onClick={() => deleteSlot(slot.id)}
+                                  className="border-white/10 text-white/30 hover:text-red-400 text-xs">Delete</Button>
+                              )}
+                            </div>
+                          </div>
+                          {editingSlotId === slot.id && (
+                            <div className="mt-4 pt-4 border-t border-white/10">
+                              <div className="grid grid-cols-3 gap-3 mb-3">
+                                <div>
+                                  <label className="text-white/40 text-xs block mb-1">Date</label>
+                                  <Input type="date" value={editSlot.date ?? ""} onChange={e => setEditSlot(p => ({ ...p, date: e.target.value }))}
+                                    className="bg-white/5 border-white/10 text-white h-8 text-sm" />
+                                </div>
+                                <div>
+                                  <label className="text-white/40 text-xs block mb-1">Start</label>
+                                  <Input type="time" value={editSlot.startTime ?? ""} onChange={e => setEditSlot(p => ({ ...p, startTime: e.target.value }))}
+                                    className="bg-white/5 border-white/10 text-white h-8 text-sm" />
+                                </div>
+                                <div>
+                                  <label className="text-white/40 text-xs block mb-1">End</label>
+                                  <Input type="time" value={editSlot.endTime ?? ""} onChange={e => setEditSlot(p => ({ ...p, endTime: e.target.value }))}
+                                    className="bg-white/5 border-white/10 text-white h-8 text-sm" />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3 mb-3">
+                                <Input placeholder="Location" value={editSlot.location ?? ""} onChange={e => setEditSlot(p => ({ ...p, location: e.target.value }))}
+                                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-8 text-sm" />
+                                <Input placeholder="Note" value={editSlot.coachNote ?? ""} onChange={e => setEditSlot(p => ({ ...p, coachNote: e.target.value }))}
+                                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-8 text-sm" />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={() => updateSlot(slot.id)} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs">Save</Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditingSlotId(null)} className="text-white/40 text-xs">Cancel</Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Bookings ── */}
+              {irlSubTab === "bookings" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-white/40 text-sm">{bookings.filter(b => b.booking.status === "confirmed").length} confirmed</div>
+                    <Button size="sm" onClick={() => setShowManualBook(!showManualBook)} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs">
+                      + Manual booking
+                    </Button>
+                  </div>
+
+                  {showManualBook && (
+                    <div className="bg-white/5 rounded-xl border border-white/10 p-5">
+                      <h3 className="text-sm font-medium mb-4">Create manual booking</h3>
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                          <label className="text-white/40 text-xs block mb-1">Slot</label>
+                          <select value={manualBookSlot} onChange={e => setManualBookSlot(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 text-white rounded-md px-3 h-9 text-sm">
+                            <option value="">Select slot…</option>
+                            {openSlots.map(s => (
+                              <option key={s.id} value={s.id}>
+                                {new Date(s.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} {s.startTime}{s.location ? ` — ${s.location}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-white/40 text-xs block mb-1">Athlete</label>
+                          <select value={manualBookClient} onChange={e => setManualBookClient(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 text-white rounded-md px-3 h-9 text-sm">
+                            <option value="">Select athlete…</option>
+                            {irlClients.map(a => (
+                              <option key={a.clientId} value={a.clientId}>{a.clientName}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={createManualBooking} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs">Book</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setShowManualBook(false)} className="text-white/40 text-xs">Cancel</Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {bookingsLoading ? <div className="text-white/30 text-sm">Loading…</div> : (
+                    <div className="space-y-2">
+                      {bookings.length === 0 && <div className="text-white/30 text-sm py-8 text-center">No bookings yet</div>}
+                      {bookings.map(({ booking, slot, client }) => (
+                        <div key={booking.id} className="bg-white/5 rounded-xl border border-white/10 p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm">{client?.name ?? "Unknown"}</span>
+                                <BookingStatusBadge status={booking.status} />
+                                {booking.creditRefunded && <span className="text-xs text-emerald-400/70">refunded</span>}
+                              </div>
+                              {slot && (
+                                <div className="text-white/40 text-xs mt-0.5">
+                                  {new Date(slot.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })} · {slot.startTime} – {slot.endTime}
+                                  {slot.location && ` · ${slot.location}`}
+                                </div>
+                              )}
+                              <div className="text-white/30 text-xs mt-0.5">
+                                Booked {new Date(booking.createdAt).toLocaleDateString("en-GB")} · {booking.creditsUsed} credit{booking.creditsUsed !== 1 ? "s" : ""}
+                              </div>
+                            </div>
+                            {booking.status === "confirmed" && (
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" onClick={() => markBookingStatus(booking.id, "completed")}
+                                  className="border-emerald-500/30 text-emerald-400/70 hover:text-emerald-400 text-xs">
+                                  Complete
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => markBookingStatus(booking.id, "no_show")}
+                                  className="border-white/20 text-white/50 hover:text-white text-xs">
+                                  No-show
+                                </Button>
+                                <Button
+                                  size="sm" variant="outline"
+                                  onClick={() => setExpandedBookingId(expandedBookingId === booking.id ? null : booking.id)}
+                                  className="border-red-500/30 text-red-400/70 hover:text-red-400 text-xs">
+                                  Cancel
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                          {expandedBookingId === booking.id && booking.status === "confirmed" && (
+                            <div className="mt-4 pt-4 border-t border-white/10">
+                              <p className="text-white/50 text-sm mb-3">Cancel this booking:</p>
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={() => cancelBooking(booking.id, true)}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs">
+                                  Cancel + refund credit
+                                </Button>
+                                <Button size="sm" onClick={() => cancelBooking(booking.id, false)}
+                                  className="bg-red-600 hover:bg-red-500 text-white text-xs">
+                                  Cancel, no refund
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => setExpandedBookingId(null)} className="text-white/40 text-xs">
+                                  Keep
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Content / Brain ──────────────────────────────────────────── */}
           {nav === "content" && (
             <div>
@@ -417,16 +999,12 @@ export default function AdminConsole() {
                 <div className="bg-white/5 rounded-xl border border-white/10 p-5">
                   <div className="text-sm font-medium mb-1">Programme Templates</div>
                   <div className="text-white/40 text-xs">Upload training block templates and programme structures for use in programme generation</div>
-                  <div className="mt-4 border-2 border-dashed border-white/10 rounded-lg p-6 text-center text-white/20 text-xs">
-                    Coming soon
-                  </div>
+                  <div className="mt-4 border-2 border-dashed border-white/10 rounded-lg p-6 text-center text-white/20 text-xs">Coming soon</div>
                 </div>
                 <div className="bg-white/5 rounded-xl border border-white/10 p-5">
                   <div className="text-sm font-medium mb-1">Resources</div>
                   <div className="text-white/40 text-xs">Upload ebooks, PDFs, guides, and reference material for athletes</div>
-                  <div className="mt-4 border-2 border-dashed border-white/10 rounded-lg p-6 text-center text-white/20 text-xs">
-                    Coming soon
-                  </div>
+                  <div className="mt-4 border-2 border-dashed border-white/10 rounded-lg p-6 text-center text-white/20 text-xs">Coming soon</div>
                 </div>
               </div>
               <div className="bg-white/5 rounded-xl border border-white/10 p-5">

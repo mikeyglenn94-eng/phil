@@ -43,6 +43,16 @@ export default function SessionEditor() {
   const sessionId = params?.sessionId;
   const isNew = sessionId === "new";
 
+  const goBack = () => {
+    const returnTo = sessionStorage.getItem("session_editor_returnTo");
+    if (returnTo) {
+      sessionStorage.removeItem("session_editor_returnTo");
+      setLocation(returnTo);
+    } else {
+      window.history.back();
+    }
+  };
+
   const searchParams = new URLSearchParams(search);
   const dateFromUrl = searchParams.get("date") || format(new Date(), "yyyy-MM-dd");
 
@@ -196,7 +206,7 @@ export default function SessionEditor() {
       setSaveStatus("saved");
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
       toast({ title: "Session saved!" });
-      window.history.back();
+      goBack();
     } catch {
       toast({ title: "Error saving session", variant: "destructive" });
     } finally {
@@ -212,7 +222,7 @@ export default function SessionEditor() {
       await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
       queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
       toast({ title: "Session deleted" });
-      window.history.back();
+      goBack();
     } catch {
       toast({ title: "Error deleting session", variant: "destructive" });
     }
@@ -240,7 +250,7 @@ export default function SessionEditor() {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-background z-20 gap-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
+            <Button variant="ghost" size="icon" onClick={goBack}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div className="flex-1 min-w-0">

@@ -105,6 +105,7 @@ router.get("/admin/athlete-linking", adminOnly, async (_req, res): Promise<void>
       clientName: c.name,
       loginEmail: user?.email ?? null,
       userId: user?.id ?? null,
+      irlClient: c.irlClient,
       status: user ? (user.lastLoginAt ? "active" : "login_created") : "no_login",
     };
   });
