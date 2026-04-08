@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Dumbbell, Users, Eye, BookOpen } from "lucide-react";
+import { Dumbbell, Users, Eye, BookOpen, LogOut, ShieldCheck } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -12,9 +12,20 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/auth-context";
 
 export function AppSidebar() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  const { user, logout, hasRole } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    setLocation("/");
+  };
+
+  const initials = user?.email
+    ? user.email.slice(0, 2).toUpperCase()
+    : "ME";
 
   return (
     <Sidebar className="border-r-0 bg-sidebar text-sidebar-foreground">
@@ -37,7 +48,7 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <Link href="/clients">
                   <SidebarMenuButton
-                    isActive={location === "/" || location.startsWith("/clients")}
+                    isActive={location === "/coach" || location === "/" || location.startsWith("/clients")}
                     className="hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground font-medium rounded-lg"
                   >
                     <Users className="w-4 h-4" />
@@ -66,6 +77,19 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>
+              {hasRole("admin") && (
+                <SidebarMenuItem>
+                  <Link href="/admin">
+                    <SidebarMenuButton
+                      isActive={location === "/admin"}
+                      className="hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground font-medium rounded-lg"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Admin Console</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -74,12 +98,23 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         <div className="flex items-center gap-3 px-2 py-3 rounded-xl bg-sidebar-accent/30 border border-sidebar-border/50">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-            ME
+            {initials}
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">Coach Mode</p>
-            <p className="text-xs text-sidebar-foreground/50 truncate">Local Workspace</p>
+            <p className="text-sm font-medium text-sidebar-foreground truncate">
+              {user?.email ?? "Coach Mode"}
+            </p>
+            <p className="text-xs text-sidebar-foreground/50 truncate capitalize">
+              {user?.roles?.join(", ") ?? "Local Workspace"}
+            </p>
           </div>
+          <button
+            onClick={handleLogout}
+            title="Sign out"
+            className="text-sidebar-foreground/40 hover:text-sidebar-foreground/80 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>

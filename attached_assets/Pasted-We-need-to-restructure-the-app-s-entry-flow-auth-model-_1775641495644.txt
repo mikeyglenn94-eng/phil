@@ -1,0 +1,166 @@
+We need to restructure the app’s entry flow, auth model, and internal management areas.
+
+Current problem:
+- train.mikeyglenncoaching.com currently opens directly into the coach dashboard
+- the app now needs to support separate experiences for athletes, coaches, and admin
+- athlete should be the default entry path
+- we do not need a complex migration system because the current user base is small and existing users can be linked manually by adding login emails to their current accounts
+
+Build the following:
+
+1. New unauthenticated homepage at the root route
+- create a clean branded landing and sign-in screen at train.mikeyglenncoaching.com
+- this should no longer open straight into the coach dashboard
+- include a role selector with two visible options: Athlete and Coach
+- Athlete should be selected by default
+- place a shared sign-in form underneath with:
+  - email
+  - password
+  - forgot password link
+- keep the design simple and premium, more like a proper product front door than an internal dashboard
+
+2. Role-based routing after sign-in
+- after login, route users based on their role:
+  - athlete -> athlete app
+  - coach -> coach dashboard
+  - admin -> admin console
+- if a user has more than one role, support a role switcher after login
+- do not create separate accounts per role
+- one user account should be able to hold multiple roles
+
+3. Authentication and user model
+- implement proper email and password authentication
+- create a user model that supports roles:
+  - athlete
+  - coach
+  - admin
+- link each authenticated user to the correct existing profile or account in the platform
+- structure this cleanly so billing and organisations can be added later without rebuilding auth
+
+4. Manual migration for existing users
+Because the number of current users is small, do not build a heavy automated migration or invitation system right now.
+
+Instead:
+- create a lightweight manual workflow for linking login credentials to existing athlete accounts
+- I need to be able to add or edit a login email against an existing athlete account
+- once an email is added, that athlete should be able to access their existing programmes and history through their login
+- include a simple account status for each athlete such as:
+  - No login
+  - Login created
+  - Active
+- include a way for me to trigger a password reset or account setup flow manually
+- preserve all existing athlete data, programme history, and relationships
+
+5. Lightweight admin console
+Create a separate admin area for platform management.
+This should be distinct from the coach dashboard.
+
+Admin console should include at least:
+
+- Users
+  - search users
+  - view role
+  - edit login email
+  - change role
+  - view account status
+
+- Athlete account linking
+  - attach login email to existing athlete profile
+  - create login for an athlete who already exists in the system
+  - trigger password reset / setup
+
+- Brain / Content
+  - upload programme templates
+  - upload resources like ebooks, PDFs, and guides
+  - tag content
+  - assign visibility by role
+  - set content status:
+    - draft
+    - published
+    - archived
+  - show processing / indexing status so uploads are not a black box
+
+- Programme uploads
+  - area specifically for uploading programme content into the brain
+
+- Resource uploads
+  - area specifically for ebooks, PDFs, guides, and reference materials
+
+- Billing placeholder
+  - do not build full billing yet
+  - just create the section and structure so it can be added later
+
+- Audit log placeholder
+  - do not fully build this yet
+  - just leave space in the structure for future tracking of important changes
+
+6. Coach dashboard rules
+- keep the current coach dashboard
+- move it behind coach authentication instead of exposing it at the root URL
+- coach users should only see coach-relevant navigation
+- coach users should not see admin tools unless they also have admin role
+
+7. Athlete app rules
+- athlete users should land in a clearly separate athlete experience
+- athlete UI should not expose coach or admin navigation
+- athlete experience should be the default orientation of the product at the public entry point
+
+8. Navigation structure
+Set up the product with these top-level areas:
+
+Public:
+- Home / Sign in
+
+Athlete:
+- athlete home
+- programmes
+- resources
+- progress
+- profile
+
+Coach:
+- dashboard
+- clients
+- library
+- client portal
+- settings
+
+Admin:
+- users
+- athlete account linking
+- brain / content
+- programme uploads
+- resource uploads
+- billing
+- audit log
+
+9. Future-proofing
+Please structure the data model and permissions so the app can later support:
+- multiple coaches
+- multiple organisations or teams
+- subscriptions and billing
+- content assigned to specific athletes or groups
+- assistant coaches or expanded internal roles
+
+Do not overbuild these features now, but do not structure the system in a way that blocks them.
+
+10. Build priority
+Start with:
+- new root homepage
+- athlete / coach selector
+- email/password auth
+- role-based routing
+- basic role model
+- basic admin console shell
+- manual athlete login linking
+
+After that, move to:
+- brain / content upload and management
+- cleaner athlete experience
+- billing later
+
+Important:
+- do not remove the existing coach dashboard
+- just move it behind authentication and proper routing
+- keep the current live data intact
+- optimise for a clean foundation rather than lots of half-built edge-case tooling

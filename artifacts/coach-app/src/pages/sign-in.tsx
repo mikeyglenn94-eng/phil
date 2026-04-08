@@ -1,0 +1,204 @@
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/auth-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+type RoleTab = "athlete" | "coach";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+export default function SignIn() {
+  const { login, isAuthenticated, primaryRole, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+  const [roleTab, setRoleTab] = useState<RoleTab>("athlete");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [showBootstrap, setShowBootstrap] = useState(false);
+  const [bootstrapDone, setBootstrapDone] = useState(false);
+  const [bEmail, setBEmail] = useState("");
+  const [bPassword, setBPassword] = useState("");
+  const [bConfirm, setBConfirm] = useState("");
+  const [bError, setBError] = useState("");
+  const [bLoading, setBLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      const role = primaryRole();
+      if (role === "admin") setLocation("/admin");
+      else if (role === "coach") setLocation("/coach");
+      else setLocation("/client");
+    }
+  }, [isAuthenticated, isLoading, primaryRole, setLocation]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const user = await login(email.trim(), password);
+      const roles = user.roles;
+      if (roles.includes("admin")) setLocation("/admin");
+      else if (roles.includes("coach")) setLocation("/coach");
+      else setLocation("/client");
+    } catch (err: any) {
+      setError(err.message || "Sign in failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleBootstrap = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBError("");
+    if (bPassword !== bConfirm) { setBError("Passwords do not match"); return; }
+    if (bPassword.length < 8) { setBError("Password must be at least 8 characters"); return; }
+    setBLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/auth/bootstrap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: bEmail, password: bPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Setup failed");
+      localStorage.setItem("axis_auth_token", data.token);
+      setBootstrapDone(true);
+      setTimeout(() => setLocation("/admin"), 1500);
+    } catch (err: any) {
+      setBError(err.message);
+    } finally {
+      setBLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        {/* Logo / Wordmark */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white mb-5">
+            <span className="text-[#0a0a0a] font-bold text-2xl tracking-tight">M</span>
+          </div>
+          <h1 className="text-white text-2xl font-semibold tracking-tight">Axis</h1>
+          <p className="text-white/40 text-sm mt-1">by Mikey Glenn Coaching</p>
+        </div>
+
+        {showBootstrap ? (
+          <div>
+            <h2 className="text-white text-lg font-medium mb-2 text-center">First-time setup</h2>
+            <p className="text-white/40 text-sm text-center mb-6">Create your admin account to get started</p>
+            {bootstrapDone ? (
+              <p className="text-emerald-400 text-center text-sm">Account created — redirecting…</p>
+            ) : (
+              <form onSubmit={handleBootstrap} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-white/60 text-xs uppercase tracking-wider">Email</Label>
+                  <Input
+                    type="email" value={bEmail} onChange={e => setBEmail(e.target.value)}
+                    placeholder="you@example.com" required autoComplete="email"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-11 rounded-xl focus:border-white/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-white/60 text-xs uppercase tracking-wider">Password</Label>
+                  <Input
+                    type="password" value={bPassword} onChange={e => setBPassword(e.target.value)}
+                    placeholder="Min 8 characters" required
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-11 rounded-xl focus:border-white/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-white/60 text-xs uppercase tracking-wider">Confirm Password</Label>
+                  <Input
+                    type="password" value={bConfirm} onChange={e => setBConfirm(e.target.value)}
+                    placeholder="Repeat password" required
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-11 rounded-xl focus:border-white/30"
+                  />
+                </div>
+                {bError && <p className="text-red-400 text-sm">{bError}</p>}
+                <Button type="submit" disabled={bLoading} className="w-full h-11 rounded-xl bg-white text-[#0a0a0a] font-semibold hover:bg-white/90">
+                  {bLoading ? "Creating…" : "Create Admin Account"}
+                </Button>
+                <button type="button" onClick={() => setShowBootstrap(false)} className="w-full text-white/30 text-sm hover:text-white/60 transition-colors pt-1">
+                  Back to sign in
+                </button>
+              </form>
+            )}
+          </div>
+        ) : (
+          <div>
+            {/* Role selector */}
+            <div className="flex rounded-xl bg-white/5 p-1 mb-8 border border-white/10">
+              {(["athlete", "coach"] as const).map(r => (
+                <button
+                  key={r}
+                  onClick={() => setRoleTab(r)}
+                  className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all capitalize ${
+                    roleTab === r
+                      ? "bg-white text-[#0a0a0a] shadow-sm"
+                      : "text-white/40 hover:text-white/70"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            {/* Sign in form */}
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs uppercase tracking-wider">Email</Label>
+                <Input
+                  type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com" required autoComplete="email"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-11 rounded-xl focus:border-white/30"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-white/60 text-xs uppercase tracking-wider">Password</Label>
+                  <button type="button" className="text-white/30 text-xs hover:text-white/60 transition-colors">
+                    Forgot password?
+                  </button>
+                </div>
+                <Input
+                  type="password" value={password} onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••" required autoComplete="current-password"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-11 rounded-xl focus:border-white/30"
+                />
+              </div>
+              {error && <p className="text-red-400 text-sm">{error}</p>}
+              <Button
+                type="submit" disabled={submitting}
+                className="w-full h-11 rounded-xl bg-white text-[#0a0a0a] font-semibold hover:bg-white/90 mt-2"
+              >
+                {submitting ? "Signing in…" : `Sign in as ${roleTab === "athlete" ? "Athlete" : "Coach"}`}
+              </Button>
+            </form>
+
+            <div className="mt-8 text-center">
+              <button
+                onClick={() => setShowBootstrap(true)}
+                className="text-white/15 text-xs hover:text-white/30 transition-colors"
+              >
+                First-time setup
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

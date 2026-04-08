@@ -2,7 +2,18 @@
 
 ## Overview
 
-A voice-first internal tool for fitness coaches to create structured training programmes by speaking naturally. The app shows a calendar (TrainHeroic-style) as the home screen, with sessions scheduled per day. Clicking a day opens a session editor with voice input, AI parsing, and live preview.
+A voice-first training platform for athletes and coaches. Supports AI-assisted programme generation, athlete self-serve calendar/session logging, WOD recording, run interval tracking, analytics, and AI coaching layer. Role-based access: athletes, coaches, and admins each have separate experiences.
+
+## Auth Architecture
+
+- **Entry**: `/` is the branded sign-in page (Athlete/Coach toggle, email + password)
+- **First-time setup**: "First-time setup" link on sign-in creates the initial admin/coach account via `POST /api/auth/bootstrap` (only works when no users exist)
+- **JWT auth**: 7-day tokens stored in `localStorage` as `axis_auth_token`; sent as `Authorization: Bearer <token>` on API calls
+- **Roles**: `athlete`, `coach`, `admin` — one user can hold multiple roles
+- **Routing after login**: admin → `/admin`, coach → `/clients`, athlete → `/client`
+- **`users` table**: holds email, passwordHash, roles[], clientId (FK → clients for athlete linking)
+- **Admin Console** (`/admin`): manage all users, link athlete logins to existing profiles, content/billing/audit placeholders
+- **Athlete linking**: admin sets email + password for an existing athlete record; athlete then signs in with those credentials and their data (programmes, nutrition, history) loads automatically via `user.clientId`
 
 ## Stack
 
