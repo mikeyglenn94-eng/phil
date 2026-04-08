@@ -835,7 +835,7 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
     // On mobile, use the native share sheet — user can tap "Save Image" to camera roll
     if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
       try {
-        await navigator.share({ files: [shareFile], title: "Axis Progress" });
+        await navigator.share({ files: [shareFile], title: "MG Coaching Progress" });
         setShareSaved(true);
         setTimeout(() => setShareSaved(false), 3000);
         return;

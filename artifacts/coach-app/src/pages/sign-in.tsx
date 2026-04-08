@@ -91,8 +91,7 @@ export default function SignIn() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white mb-5">
             <span className="text-[#0a0a0a] font-bold text-2xl tracking-tight">M</span>
           </div>
-          <h1 className="text-white text-2xl font-semibold tracking-tight">Axis</h1>
-          <p className="text-white/40 text-sm mt-1">by Mikey Glenn Coaching</p>
+          <h1 className="text-white text-2xl font-semibold tracking-tight">MG Coaching</h1>
         </div>
 
         {showBootstrap ? (

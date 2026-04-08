@@ -171,8 +171,8 @@ export default function AdminConsole() {
       {/* Sidebar */}
       <div className="w-56 shrink-0 border-r border-white/10 flex flex-col py-6 px-4">
         <div className="mb-8">
-          <div className="text-lg font-semibold tracking-tight">Axis Admin</div>
-          <div className="text-white/30 text-xs mt-0.5">Platform Console</div>
+          <div className="text-lg font-semibold tracking-tight">MG Coaching</div>
+          <div className="text-white/30 text-xs mt-0.5">Admin Console</div>
         </div>
         <nav className="space-y-1 flex-1">
           {navItems.map(item => (
