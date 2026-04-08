@@ -19,10 +19,13 @@ interface User {
   email: string;
   roles: string[];
   clientId: number | null;
+  irlClient: boolean | null;
   status: "login_created" | "active";
   lastLoginAt: string | null;
   createdAt: string;
 }
+
+type UserFilter = "all" | "online" | "irl";
 
 interface AthleteLink {
   clientId: number;
@@ -110,6 +113,12 @@ export default function AdminConsole() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editRoles, setEditRoles] = useState<string[]>([]);
   const [resetPw, setResetPw] = useState("");
+  const [userFilter, setUserFilter] = useState<UserFilter>("all");
+  const [userSearch, setUserSearch] = useState("");
+  const [userIrlExpandedId, setUserIrlExpandedId] = useState<number | null>(null);
+  const [userIrlBalances, setUserIrlBalances] = useState<Record<number, { balance: number; ledger: CreditLedgerEntry[] }>>({});
+  const [userIrlCreditDelta, setUserIrlCreditDelta] = useState("");
+  const [userIrlCreditNote, setUserIrlCreditNote] = useState("");
 
   // Athlete linking
   const [athletes, setAthletes] = useState<AthleteLink[]>([]);
@@ -293,6 +302,48 @@ export default function AdminConsole() {
       toast({ title: delta > 0 ? `+${delta} credits added` : `${delta} credits adjusted` });
       setIrlCreditDelta(""); setIrlCreditNote("");
       fetchIrlCredits(clientId);
+    } else {
+      const d = await r.json();
+      toast({ title: "Error", description: d.error, variant: "destructive" });
+    }
+  };
+
+  // ── IRL helpers for All Users section ────────────────────────────────────
+
+  const fetchUserIrlCredits = async (clientId: number) => {
+    const r = await fetch(`${BASE}/api/admin/clients/${clientId}/irl-credits`, { headers: authHeaders(token) });
+    if (r.ok) {
+      const d = await r.json();
+      setUserIrlBalances(prev => ({ ...prev, [clientId]: { balance: d.balance, ledger: d.ledger } }));
+    }
+  };
+
+  const toggleUserIrlClient = async (userId: number, clientId: number, irlClient: boolean) => {
+    const r = await fetch(`${BASE}/api/admin/clients/${clientId}/irl-settings`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ irlClient }),
+    });
+    if (r.ok) {
+      toast({ title: irlClient ? "IRL enabled" : "IRL disabled" });
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, irlClient } : u));
+    } else {
+      toast({ title: "Error updating IRL status", variant: "destructive" });
+    }
+  };
+
+  const addUserIrlCredits = async (clientId: number) => {
+    const delta = parseInt(userIrlCreditDelta, 10);
+    if (!delta || isNaN(delta)) { toast({ title: "Enter a valid credit amount", variant: "destructive" }); return; }
+    const r = await fetch(`${BASE}/api/admin/clients/${clientId}/irl-credits`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ delta, type: delta > 0 ? "manual_add" : "manual_adjustment", note: userIrlCreditNote || null }),
+    });
+    if (r.ok) {
+      toast({ title: delta > 0 ? `+${delta} credits added` : `${delta} credits adjusted` });
+      setUserIrlCreditDelta(""); setUserIrlCreditNote("");
+      fetchUserIrlCredits(clientId);
     } else {
       const d = await r.json();
       toast({ title: "Error", description: d.error, variant: "destructive" });
@@ -709,7 +760,7 @@ export default function AdminConsole() {
             <div>
               <div className="mb-6">
                 <h1 className="text-xl font-semibold">All Users</h1>
-                <p className="text-white/40 text-sm mt-1">Manage accounts, roles, and passwords</p>
+                <p className="text-white/40 text-sm mt-1">Manage accounts, roles, passwords, and IRL access</p>
               </div>
               <div className="bg-white/5 rounded-xl border border-white/10 p-5 mb-6">
                 <h2 className="text-sm font-medium mb-4">Create new user</h2>
@@ -736,17 +787,53 @@ export default function AdminConsole() {
                   Create user
                 </Button>
               </div>
+
+              {/* Search + filter */}
+              <div className="flex gap-3 mb-5">
+                <Input
+                  placeholder="Search by email…"
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 max-w-xs"
+                />
+                <div className="flex gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
+                  {(["all", "online", "irl"] as UserFilter[]).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setUserFilter(f)}
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${userFilter === f ? "bg-white/15 text-white" : "text-white/40 hover:text-white/60"}`}
+                    >
+                      {f === "all" ? "All" : f === "online" ? "Online only" : "IRL enabled"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {usersLoading ? (
                 <div className="text-white/30 text-sm">Loading…</div>
               ) : (
                 <div className="space-y-2">
-                  {users.map(u => (
+                  {users
+                    .filter(u => {
+                      const isAthlete = u.roles.includes("athlete");
+                      if (userFilter === "irl") return isAthlete && u.irlClient === true;
+                      if (userFilter === "online") return isAthlete && !u.irlClient;
+                      return true;
+                    })
+                    .filter(u => u.email.toLowerCase().includes(userSearch.toLowerCase()))
+                    .map(u => (
                     <div key={u.id} className="bg-white/5 rounded-xl border border-white/10 p-4">
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-sm">{u.email}</span>
                             {u.roles.map(r => <RoleBadge key={r} role={r} />)}
+                            {u.irlClient === true && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 font-medium">IRL</span>
+                            )}
+                            {u.irlClient === false && u.roles.includes("athlete") && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-white/5 text-white/30 font-medium">Online only</span>
+                            )}
                           </div>
                           <div className="text-white/30 text-xs mt-0.5">
                             {u.lastLoginAt ? `Last login ${new Date(u.lastLoginAt).toLocaleDateString()}` : "Never signed in"}
@@ -756,6 +843,19 @@ export default function AdminConsole() {
                           <span className={`text-xs px-2 py-1 rounded-md font-medium ${STATUS_COLOURS[u.status]}`}>
                             {STATUS_LABELS[u.status]}
                           </span>
+                          {u.clientId != null && (
+                            <Button
+                              size="sm" variant="outline"
+                              onClick={() => {
+                                const newId = userIrlExpandedId === u.id ? null : u.id;
+                                setUserIrlExpandedId(newId);
+                                if (newId && u.clientId) fetchUserIrlCredits(u.clientId);
+                              }}
+                              className={`border-white/20 text-white/70 hover:text-white hover:bg-white/10 text-xs ${u.irlClient ? "text-violet-300 border-violet-500/30" : ""}`}
+                            >
+                              IRL
+                            </Button>
+                          )}
                           <Button
                             size="sm" variant="outline"
                             onClick={() => { setEditingUser(editingUser?.id === u.id ? null : u); setEditRoles([...u.roles]); setResetPw(""); }}
@@ -765,6 +865,63 @@ export default function AdminConsole() {
                           </Button>
                         </div>
                       </div>
+
+                      {/* IRL settings panel */}
+                      {userIrlExpandedId === u.id && u.clientId != null && (
+                        <div className="mt-4 pt-4 border-t border-white/10 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-medium">IRL Client</div>
+                              <div className="text-white/40 text-xs mt-0.5">Allow this athlete to access IRL session booking</div>
+                            </div>
+                            <button
+                              onClick={() => toggleUserIrlClient(u.id, u.clientId!, !u.irlClient)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${u.irlClient ? "bg-violet-500" : "bg-white/10"}`}
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${u.irlClient ? "translate-x-6" : "translate-x-1"}`} />
+                            </button>
+                          </div>
+                          {u.irlClient && (
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm font-medium">IRL Credits</div>
+                                <div className="text-xl font-bold text-violet-300">
+                                  {userIrlBalances[u.clientId]?.balance ?? "—"}
+                                </div>
+                              </div>
+                              <div className="flex gap-2 mb-3">
+                                <Input
+                                  type="number"
+                                  placeholder="+5 or -1"
+                                  value={userIrlCreditDelta}
+                                  onChange={e => setUserIrlCreditDelta(e.target.value)}
+                                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-8 text-sm w-28"
+                                />
+                                <Input
+                                  placeholder="Note (optional)"
+                                  value={userIrlCreditNote}
+                                  onChange={e => setUserIrlCreditNote(e.target.value)}
+                                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-8 text-sm flex-1"
+                                />
+                                <Button size="sm" onClick={() => addUserIrlCredits(u.clientId!)} className="bg-white text-[#0a0a0a] hover:bg-white/90 text-xs h-8">
+                                  Add
+                                </Button>
+                              </div>
+                              {userIrlBalances[u.clientId]?.ledger?.length > 0 && (
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                  {userIrlBalances[u.clientId].ledger.map(e => (
+                                    <div key={e.id} className="flex items-center justify-between text-xs text-white/50">
+                                      <span>{e.note ?? e.type}</span>
+                                      <span className={e.delta > 0 ? "text-green-400" : "text-red-400"}>{e.delta > 0 ? `+${e.delta}` : e.delta}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {editingUser?.id === u.id && (
                         <div className="mt-4 pt-4 border-t border-white/10 space-y-4">
                           <div>

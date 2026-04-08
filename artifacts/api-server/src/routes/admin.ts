@@ -15,11 +15,14 @@ const adminOnly = requireRole("admin");
 // GET /api/admin/users
 router.get("/admin/users", adminOnly, async (_req, res): Promise<void> => {
   const users = await db.select().from(usersTable).orderBy(desc(usersTable.createdAt));
+  const clients = await db.select({ id: clientsTable.id, irlClient: clientsTable.irlClient }).from(clientsTable);
+  const clientMap = new Map(clients.map(c => [c.id, c.irlClient]));
   res.json(users.map(u => ({
     id: u.id,
     email: u.email,
     roles: u.roles,
     clientId: u.clientId,
+    irlClient: u.clientId != null ? (clientMap.get(u.clientId) ?? false) : null,
     lastLoginAt: u.lastLoginAt,
     createdAt: u.createdAt,
     status: !u.lastLoginAt ? "login_created" : "active",

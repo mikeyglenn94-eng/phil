@@ -1,0 +1,110 @@
+We need to restore the IRL client functionality in Admin after the recent rebuild, and we must preserve all existing bookable slots already created.
+
+Current issue:
+- the IRL client toggle / flag appears to have disappeared from the user management flow
+- I have already created a lot of bookable IRL slots
+- those existing slots must not be deleted, reset, or orphaned during this fix
+
+This is a restore-and-protect task, not a rebuild from scratch.
+
+Implement the following:
+
+1. Restore IRL client toggle / flag
+Bring back the IRL client setting on athlete accounts.
+
+This should exist in the admin user management flow and be editable from the user record.
+
+Required behaviour:
+- IRL client = true / false
+- if true, the athlete is eligible for IRL booking features
+- if false, the athlete should not see any IRL booking, IRL credits, or IRL session UI
+
+This needs to be visible again when editing a user, and ideally also visible at a glance in the user list.
+
+2. Add IRL status to user list
+In the All Users admin screen, add a visible indicator for IRL status on athlete accounts.
+
+Example:
+- IRL enabled
+- Online only
+
+This should make it obvious which athletes are set up for in-person sessions.
+
+Do not show this for admin-only users unless relevant.
+
+3. Restore the athlete list filter
+Make sure admin can filter athletes by:
+- All
+- Online only
+- IRL enabled
+
+If the current All Users page is the main user management area, add the filter there.
+If there is a separate athlete management screen, make sure the filter exists there too.
+
+4. Protect existing IRL slots
+Very important:
+do not delete, overwrite, reset, or disconnect any existing IRL availability slots that were already created.
+
+Requirements:
+- keep all existing slots in the database
+- keep their dates, times, booking status, and notes intact
+- do not regenerate the slot table from scratch
+- do not run a migration that drops or recreates slot data
+- do not break the link between slots and future bookings
+
+This fix must be backwards-compatible with the existing slot data.
+
+5. Preserve slot relationships
+Ensure the restored IRL client flag works with the current availability system without affecting existing slot records.
+
+Meaning:
+- existing slots should remain bookable
+- restoring the IRL toggle should only affect which athletes can see or use IRL booking
+- existing slot inventory must remain unchanged
+
+6. Data migration safety
+If a database migration is needed, it must be additive and safe.
+
+Rules:
+- do not drop IRL slot tables
+- do not truncate IRL slot records
+- do not wipe booking records
+- do not remove credit ledgers
+- only add back the missing IRL eligibility field or reconnect it if the UI lost access to it
+
+7. Admin editing flow
+When I click Edit on an athlete user, I need to be able to:
+- change email if needed
+- view role(s)
+- toggle IRL client on/off
+- manage IRL eligibility without affecting unrelated booking data
+
+If possible, also show:
+- current IRL credit balance
+- quick link to IRL bookings / credits for that athlete
+
+8. Behaviour after restore
+Once restored:
+- IRL-enabled athletes should see IRL booking features
+- online-only athletes should not
+- existing open slots should still appear in the IRL Sessions area
+- existing bookings and availability should remain untouched
+
+9. Sanity checks
+Before shipping this fix, verify:
+- existing IRL slots still exist
+- existing slots still appear in the admin IRL Sessions screen
+- IRL-enabled athletes can still access booking
+- online-only athletes cannot
+- no availability data was lost in the process
+
+10. Priority
+Priority order for this fix:
+1. preserve all existing slot and booking data
+2. restore IRL client toggle
+3. restore IRL visibility/filtering in admin
+4. reconnect athlete eligibility to the existing booking flow
+
+Important:
+This is not permission to refactor the IRL booking system from scratch.
+This is a targeted fix to restore the missing IRL client control while preserving the existing bookable slot inventory exactly as it is.
