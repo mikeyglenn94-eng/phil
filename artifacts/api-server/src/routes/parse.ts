@@ -1238,6 +1238,67 @@ function wodBuildNotes(block: Record<string, unknown>): string {
   return loadDisplay ? `${display} ${unit} (${loadDisplay})` : `${display} ${unit}`;
 }
 
+/** Build canonical steps from a flat blocks array */
+function wodBlocksToSteps(blocks: Record<string, unknown>[], blockIndexOffset = 0) {
+  return blocks.map((block, idx) => {
+    const raw = wodExtractRawAmount(block);
+    const rawUnit = block.unit as string | undefined;
+    const targetType = wodNormaliseUnit(rawUnit);
+    const unit = wodResolveUnit(rawUnit);
+    const movementRaw = (block.movement as string | undefined) ?? "";
+    const movName = movementRaw.charAt(0).toUpperCase() + movementRaw.slice(1);
+    const loadDisplay = block.weight as string | undefined;
+    const minuteLabel = block.minuteLabel as string | undefined;
+    const target: Record<string, unknown> = { type: targetType, unit };
+    if (raw) {
+      if ("range" in raw) {
+        target.valueRange = raw.range;
+        target.targetText = `${raw.range[0]}–${raw.range[1]} ${unit}`;
+        target.value = null;
+      } else {
+        target.value = raw.single;
+      }
+    }
+    return {
+      id: `step-${blockIndexOffset}-${idx}`,
+      movement: { name: movName },
+      target,
+      ...(loadDisplay ? { load: { display: loadDisplay } } : {}),
+      ...(minuteLabel ? { label: minuteLabel } : {}),
+    };
+  });
+}
+
+/** Build canonical WOD from multi-segment AI response */
+function wodBuildFromSegments(
+  format: string,
+  segments: Array<{ segmentType?: string; label?: string; rounds?: number; restNote?: string; blocks: Record<string, unknown>[] }>,
+  durationMinutes?: number
+) {
+  const fmtMap: Record<string, string> = {
+    emom: "emom", amrap: "amrap", for_time: "for_time", rounds_for_time: "for_time",
+    chipper: "chipper", interval: "intervals", intervals: "intervals",
+    fixed: "for_time", rounds: "for_time",
+  };
+  const canonicalFormat = fmtMap[(format ?? "").toLowerCase()] ?? "for_time";
+  const canonicalBlocks = segments.map((seg, bi) => {
+    const steps = wodBlocksToSteps(seg.blocks ?? [], bi);
+    const segType = fmtMap[(seg.segmentType ?? "fixed").toLowerCase()] ?? "for_time";
+    return {
+      id: `block-${bi}`,
+      type: segType,
+      steps,
+      ...(seg.label ? { label: seg.label } : {}),
+      ...(seg.rounds != null ? { rounds: seg.rounds } : {}),
+    };
+  });
+  return {
+    format: canonicalFormat,
+    blocks: canonicalBlocks,
+    ...(durationMinutes != null ? { totalDurationSeconds: durationMinutes * 60 } : {}),
+  };
+}
+
 /** Build a canonical WodWorkout object from raw AI blocks */
 function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], durationMinutes?: number, rounds?: number) {
   const fmtMap: Record<string, string> = {
@@ -1331,6 +1392,33 @@ EXTRA FIELDS (include when relevant):
 - "repeatNote": string — plain English repeat instruction, e.g. "Repeat for 7 rounds".
 - "restNote": string — rest instruction if applicable, e.g. "Rest the remainder of each minute", "60s rest between rounds".
 
+MULTI-SEGMENT WODs — use "segments" instead of "blocks" when:
+- The description has a buy-in / cash-out / buy-out pattern
+- There are clearly distinct phases (e.g. fixed opener + repeated block + fixed closer)
+
+Segment types: "fixed", "rounds", "amrap", "emom", "interval"
+Semantic labels: "Buy-in", "Cash-out", "Buy-out", "Finisher"
+Use plain label for rounds: "4 rounds", "6 rounds"
+Use format + duration for timed blocks: "AMRAP 8 min", "EMOM 10 min"
+
+Multi-segment example:
+{
+  "format": "for_time", "name": "Buy-in · Grind · Cash-out", "duration": 20,
+  "segments": [
+    { "segmentType": "fixed", "label": "Buy-in", "blocks": [{ "movement": "Bike Erg", "amount": 25, "unit": "cal" }] },
+    { "segmentType": "rounds", "label": "4 rounds", "rounds": 4, "restNote": "Rest 30s between rounds",
+      "blocks": [
+        { "movement": "Step-Ups", "amount": 16, "unit": "reps" },
+        { "movement": "Press-Ups", "amount": 12, "unit": "reps" },
+        { "movement": "Air Squats", "amount": 20, "unit": "reps" }
+      ]
+    },
+    { "segmentType": "fixed", "label": "Cash-out", "blocks": [{ "movement": "Bike Erg", "amount": 15, "unit": "cal" }] }
+  ]
+}
+
+For simple single-phase WODs, continue to use flat "blocks" as before.
+
 Result type per format:
   amrap → "rounds_reps" | for_time → "finish_time" | emom → "completed" | rounds_for_time → "finish_time" | chipper → "finish_time" | interval → "total_output"
 
@@ -1383,14 +1471,22 @@ Response format — EMOM example:
     const now = Date.now();
     const sessionOptions = options.map((opt: any, oi: number) => {
       const rawBlocks: Record<string, unknown>[] = opt.blocks ?? [];
+      const rawSegments: any[] = opt.segments ?? [];
       const durationMin: number | undefined = typeof opt.duration === "number" ? opt.duration : undefined;
       const rounds: number | undefined = typeof opt.rounds === "number" ? opt.rounds : undefined;
 
-      // Build canonical wod structure (new schema) — pass rounds for EMOM
-      const wodCanonical = wodBuildCanonical(opt.format ?? "amrap", rawBlocks, durationMin, rounds);
+      // Multi-segment or single-block canonical WOD
+      const wodCanonical = rawSegments.length > 0
+        ? wodBuildFromSegments(opt.format ?? "for_time", rawSegments, durationMin)
+        : wodBuildCanonical(opt.format ?? "amrap", rawBlocks, durationMin, rounds);
+
+      // All raw blocks for legacy exercises array
+      const allRawBlocks: Record<string, unknown>[] = rawSegments.length > 0
+        ? rawSegments.flatMap((s: any) => s.blocks ?? [])
+        : rawBlocks;
 
       // Build legacy exercises array for backward compat — with safe notes (never "undefined ...")
-      const exercises = rawBlocks.map((block, idx) => {
+      const exercises = allRawBlocks.map((block, idx) => {
         const notes = wodBuildNotes(block);
         const movementRaw = (block.movement as string | undefined) ?? "";
         const movName = movementRaw.charAt(0).toUpperCase() + movementRaw.slice(1);

@@ -2,8 +2,8 @@
  * Shared Workout Preview / Inline Editor
  * Used in: creation flow (client-area.tsx) + edit-saved-workout (client-session.tsx)
  *
- * Design: each row is a single-line readable text. Tap to edit inline.
- * Progressive disclosure: advanced fields hidden behind "···" expand.
+ * Design: inline editable rows feel like editing a note, not a form.
+ * WOD multi-segment: buy-in / rounds / cash-out render as labelled groups.
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -12,15 +12,22 @@ import { GripVertical, X, Plus, MoreHorizontal, ChevronDown } from "lucide-react
 // ── Types ──────────────────────────────────────────────────────────────────────
 export interface EditableRow {
   id: string;
-  label: string;    // "Minute 1", "Warm-up", etc.
-  name: string;     // movement / exercise / segment description
-  // strength
+  label: string;
+  name: string;
   sets: string; reps: string; weight: string; rpe: string; rest: string; tempo: string;
-  // wod / run
   value: string;    // can be "35" or "12-18" for ranges
   unit: string;
   load: string;
   notes: string;
+}
+
+/** A WOD segment — e.g. buy-in, 4 rounds block, cash-out */
+export interface WodSegment {
+  id: string;
+  type: "fixed" | "rounds" | "amrap" | "emom" | "interval" | "chipper" | "for_time";
+  label: string;   // "Buy-in", "4 rounds", "Cash-out", "AMRAP 8 min", etc.
+  rounds: string;
+  rows: EditableRow[];
 }
 
 export interface EditableSession {
@@ -29,7 +36,8 @@ export interface EditableSession {
   format: string;
   summary: string;
   durationMinutes: string;
-  rows: EditableRow[];
+  rows: EditableRow[];           // flat — used for strength/run, and as fallback
+  segments?: WodSegment[];       // WOD multi-segment structure (buy-in, rounds, cash-out…)
   repeatNote: string;
   restNote: string;
   rounds: string;
@@ -46,7 +54,7 @@ export function blankRow(id: string, label = ""): EditableRow {
   return { id, label, name: "", sets: "", reps: "", weight: "", rpe: "", rest: "", tempo: "", value: "", unit: "reps", load: "", notes: "" };
 }
 
-// ── Converters: session object → EditableSession ───────────────────────────────
+// ── Converters: session → EditableSession ─────────────────────────────────────
 export function parseStrengthToEditable(session: any): EditableSession {
   const rows: EditableRow[] = (session.exercises ?? []).map((ex: any, i: number) => ({
     id: ex.id || `row-${i}`,
@@ -71,27 +79,68 @@ export function parseStrengthToEditable(session: any): EditableSession {
   };
 }
 
+function stepToRow(step: any, stepIndex: number, segIndex = 0): EditableRow {
+  const rawVal = step.target?.targetText
+    ? step.target.targetText.replace(/[^\d\-–.]/g, "").replace("–", "-")
+    : step.target?.valueRange
+      ? `${step.target.valueRange[0]}-${step.target.valueRange[1]}`
+      : step.target?.value != null ? String(step.target.value) : "";
+  return {
+    id: step.id ?? `row-${segIndex}-${stepIndex}`,
+    label: step.label ?? "",
+    name: step.movement?.name ?? "",
+    sets: "", reps: "", weight: "", rpe: "", rest: "", tempo: "",
+    value: rawVal,
+    unit: step.target?.unit ?? "reps",
+    load: step.load?.display ?? "",
+    notes: "",
+  };
+}
+
 export function parseWodToEditable(opt: any): EditableSession {
   const canonical = opt.wod;
+  const blocks: any[] = canonical?.blocks ?? [];
+  const dur = canonical?.totalDurationSeconds
+    ? String(Math.round(canonical.totalDurationSeconds / 60))
+    : "";
+  const fmtLabel = FORMAT_LABELS[opt.format] ?? opt.format?.toUpperCase() ?? "WOD";
+
+  // Multi-segment: more than 1 block, or any block has a label
+  const isMultiSegment = blocks.length > 1 || blocks.some((b: any) => b.label);
+
+  if (isMultiSegment) {
+    const segments: WodSegment[] = blocks.map((block: any, bi: number) => {
+      const rows = (block.steps ?? []).map((step: any, si: number) => stepToRow(step, si, bi));
+      return {
+        id: block.id || `seg-${bi}`,
+        type: block.type || "fixed",
+        label: block.label || (block.rounds ? `${block.rounds} rounds` : ""),
+        rounds: block.rounds != null ? String(block.rounds) : "",
+        rows,
+      };
+    });
+    const allRows = segments.flatMap(s => s.rows);
+    return {
+      title: opt.name || fmtLabel,
+      type: "wod",
+      format: opt.format ?? "for_time",
+      summary: dur ? `${dur} min ${fmtLabel}` : fmtLabel,
+      durationMinutes: dur,
+      rows: allRows,
+      segments,
+      repeatNote: opt.repeatNote ?? "",
+      restNote: opt.restNote ?? "",
+      rounds: "",
+      _raw: opt,
+    };
+  }
+
+  // Single block — flat rows
   const rows: EditableRow[] = [];
-  if (canonical?.blocks?.length) {
-    for (const block of canonical.blocks) {
+  if (blocks.length) {
+    for (const block of blocks) {
       for (const step of (block.steps ?? [])) {
-        const rawVal = step.target?.targetText
-          ? step.target.targetText.replace(/[^\d\-–.]/g, "").replace("–", "-")
-          : step.target?.valueRange
-            ? `${step.target.valueRange[0]}-${step.target.valueRange[1]}`
-            : step.target?.value != null ? String(step.target.value) : "";
-        rows.push({
-          id: step.id ?? `row-${rows.length}`,
-          label: step.label ?? "",
-          name: step.movement?.name ?? "",
-          sets: "", reps: "", weight: "", rpe: "", rest: "", tempo: "",
-          value: rawVal,
-          unit: step.target?.unit ?? "reps",
-          load: step.load?.display ?? "",
-          notes: "",
-        });
+        rows.push(stepToRow(step, rows.length));
       }
     }
   } else {
@@ -99,9 +148,7 @@ export function parseWodToEditable(opt: any): EditableSession {
       rows.push({ ...blankRow(ex.id || `row-${rows.length}`), name: ex.name ?? "" });
     }
   }
-  const dur = canonical?.totalDurationSeconds ? String(Math.round(canonical.totalDurationSeconds / 60)) : "";
-  const fmtLabel = FORMAT_LABELS[opt.format] ?? opt.format?.toUpperCase() ?? "WOD";
-  const block0 = canonical?.blocks?.[0];
+  const block0 = blocks?.[0];
   return {
     title: opt.name || fmtLabel,
     type: "wod",
@@ -150,6 +197,32 @@ export function sessionToEditable(session: any): EditableSession {
 }
 
 // ── Converter: EditableSession → canonical save object ─────────────────────────
+function buildWodStep(r: EditableRow, idx: number, segIdx = 0) {
+  const rawVal = r.value.trim();
+  const rangeMatch = rawVal.match(/^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/);
+  const numVal = rangeMatch ? null : (rawVal !== "" ? Number(rawVal) : undefined);
+  const valueRange: [number, number] | undefined = rangeMatch
+    ? [Number(rangeMatch[1]), Number(rangeMatch[2])]
+    : undefined;
+  const targetText = rangeMatch ? `${rangeMatch[1]}–${rangeMatch[2]} ${r.unit}` : undefined;
+  const targetType = r.unit === "seconds" ? "seconds"
+    : (r.unit === "m" || r.unit === "km") ? "distance"
+    : r.unit === "cal" ? "calories" : "reps";
+  return {
+    id: r.id || `step-${segIdx}-${idx}`,
+    ...(r.label ? { label: r.label } : {}),
+    movement: { name: r.name },
+    target: {
+      type: targetType,
+      ...(numVal != null ? { value: numVal } : {}),
+      ...(valueRange ? { valueRange } : {}),
+      ...(targetText ? { targetText } : {}),
+      unit: r.unit,
+    },
+    ...(r.load ? { load: { display: r.load } } : {}),
+  };
+}
+
 export function editableSessionToSession(es: EditableSession): any {
   const now = Date.now();
 
@@ -192,41 +265,27 @@ export function editableSessionToSession(es: EditableSession): any {
     };
   }
 
-  // WOD
+  // WOD — multi-segment or flat
   const durationMin = es.durationMinutes ? Number(es.durationMinutes) : undefined;
-  const rounds = es.rounds ? Number(es.rounds) : undefined;
-  const wodBlocks = [{
-    id: "block-0", type: es.format,
-    durationSeconds: durationMin != null ? durationMin * 60 : undefined,
-    ...(rounds != null ? { rounds } : {}),
-    steps: es.rows.map((r, idx) => {
-      const rawVal = r.value.trim();
-      const rangeMatch = rawVal.match(/^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/);
-      const numVal = rangeMatch ? null : (rawVal !== "" ? Number(rawVal) : undefined);
-      const valueRange: [number, number] | undefined = rangeMatch
-        ? [Number(rangeMatch[1]), Number(rangeMatch[2])]
-        : undefined;
-      const targetText = rangeMatch ? `${rangeMatch[1]}–${rangeMatch[2]} ${r.unit}` : undefined;
-      const targetType = r.unit === "seconds" ? "seconds"
-        : (r.unit === "m" || r.unit === "km") ? "distance"
-        : r.unit === "cal" ? "calories" : "reps";
-      return {
-        id: r.id || `step-${idx}`,
-        ...(r.label ? { label: r.label } : {}),
-        movement: { name: r.name },
-        target: {
-          type: targetType,
-          ...(numVal != null ? { value: numVal } : {}),
-          ...(valueRange ? { valueRange } : {}),
-          ...(targetText ? { targetText } : {}),
-          unit: r.unit,
-        },
-        ...(r.load ? { load: { display: r.load } } : {}),
-      };
-    }),
-  }];
 
-  const exercises = es.rows.map((r, idx) => {
+  const wodBlocks = es.segments?.length
+    ? es.segments.map((seg, si) => ({
+        id: seg.id || `block-${si}`,
+        type: seg.type || "for_time",
+        ...(seg.label ? { label: seg.label } : {}),
+        ...(seg.rounds ? { rounds: Number(seg.rounds) } : {}),
+        steps: seg.rows.map((r, idx) => buildWodStep(r, idx, si)),
+      }))
+    : [{
+        id: "block-0",
+        type: es.format,
+        steps: es.rows.map((r, idx) => buildWodStep(r, idx)),
+        ...(durationMin != null ? { durationSeconds: durationMin * 60 } : {}),
+        ...(es.rounds ? { rounds: Number(es.rounds) } : {}),
+      }];
+
+  const allRows = es.segments?.length ? es.segments.flatMap(s => s.rows) : es.rows;
+  const exercises = allRows.map((r, idx) => {
     const notes = r.value ? (r.load ? `${r.value} ${r.unit} (${r.load})` : `${r.value} ${r.unit}`) : (r.load || "");
     return {
       id: r.id || `ex-${now}-${idx}`,
@@ -255,7 +314,6 @@ export function editableSessionToSession(es: EditableSession): any {
 
 // ── Row text helpers ───────────────────────────────────────────────────────────
 
-/** Render a row as a single human-readable line */
 function rowToText(row: EditableRow, type: EditableSession["type"]): string {
   if (type === "wod") {
     const labelPart = row.label ? `${row.label} · ` : "";
@@ -267,14 +325,11 @@ function rowToText(row: EditableRow, type: EditableSession["type"]): string {
   if (type === "strength") {
     const scheme = row.sets && row.reps
       ? ` · ${row.sets}×${row.reps}`
-      : row.reps
-      ? ` · ${row.reps} reps`
-      : "";
+      : row.reps ? ` · ${row.reps} reps` : "";
     const wt = row.weight ? ` @ ${row.weight}` : "";
     const rpe = row.rpe ? ` RPE ${row.rpe}` : "";
     return `${row.name}${scheme}${wt}${rpe}`.trim();
   }
-  // run
   const labelPart = row.label ? `${row.label} · ` : "";
   const repsPart = row.reps ? `${row.reps} × ` : "";
   const distPart = row.value ? `${row.value} · ` : "";
@@ -282,21 +337,15 @@ function rowToText(row: EditableRow, type: EditableSession["type"]): string {
   return `${labelPart}${repsPart}${distPart}${row.name}${notesPart}`.trim();
 }
 
-/** Parse a natural-language line back to row fields */
 function textToRow(text: string, type: EditableSession["type"], existing: EditableRow): EditableRow {
   const t = text.trim();
   if (!t) return { ...existing, name: "" };
 
   if (type === "wod") {
-    // Extract load after last " @ "
     let rest = t;
     let load = existing.load;
     const atIdx = t.lastIndexOf(" @ ");
-    if (atIdx !== -1) {
-      load = t.slice(atIdx + 3).trim();
-      rest = t.slice(0, atIdx).trim();
-    }
-    // Split on "·" or "•"
+    if (atIdx !== -1) { load = t.slice(atIdx + 3).trim(); rest = t.slice(0, atIdx).trim(); }
     const parts = rest.split(/\s*[·•]\s*/).map(s => s.trim()).filter(Boolean);
     if (parts.length >= 3) {
       const amountStr = parts[parts.length - 1];
@@ -311,29 +360,22 @@ function textToRow(text: string, type: EditableSession["type"], existing: Editab
       };
     } else if (parts.length === 2) {
       const am = parts[1].match(/^([\d\-–]+(?:\.\d+)?)\s*(.*)$/);
-      if (am) {
-        return { ...existing, name: parts[0], value: am[1].replace("–", "-"), unit: am[2]?.trim() || existing.unit, load };
-      }
-      // label · movement (no amount detected)
+      if (am) return { ...existing, name: parts[0], value: am[1].replace("–", "-"), unit: am[2]?.trim() || existing.unit, load };
       return { ...existing, label: parts[0], name: parts[1], load };
     }
     return { ...existing, name: rest, load };
   }
 
   if (type === "strength") {
-    // Extract RPE suffix
     const rpeM = t.match(/\s+RPE\s+([\d.]+)\s*$/i);
     const rpe = rpeM ? rpeM[1] : existing.rpe;
     const withoutRpe = rpeM ? t.replace(/\s+RPE\s+[\d.]+\s*$/i, "").trim() : t;
-    // Extract weight after "@"
     const wtM = withoutRpe.match(/\s*@\s*([\w/.\s]+)$/);
     const weight = wtM ? wtM[1].trim() : existing.weight;
     const withoutWt = wtM ? withoutRpe.slice(0, withoutRpe.lastIndexOf("@")).trim() : withoutRpe;
-    // Split on "·"
     const parts = withoutWt.split(/\s*[·•]\s*/).map(s => s.trim()).filter(Boolean);
     const name = parts[0] || "";
-    let sets = existing.sets;
-    let reps = existing.reps;
+    let sets = existing.sets; let reps = existing.reps;
     if (parts[1]) {
       const schemeM = parts[1].match(/^(\d+)\s*[×xX]\s*(\S+)$/);
       if (schemeM) { sets = schemeM[1]; reps = schemeM[2]; }
@@ -342,29 +384,23 @@ function textToRow(text: string, type: EditableSession["type"], existing: Editab
     return { ...existing, name, sets, reps, weight, rpe };
   }
 
-  // run
   const parts = t.split(/\s*[·•]\s*/).map(s => s.trim()).filter(Boolean);
   const repsM = parts[0]?.match(/^(\d+)\s*[×x]\s*$/);
   if (repsM && parts.length > 1) {
     const remainder = parts.slice(1).join(" · ");
     const distM = remainder.match(/^([\d.]+\s*(?:km|m|mi)?)\s*·?\s*(.*)$/i);
-    if (distM) {
-      return { ...existing, reps: repsM[1], value: distM[1].trim(), name: distM[2].trim() || existing.name };
-    }
+    if (distM) return { ...existing, reps: repsM[1], value: distM[1].trim(), name: distM[2].trim() || existing.name };
     return { ...existing, reps: repsM[1], name: remainder };
   }
-  // value · description  or  just description
   if (parts.length >= 2) {
     const distM = parts[0].match(/^([\d.]+\s*(?:km|m|mi)?)$/i);
-    if (distM) {
-      return { ...existing, value: distM[1].trim(), name: parts.slice(1).join(" · ") };
-    }
+    if (distM) return { ...existing, value: distM[1].trim(), name: parts.slice(1).join(" · ") };
   }
   return { ...existing, name: parts.join(" · ") };
 }
 
 function rowPlaceholder(type: EditableSession["type"], index: number): string {
-  if (type === "wod") return index === 0 ? "e.g. Min 1 · Bike Erg · 12 cal" : "Movement · amount";
+  if (type === "wod") return index === 0 ? "e.g. Bike Erg · 12 cal" : "Movement · amount";
   if (type === "strength") return "e.g. Back Squat · 5×5 @ 100kg";
   return "e.g. 5 × 1 km · tempo";
 }
@@ -381,25 +417,23 @@ interface PreviewRowProps {
   onEditChange: (v: string) => void;
   onCommit: () => void;
   onDelete: () => void;
-  onAddBelow: () => void;
   onToggleExpand: () => void;
   onChangeField: (patch: Partial<EditableRow>) => void;
 }
 
 function PreviewRow({
   row, type, isActive, isExpanded, editingText, index,
-  onActivate, onEditChange, onCommit, onDelete, onAddBelow, onToggleExpand, onChangeField,
+  onActivate, onEditChange, onCommit, onDelete, onToggleExpand, onChangeField,
 }: PreviewRowProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isActive) {
-      // Small delay so the input is mounted
       requestAnimationFrame(() => {
-        inputRef.current?.focus();
-        // Place cursor at end
-        const len = inputRef.current?.value.length ?? 0;
-        inputRef.current?.setSelectionRange(len, len);
+        if (!inputRef.current) return;
+        inputRef.current.focus();
+        const len = inputRef.current.value.length;
+        inputRef.current.setSelectionRange(len, len);
       });
     }
   }, [isActive]);
@@ -410,12 +444,9 @@ function PreviewRow({
   return (
     <div className="group/row">
       <div className="flex items-center gap-1 min-h-[44px]">
-        {/* Drag handle */}
         <span className="text-muted-foreground/15 group-hover/row:text-muted-foreground/35 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none transition-colors">
           <GripVertical className="w-3.5 h-3.5" />
         </span>
-
-        {/* Main editable area */}
         <div className="flex-1 min-w-0 py-0.5">
           {isActive ? (
             <input
@@ -433,9 +464,7 @@ function PreviewRow({
             <button
               type="button"
               className={`w-full text-left text-sm leading-snug py-1 transition-colors ${
-                hasContent
-                  ? "text-foreground hover:text-foreground/80"
-                  : "text-muted-foreground/30 italic"
+                hasContent ? "text-foreground hover:text-foreground/80" : "text-muted-foreground/30 italic"
               }`}
               onClick={onActivate}
             >
@@ -443,25 +472,19 @@ function PreviewRow({
             </button>
           )}
         </div>
-
-        {/* Advanced expand */}
         <button
           type="button"
           className={`shrink-0 p-1.5 rounded-md transition-colors ${
-            isExpanded
-              ? "text-primary bg-primary/10"
-              : "text-muted-foreground/20 hover:text-muted-foreground/50 group-hover/row:text-muted-foreground/40"
+            isExpanded ? "text-primary bg-primary/10" : "text-muted-foreground/15 hover:text-muted-foreground/50 group-hover/row:text-muted-foreground/40"
           }`}
           onClick={onToggleExpand}
           title="Advanced options"
         >
           <MoreHorizontal className="w-3.5 h-3.5" />
         </button>
-
-        {/* Delete */}
         <button
           type="button"
-          className="shrink-0 p-1.5 rounded-md text-muted-foreground/20 hover:text-destructive group-hover/row:text-muted-foreground/40 transition-colors"
+          className="shrink-0 p-1.5 rounded-md text-muted-foreground/15 hover:text-destructive group-hover/row:text-muted-foreground/40 transition-colors"
           onClick={onDelete}
           title="Remove line"
         >
@@ -469,27 +492,19 @@ function PreviewRow({
         </button>
       </div>
 
-      {/* Advanced panel — progressive disclosure */}
       {isExpanded && (
         <div className="ml-5 mb-1 mt-0.5 grid grid-cols-2 gap-x-4 gap-y-2 px-3 py-2.5 rounded-xl bg-muted/40 text-xs">
           {type === "wod" && (
             <>
               <label className="flex items-center gap-2 col-span-2 sm:col-span-1">
                 <span className="text-muted-foreground/60 w-8 shrink-0">Load</span>
-                <input
-                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
-                  value={row.load}
-                  onChange={e => onChangeField({ load: e.target.value })}
-                  placeholder="e.g. 20kg"
-                />
+                <input className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                  value={row.load} onChange={e => onChangeField({ load: e.target.value })} placeholder="e.g. 20kg" />
               </label>
               <label className="flex items-center gap-2 col-span-2 sm:col-span-1">
                 <span className="text-muted-foreground/60 w-8 shrink-0">Unit</span>
-                <select
-                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 cursor-pointer text-foreground font-medium"
-                  value={row.unit}
-                  onChange={e => onChangeField({ unit: e.target.value })}
-                >
+                <select className="flex-1 bg-transparent border-none outline-none focus:ring-0 cursor-pointer text-foreground font-medium"
+                  value={row.unit} onChange={e => onChangeField({ unit: e.target.value })}>
                   <option value="reps">reps</option>
                   <option value="seconds">seconds</option>
                   <option value="m">metres</option>
@@ -503,52 +518,32 @@ function PreviewRow({
             <>
               <label className="flex items-center gap-2">
                 <span className="text-muted-foreground/60 w-8 shrink-0">RPE</span>
-                <input
-                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
-                  value={row.rpe}
-                  onChange={e => onChangeField({ rpe: e.target.value })}
-                  placeholder="e.g. 8"
-                />
+                <input className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                  value={row.rpe} onChange={e => onChangeField({ rpe: e.target.value })} placeholder="e.g. 8" />
               </label>
               <label className="flex items-center gap-2">
                 <span className="text-muted-foreground/60 w-8 shrink-0">Rest</span>
-                <input
-                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
-                  value={row.rest}
-                  onChange={e => onChangeField({ rest: e.target.value })}
-                  placeholder="e.g. 90s"
-                />
+                <input className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                  value={row.rest} onChange={e => onChangeField({ rest: e.target.value })} placeholder="e.g. 90s" />
               </label>
               <label className="flex items-center gap-2">
                 <span className="text-muted-foreground/60 w-8 shrink-0">Tempo</span>
-                <input
-                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
-                  value={row.tempo}
-                  onChange={e => onChangeField({ tempo: e.target.value })}
-                  placeholder="e.g. 3-1-1"
-                />
+                <input className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                  value={row.tempo} onChange={e => onChangeField({ tempo: e.target.value })} placeholder="e.g. 3-1-1" />
               </label>
             </>
           )}
           {type === "run" && (
             <label className="flex items-center gap-2">
               <span className="text-muted-foreground/60 w-8 shrink-0">Rest</span>
-              <input
-                className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
-                value={row.rest}
-                onChange={e => onChangeField({ rest: e.target.value })}
-                placeholder="e.g. 90s jog"
-              />
+              <input className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                value={row.rest} onChange={e => onChangeField({ rest: e.target.value })} placeholder="e.g. 90s jog" />
             </label>
           )}
           <label className="flex items-center gap-2 col-span-2">
             <span className="text-muted-foreground/60 w-8 shrink-0">Note</span>
-            <input
-              className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
-              value={row.notes}
-              onChange={e => onChangeField({ notes: e.target.value })}
-              placeholder="Optional coaching note…"
-            />
+            <input className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+              value={row.notes} onChange={e => onChangeField({ notes: e.target.value })} placeholder="Optional coaching note…" />
           </label>
         </div>
       )}
@@ -556,11 +551,122 @@ function PreviewRow({
   );
 }
 
-// ── WorkoutPreviewEditorCard component ─────────────────────────────────────────
+// ── WodSegmentBlock — renders one labelled WOD segment ─────────────────────────
+interface WodSegmentBlockProps {
+  segment: WodSegment;
+  segIdx: number;
+  activeRowId: string | null;
+  editingText: string;
+  expandedRowId: string | null;
+  isFirst: boolean;
+  isLast: boolean;
+  onActivateRow: (rowId: string, text: string) => void;
+  onEditChange: (v: string) => void;
+  onCommitRow: (segIdx: number, rowIdx: number) => void;
+  onDeleteRow: (segIdx: number, rowIdx: number) => void;
+  onAddRow: (segIdx: number) => void;
+  onToggleExpand: (rowId: string) => void;
+  onChangeField: (segIdx: number, rowIdx: number, patch: Partial<EditableRow>) => void;
+  onLabelChange: (segIdx: number, label: string) => void;
+  onDeleteSegment: (segIdx: number) => void;
+}
+
+/** Colour hint for well-known labels */
+function segmentLabelStyle(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes("buy-in") || l.includes("buy in")) return "text-primary";
+  if (l.includes("cash-out") || l.includes("cash out") || l.includes("buy-out") || l.includes("buy out") || l.includes("finisher")) return "text-violet-600 dark:text-violet-400";
+  return "text-muted-foreground";
+}
+
+function WodSegmentBlock({
+  segment, segIdx, activeRowId, editingText, expandedRowId,
+  isFirst, isLast,
+  onActivateRow, onEditChange, onCommitRow, onDeleteRow, onAddRow,
+  onToggleExpand, onChangeField, onLabelChange, onDeleteSegment,
+}: WodSegmentBlockProps) {
+  const [editingLabel, setEditingLabel] = useState(false);
+  const labelRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingLabel) {
+      requestAnimationFrame(() => labelRef.current?.focus());
+    }
+  }, [editingLabel]);
+
+  const hasLabel = segment.label.trim() !== "";
+  const labelStyle = segmentLabelStyle(segment.label);
+
+  return (
+    <div className={`${!isFirst ? "mt-3 pt-3 border-t border-border/30" : ""}`}>
+      {/* Segment header */}
+      <div className="flex items-center gap-1.5 mb-1 group/seg">
+        {editingLabel ? (
+          <input
+            ref={labelRef}
+            className="flex-1 text-xs font-semibold bg-transparent border-none outline-none focus:ring-0 text-foreground"
+            value={segment.label}
+            onChange={e => onLabelChange(segIdx, e.target.value)}
+            onBlur={() => setEditingLabel(false)}
+            onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setEditingLabel(false); }}
+          />
+        ) : (
+          <button
+            type="button"
+            className={`text-xs font-semibold flex-1 text-left transition-colors hover:opacity-80 ${hasLabel ? labelStyle : "text-muted-foreground/30 italic"}`}
+            onClick={() => setEditingLabel(true)}
+          >
+            {hasLabel ? segment.label : "Untitled segment"}
+          </button>
+        )}
+        {segment.rounds && (
+          <span className="text-[10px] text-muted-foreground/50 font-mono shrink-0">×{segment.rounds}</span>
+        )}
+        <button
+          type="button"
+          className="shrink-0 p-1 text-muted-foreground/15 hover:text-destructive opacity-0 group-hover/seg:opacity-100 transition-all"
+          onClick={() => onDeleteSegment(segIdx)}
+          title="Remove segment"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Rows */}
+      {segment.rows.map((row, ri) => (
+        <PreviewRow
+          key={row.id}
+          row={row}
+          type="wod"
+          index={ri}
+          isActive={activeRowId === row.id}
+          isExpanded={expandedRowId === row.id}
+          editingText={activeRowId === row.id ? editingText : ""}
+          onActivate={() => onActivateRow(row.id, rowToText(row, "wod"))}
+          onEditChange={onEditChange}
+          onCommit={() => onCommitRow(segIdx, ri)}
+          onDelete={() => onDeleteRow(segIdx, ri)}
+          onToggleExpand={() => onToggleExpand(row.id)}
+          onChangeField={patch => onChangeField(segIdx, ri, patch)}
+        />
+      ))}
+
+      <button
+        type="button"
+        className="flex items-center gap-1.5 text-[11px] text-primary/40 hover:text-primary/70 transition-colors mt-0.5 ml-5 py-1 touch-manipulation"
+        onClick={() => onAddRow(segIdx)}
+      >
+        <Plus className="w-3 h-3" />
+        Add line
+      </button>
+    </div>
+  );
+}
+
+// ── WorkoutPreviewEditorCard ───────────────────────────────────────────────────
 interface Props {
   editableSession: EditableSession;
   onChange: (updated: EditableSession) => void;
-  /** Optional: "compact" hides the footer status bar */
   compact?: boolean;
 }
 
@@ -568,6 +674,27 @@ function setRow(es: EditableSession, ri: number, patch: Partial<EditableRow>): E
   const rows = [...es.rows];
   rows[ri] = { ...rows[ri], ...patch };
   return { ...es, rows };
+}
+
+function setSegmentRow(es: EditableSession, si: number, ri: number, patch: Partial<EditableRow>): EditableSession {
+  if (!es.segments) return setRow(es, ri, patch);
+  const segs = [...es.segments];
+  const rows = [...segs[si].rows];
+  rows[ri] = { ...rows[ri], ...patch };
+  segs[si] = { ...segs[si], rows };
+  return { ...es, segments: segs, rows: segs.flatMap(s => s.rows) };
+}
+
+function findRow(es: EditableSession, rowId: string): { si: number; ri: number } | null {
+  if (es.segments?.length) {
+    for (let si = 0; si < es.segments.length; si++) {
+      const ri = es.segments[si].rows.findIndex(r => r.id === rowId);
+      if (ri !== -1) return { si, ri };
+    }
+    return null;
+  }
+  const ri = es.rows.findIndex(r => r.id === rowId);
+  return ri !== -1 ? { si: -1, ri } : null;
 }
 
 export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compact }: Props) {
@@ -584,46 +711,79 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
 
   const badgeLabel = es.type === "wod"
     ? (FORMAT_LABELS[es.format] ?? (es.format ? es.format.toUpperCase() : "WOD"))
-    : es.type === "run"
-    ? (es.format || "Run")
-    : "Strength";
+    : es.type === "run" ? (es.format || "Run") : "Strength";
 
-  function activateRow(ri: number) {
-    const row = es.rows[ri];
-    setEditingText(rowToText(row, es.type));
-    setActiveRowId(row.id);
+  // ── Row activation
+  function activateRow(rowId: string, text: string) {
+    setEditingText(text);
+    setActiveRowId(rowId);
   }
 
-  function commitEdit() {
+  // ── Commit edit (flat rows)
+  function commitFlatEdit() {
     if (!activeRowId) return;
     const ri = es.rows.findIndex(r => r.id === activeRowId);
-    if (ri !== -1) {
-      const parsed = textToRow(editingText, es.type, es.rows[ri]);
-      onChange(setRow(es, ri, parsed));
-    }
+    if (ri !== -1) onChange(setRow(es, ri, textToRow(editingText, es.type, es.rows[ri])));
     setActiveRowId(null);
   }
 
-  function deleteRow(ri: number) {
+  // ── Commit edit (segment rows)
+  function commitSegmentEdit(si: number, ri: number) {
+    if (!activeRowId || !es.segments) return;
+    const row = es.segments[si].rows[ri];
+    onChange(setSegmentRow(es, si, ri, textToRow(editingText, "wod", row)));
+    setActiveRowId(null);
+  }
+
+  // ── Flat row ops
+  function deleteFlatRow(ri: number) {
     setActiveRowId(null);
     onChange({ ...es, rows: es.rows.filter((_, i) => i !== ri) });
   }
-
-  function addRowBelow(ri: number) {
-    const newRow = blankRow(`row-${Date.now()}`);
-    const rows = [...es.rows];
-    rows.splice(ri + 1, 0, newRow);
-    onChange({ ...es, rows });
-    setEditingText("");
-    setActiveRowId(newRow.id);
+  function addFlatRow() {
+    const nr = blankRow(`row-${Date.now()}`);
+    onChange({ ...es, rows: [...es.rows, nr] });
+    activateRow(nr.id, "");
   }
 
-  function addRowAtEnd() {
-    const newRow = blankRow(`row-${Date.now()}`);
-    onChange({ ...es, rows: [...es.rows, newRow] });
-    setEditingText("");
-    setActiveRowId(newRow.id);
+  // ── Segment ops
+  function deleteSegmentRow(si: number, ri: number) {
+    setActiveRowId(null);
+    if (!es.segments) return;
+    const segs = [...es.segments];
+    segs[si] = { ...segs[si], rows: segs[si].rows.filter((_, i) => i !== ri) };
+    onChange({ ...es, segments: segs, rows: segs.flatMap(s => s.rows) });
   }
+  function addSegmentRow(si: number) {
+    if (!es.segments) return;
+    const nr = blankRow(`row-${Date.now()}`);
+    const segs = [...es.segments];
+    segs[si] = { ...segs[si], rows: [...segs[si].rows, nr] };
+    onChange({ ...es, segments: segs, rows: segs.flatMap(s => s.rows) });
+    activateRow(nr.id, "");
+  }
+  function updateSegmentLabel(si: number, label: string) {
+    if (!es.segments) return;
+    const segs = [...es.segments];
+    segs[si] = { ...segs[si], label };
+    onChange({ ...es, segments: segs });
+  }
+  function deleteSegment(si: number) {
+    if (!es.segments) return;
+    const segs = es.segments.filter((_, i) => i !== si);
+    onChange({ ...es, segments: segs.length ? segs : undefined, rows: segs.flatMap(s => s.rows) });
+  }
+  function addSegment() {
+    const nr = blankRow(`row-${Date.now()}`);
+    const newSeg: WodSegment = {
+      id: `seg-${Date.now()}`, type: "fixed", label: "", rounds: "", rows: [nr],
+    };
+    const segs = [...(es.segments ?? []), newSeg];
+    onChange({ ...es, segments: segs, rows: segs.flatMap(s => s.rows) });
+    activateRow(nr.id, "");
+  }
+
+  const useSegments = es.type === "wod" && !!es.segments?.length;
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card overflow-hidden shadow-sm">
@@ -649,54 +809,86 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
             </div>
           )}
         </div>
-
         <input
           className="w-full text-lg font-bold bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/40 leading-tight"
           value={es.title}
           onChange={e => onChange({ ...es, title: e.target.value })}
           placeholder="Workout title…"
         />
-
-        {es.summary && (
-          <p className="text-xs text-muted-foreground">{es.summary}</p>
-        )}
+        {es.summary && <p className="text-xs text-muted-foreground">{es.summary}</p>}
       </div>
 
       <div className="border-t border-border/40" />
 
-      {/* ── Rows ── */}
+      {/* ── Content ── */}
       <div className="px-3 py-1 pb-2">
-        {es.rows.map((row, ri) => (
-          <PreviewRow
-            key={row.id}
-            row={row}
-            type={es.type}
-            index={ri}
-            isActive={activeRowId === row.id}
-            isExpanded={expandedRowId === row.id}
-            editingText={activeRowId === row.id ? editingText : ""}
-            onActivate={() => activateRow(ri)}
-            onEditChange={setEditingText}
-            onCommit={commitEdit}
-            onDelete={() => deleteRow(ri)}
-            onAddBelow={() => addRowBelow(ri)}
-            onToggleExpand={() => setExpandedRowId(expandedRowId === row.id ? null : row.id)}
-            onChangeField={patch => onChange(setRow(es, ri, patch))}
-          />
-        ))}
-
-        <button
-          type="button"
-          className="flex items-center gap-1.5 text-[11px] text-primary/40 hover:text-primary/70 transition-colors mt-1 ml-5 py-1.5 touch-manipulation"
-          onClick={addRowAtEnd}
-        >
-          <Plus className="w-3 h-3" />
-          Add line
-        </button>
+        {useSegments ? (
+          // Multi-segment WOD
+          <>
+            {es.segments!.map((seg, si) => (
+              <WodSegmentBlock
+                key={seg.id}
+                segment={seg}
+                segIdx={si}
+                isFirst={si === 0}
+                isLast={si === es.segments!.length - 1}
+                activeRowId={activeRowId}
+                editingText={editingText}
+                expandedRowId={expandedRowId}
+                onActivateRow={activateRow}
+                onEditChange={setEditingText}
+                onCommitRow={commitSegmentEdit}
+                onDeleteRow={deleteSegmentRow}
+                onAddRow={addSegmentRow}
+                onToggleExpand={id => setExpandedRowId(expandedRowId === id ? null : id)}
+                onChangeField={(si2, ri, patch) => onChange(setSegmentRow(es, si2, ri, patch))}
+                onLabelChange={updateSegmentLabel}
+                onDeleteSegment={deleteSegment}
+              />
+            ))}
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-[11px] text-primary/40 hover:text-primary/70 transition-colors mt-3 ml-0 py-1 touch-manipulation"
+              onClick={addSegment}
+            >
+              <Plus className="w-3 h-3" />
+              Add segment
+            </button>
+          </>
+        ) : (
+          // Flat rows (strength, run, or simple WOD)
+          <>
+            {es.rows.map((row, ri) => (
+              <PreviewRow
+                key={row.id}
+                row={row}
+                type={es.type}
+                index={ri}
+                isActive={activeRowId === row.id}
+                isExpanded={expandedRowId === row.id}
+                editingText={activeRowId === row.id ? editingText : ""}
+                onActivate={() => activateRow(row.id, rowToText(row, es.type))}
+                onEditChange={setEditingText}
+                onCommit={commitFlatEdit}
+                onDelete={() => deleteFlatRow(ri)}
+                onToggleExpand={() => setExpandedRowId(expandedRowId === row.id ? null : row.id)}
+                onChangeField={patch => onChange(setRow(es, ri, patch))}
+              />
+            ))}
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-[11px] text-primary/40 hover:text-primary/70 transition-colors mt-1 ml-5 py-1.5 touch-manipulation"
+              onClick={addFlatRow}
+            >
+              <Plus className="w-3 h-3" />
+              Add line
+            </button>
+          </>
+        )}
       </div>
 
-      {/* ── WOD footer: rounds / repeat / rest (progressive disclosure) ── */}
-      {es.type === "wod" && (es.rounds || es.repeatNote || es.restNote) && (
+      {/* ── WOD footer: rounds / repeat / rest (flat WOD only) ── */}
+      {es.type === "wod" && !useSegments && (es.rounds || es.repeatNote || es.restNote) && (
         <div className="border-t border-border/40">
           <button
             type="button"
@@ -714,43 +906,27 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
             <div className="px-4 pb-3 space-y-2">
               <label className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground/60 w-16 shrink-0">Rounds</span>
-                <input
-                  type="number"
-                  className="w-16 text-xs font-mono bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 tabular-nums"
-                  value={es.rounds}
-                  onChange={e => onChange({ ...es, rounds: e.target.value })}
-                  placeholder="—"
-                  min={1}
-                />
+                <input type="number" className="w-16 text-xs font-mono bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 tabular-nums"
+                  value={es.rounds} onChange={e => onChange({ ...es, rounds: e.target.value })} placeholder="—" min={1} />
               </label>
               {es.repeatNote && (
                 <label className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground/60 w-16 shrink-0">Repeat</span>
-                  <input
-                    className="flex-1 text-xs bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30"
-                    value={es.repeatNote}
-                    onChange={e => onChange({ ...es, repeatNote: e.target.value })}
-                    placeholder="Repeat logic…"
-                  />
+                  <input className="flex-1 text-xs bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30"
+                    value={es.repeatNote} onChange={e => onChange({ ...es, repeatNote: e.target.value })} placeholder="Repeat logic…" />
                 </label>
               )}
               {es.restNote && (
                 <label className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground/60 w-16 shrink-0">Rest</span>
-                  <input
-                    className="flex-1 text-xs bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30"
-                    value={es.restNote}
-                    onChange={e => onChange({ ...es, restNote: e.target.value })}
-                    placeholder="Rest note…"
-                  />
+                  <input className="flex-1 text-xs bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30"
+                    value={es.restNote} onChange={e => onChange({ ...es, restNote: e.target.value })} placeholder="Rest note…" />
                 </label>
               )}
             </div>
           )}
         </div>
       )}
-
-      {/* ── Strength/Run: no extra footer needed ── */}
 
       {/* ── Status bar ── */}
       {!compact && (

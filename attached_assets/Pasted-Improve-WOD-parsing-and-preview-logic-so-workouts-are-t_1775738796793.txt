@@ -1,0 +1,69 @@
+Improve WOD parsing and preview logic so workouts are treated as an ordered sequence of segments, not just a flat list of movements.
+
+WOD-specific model:
+A WOD can contain multiple sequential segments, for example:
+- fixed opening work
+- repeated rounds block
+- fixed ending work
+
+Examples:
+- Buy-in: Bike Erg 25 cal
+- 4 rounds of: Step-Ups 16, Press-Ups 12, Air Squats 20
+- Cash-out / Buy out: Bike Erg 15 cal
+
+Requirements:
+
+1. Add WOD segment parsing
+The parser should detect and structure these segment types:
+- fixed segment
+- rounds segment
+- AMRAP segment
+- EMOM segment
+- interval segment
+- cash-out / buy-out / finisher segment
+
+2. Treat “buy-in”, “cash-out”, and “buy out” as semantic labels, not standalone formats
+- “buy-in” usually labels an opening fixed segment
+- “cash-out” and “buy out” usually label an ending fixed segment
+- support variants:
+  - buy in
+  - buy-in
+  - cash out
+  - cash-out
+  - buy out
+  - buy-out
+
+3. Represent WOD previews as ordered segments
+Example preview:
+For Time · cap 16
+
+Buy-in
+Bike Erg · 25 cal
+
+4 rounds:
+Step-Ups · 16
+Press-Ups · 12
+Air Squats · 20
+
+Cash-out
+Bike Erg · 15 cal
+
+4. Do not flatten repeated blocks into a plain list
+The preview must preserve segment boundaries and repeated-block meaning.
+
+5. Let users edit segment labels inline
+Users should be able to rename or remove labels like Buy-in, Cash-out, Finisher without breaking the underlying workout structure.
+
+6. WOD-specific preview rules
+- fixed segments render as simple lines or a small labelled block
+- rounds / AMRAP / EMOM / interval segments render as grouped blocks
+- opening and closing fixed segments should be visually distinct when labelled as buy-in / cash-out / buy out
+
+7. Keep this lightweight
+Do not introduce heavy nested cards or complicated section builders.
+Use a simple stacked preview with optional block labels and grouped repeated segments.
+
+Success criteria:
+- The parser understands “fixed work + rounds block + buy/cash out”
+- The preview preserves that sequence clearly
+- Users can edit it inline without losing the workout logic
