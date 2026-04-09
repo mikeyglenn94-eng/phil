@@ -1168,7 +1168,94 @@ Response format:
   }
 });
 
-// ── Quick WOD / conditioning session builder ────────────────────────────────
+// ── WOD canonical schema helpers (mirrors wod-schema.ts in the frontend) ─────
+type WodStepUnit = "reps" | "seconds" | "m" | "km" | "cal";
+type StepTargetType = "reps" | "seconds" | "distance" | "calories" | "free_text";
+
+function wodNormaliseUnit(unit: string | undefined): StepTargetType {
+  if (!unit) return "reps";
+  const u = unit.toLowerCase().trim();
+  if (u === "seconds" || u === "sec" || u === "s") return "seconds";
+  if (u === "m" || u === "metres" || u === "meters" || u === "km") return "distance";
+  if (u === "calories" || u === "cal" || u === "cals") return "calories";
+  return "reps";
+}
+
+function wodResolveUnit(unit: string | undefined): WodStepUnit {
+  if (!unit) return "reps";
+  const u = unit.toLowerCase().trim();
+  if (u === "seconds" || u === "sec" || u === "s") return "seconds";
+  if (u === "m" || u === "metres" || u === "meters") return "m";
+  if (u === "km") return "km";
+  if (u === "calories" || u === "cal" || u === "cals") return "cal";
+  return "reps";
+}
+
+/** Defensively extract a numeric amount — tries every field name the AI might use */
+function wodExtractAmount(block: Record<string, unknown>): number | undefined {
+  const candidates = ["amount", "reps", "duration", "time", "seconds", "distance", "calories", "value", "count"];
+  for (const key of candidates) {
+    const v = block[key];
+    if (v !== undefined && v !== null && v !== "") {
+      const n = Number(v);
+      if (!Number.isNaN(n)) return n;
+      // handle strings like "21-15-9" — take first number
+      if (typeof v === "string") {
+        const m = v.match(/\d+/);
+        if (m) return Number(m[0]);
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Build a safe notes display string — never produces "undefined ..." */
+function wodBuildNotes(block: Record<string, unknown>): string {
+  const amount = wodExtractAmount(block);
+  const unit = wodResolveUnit(block.unit as string | undefined);
+  const loadDisplay = block.weight as string | undefined;
+  if (amount == null) return loadDisplay ?? "";
+  return loadDisplay ? `${amount} ${unit} (${loadDisplay})` : `${amount} ${unit}`;
+}
+
+/** Build a canonical WodWorkout object from raw AI blocks */
+function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], durationMinutes?: number) {
+  const fmtMap: Record<string, string> = {
+    emom: "emom", amrap: "amrap", for_time: "for_time",
+    rounds_for_time: "for_time", chipper: "chipper", interval: "intervals", intervals: "intervals",
+  };
+  const canonicalFormat = fmtMap[(format ?? "").toLowerCase()] ?? "custom";
+
+  const steps = blocks.map((block, idx) => {
+    const amount = wodExtractAmount(block);
+    const rawUnit = block.unit as string | undefined;
+    const targetType = wodNormaliseUnit(rawUnit);
+    const unit = wodResolveUnit(rawUnit);
+    const movementRaw = (block.movement as string | undefined) ?? "";
+    const movName = movementRaw.charAt(0).toUpperCase() + movementRaw.slice(1);
+    const loadDisplay = block.weight as string | undefined;
+    return {
+      id: `step-${idx}`,
+      movement: { name: movName },
+      target: { type: targetType, value: amount, unit },
+      ...(loadDisplay ? { load: { display: loadDisplay } } : {}),
+    };
+  });
+
+  const canonicalBlock = {
+    id: "block-0",
+    type: canonicalFormat,
+    steps,
+    ...(durationMinutes != null ? { durationSeconds: durationMinutes * 60 } : {}),
+  };
+
+  return {
+    format: canonicalFormat,
+    blocks: [canonicalBlock],
+    ...(durationMinutes != null ? { totalDurationSeconds: durationMinutes * 60 } : {}),
+  };
+}
+
 // POST /parse-wod-session  { description, name? }
 // Returns a ready-to-save WOD session (source: "wod_brain") from free-text.
 router.post("/parse-wod-session", async (req, res): Promise<void> => {
@@ -1192,7 +1279,15 @@ Rules:
 - AMRAP rounds should complete in 60-90s per round. EMOM minutes achievable in 35-45s.
 - Return ONLY valid JSON, no markdown fences.
 
-Result type per format (helps the app know what to ask the user):
+CRITICAL — blocks field rules:
+- ALWAYS include "amount" as a number in every block. NEVER use "duration", "time", "reps", or other synonyms — only "amount".
+- For time-based movements (e.g. "35 seconds burpees"): amount=35, unit="seconds"
+- For rep-based movements (e.g. "15 wall balls"): amount=15, unit="reps"
+- For distance (e.g. "200m run"): amount=200, unit="m"
+- For calories (e.g. "12 cal bike"): amount=12, unit="cal"
+- If amount is ambiguous, make a reasonable coaching decision — never leave it null or omit it.
+
+Result type per format:
   amrap          → rounds + additional_reps
   for_time       → finish_time
   emom           → completed (bool) + optional score
@@ -1207,6 +1302,7 @@ Response format:
       "format": "amrap",
       "name": "AMRAP 20",
       "structure": "AMRAP 20: 15 Wall Balls (9kg), 200m Run, 10 Burpees",
+      "duration": 20,
       "resultType": "rounds_reps",
       "blocks": [
         { "movement": "Wall Balls", "amount": 15, "unit": "reps", "weight": "9kg" },
@@ -1215,13 +1311,13 @@ Response format:
       ]
     },
     {
-      "format": "for_time",
-      "name": "For Time",
-      "structure": "For Time: 21-15-9 Thrusters (43kg), Pull-ups",
-      "resultType": "finish_time",
+      "format": "interval",
+      "name": "35s Intervals",
+      "structure": "10 Rounds: 35s Burpees / 25s Rest",
+      "duration": 10,
+      "resultType": "total_output",
       "blocks": [
-        { "movement": "Thrusters", "amount": "21-15-9", "unit": "reps", "weight": "43kg" },
-        { "movement": "Pull-ups", "amount": "21-15-9", "unit": "reps" }
+        { "movement": "Burpees", "amount": 35, "unit": "seconds" }
       ]
     }
   ]
@@ -1242,35 +1338,40 @@ Response format:
 
     const now = Date.now();
     const sessionOptions = options.map((opt: any, oi: number) => {
-      const blocks: { movement: string; amount: any; unit: string; weight?: string }[] = opt.blocks ?? [];
-      const exercises = blocks.map((block, idx) => {
-        // Build a clear display note: "15 reps (9kg)" or "200m"
-        const amtStr = String(block.amount);
-        const unitStr = block.unit || "reps";
-        const weightStr = block.weight ? ` (${block.weight})` : "";
-        const notes = `${amtStr} ${unitStr}${weightStr}`;
+      const rawBlocks: Record<string, unknown>[] = opt.blocks ?? [];
+      const durationMin: number | undefined = typeof opt.duration === "number" ? opt.duration : undefined;
+
+      // Build canonical wod structure (new schema)
+      const wodCanonical = wodBuildCanonical(opt.format ?? "amrap", rawBlocks, durationMin);
+
+      // Build legacy exercises array for backward compat — with safe notes (never "undefined ...")
+      const exercises = rawBlocks.map((block, idx) => {
+        const notes = wodBuildNotes(block);
+        const movementRaw = (block.movement as string | undefined) ?? "";
+        const movName = movementRaw.charAt(0).toUpperCase() + movementRaw.slice(1);
         return {
           id: `ex-${now}-${oi}-${idx}`,
-          name: block.movement.charAt(0).toUpperCase() + block.movement.slice(1),
+          name: movName,
           sets: null, reps: null, rpe: null, rest: null, tempo: null,
           notes,
-          rawText: `${notes} ${block.movement}`,
+          rawText: notes ? `${notes} ${movementRaw}` : movementRaw,
           weekProgression: [], clientComment: null,
           perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
         };
       });
+
       return {
         name: name?.trim() || opt.name || "WOD",
         source: "wod_brain",
-        format: opt.format ?? "other",
+        format: opt.format ?? "amrap",
         structure: opt.structure ?? description.trim(),
+        wod: wodCanonical,
         exercises,
       };
     });
 
-    // Fallback: if AI returned a single option or none, return it in legacy shape
     if (sessionOptions.length === 0) {
-      res.json({ name: name?.trim() || "WOD", source: "wod_brain", structure: description.trim(), exercises: [] });
+      res.json({ name: name?.trim() || "WOD", source: "wod_brain", structure: description.trim(), wod: null, exercises: [] });
       return;
     }
 

@@ -1456,18 +1456,80 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (!wodClientTargetDate) return;
     const formatLabel = wod.formatLabel ?? wod.format;
     const sessionName = `${formatLabel} ${wod.duration}: ${wod.name}`;
+
+    // ── Safe block helpers (mirrors parse.ts) ──
+    const _candidates = ["amount", "reps", "duration", "time", "seconds", "distance", "calories", "value", "count"];
+    const _extractAmt = (b: any): number | undefined => {
+      for (const k of _candidates) {
+        const v = b[k];
+        if (v != null && v !== "") {
+          const n = Number(v);
+          if (!Number.isNaN(n)) return n;
+          if (typeof v === "string") { const m = v.match(/\d+/); if (m) return Number(m[0]); }
+        }
+      }
+      return undefined;
+    };
+    const _resolveUnit = (u: string | undefined): string => {
+      if (!u) return "reps";
+      const l = u.toLowerCase().trim();
+      if (l === "seconds" || l === "sec" || l === "s") return "seconds";
+      if (l === "m" || l === "metres" || l === "meters") return "m";
+      if (l === "km") return "km";
+      if (l === "calories" || l === "cal" || l === "cals") return "cal";
+      return "reps";
+    };
+    const _buildNotes = (b: any): string => {
+      const amt = _extractAmt(b);
+      const unit = _resolveUnit(b.unit);
+      if (amt == null) return b.weight ?? "";
+      return b.weight ? `${amt} ${unit} (${b.weight})` : `${amt} ${unit}`;
+    };
+    const _buildStepType = (u: string | undefined): string => {
+      const l = (u ?? "").toLowerCase().trim();
+      if (l === "seconds" || l === "sec" || l === "s") return "seconds";
+      if (l === "m" || l === "metres" || l === "meters" || l === "km") return "distance";
+      if (l === "calories" || l === "cal" || l === "cals") return "calories";
+      return "reps";
+    };
+
+    const rawBlocks: any[] = wod.blocks ?? [];
+    const now = Date.now();
+
+    // Canonical wod structure
+    const wodCanonical = {
+      format: (wod.format ?? "amrap") as string,
+      totalDurationSeconds: wod.duration ? wod.duration * 60 : undefined,
+      blocks: [{
+        id: "block-0",
+        type: wod.format ?? "amrap",
+        durationSeconds: wod.duration ? wod.duration * 60 : undefined,
+        steps: rawBlocks.map((block: any, idx: number) => {
+          const amt = _extractAmt(block);
+          const unit = _resolveUnit(block.unit);
+          return {
+            id: `step-${idx}`,
+            movement: { name: `${block.movement.charAt(0).toUpperCase()}${block.movement.slice(1)}` },
+            target: { type: _buildStepType(block.unit), value: amt, unit },
+            ...(block.weight ? { load: { display: block.weight } } : {}),
+          };
+        }),
+      }],
+    };
+
     const newSession = {
-      id: `session-${Date.now()}`,
+      id: `session-${now}`,
       date: wodClientTargetDate,
       name: sessionName,
       source: "wod_brain",
       structure: wod.structure ?? "",
-      exercises: (wod.blocks ?? []).map((block: any, idx: number) => ({
-        id: `ex-${Date.now()}-${idx}`,
+      wod: wodCanonical,
+      exercises: rawBlocks.map((block: any, idx: number) => ({
+        id: `ex-${now}-${idx}`,
         name: `${block.movement.charAt(0).toUpperCase()}${block.movement.slice(1)}`,
         sets: null, reps: null, rpe: null,
-        notes: `${block.amount} ${block.unit}`,
-        rawText: `${block.amount} ${block.unit} ${block.movement}`,
+        notes: _buildNotes(block),
+        rawText: `${_buildNotes(block)} ${block.movement}`.trim(),
       })),
     };
     const navigateWod = () => {

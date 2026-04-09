@@ -1456,14 +1456,48 @@ export default function ClientSession() {
           {/* ── WOD Brain: structured workout definition + result inputs ── */}
           {src === "wod_brain" && (() => {
             const wodFmt = detectWodFormat(session as any);
-            const movements = (session.exercises || []);
-
-            // Parse a clean format header from structure or name
             const structureStr = (session as any).structure as string | undefined;
-            // e.g. "AMRAP 20: 15 Wall Balls ..." → header = "AMRAP 20"
             const fmtHeader = structureStr
               ? structureStr.split(":")[0].trim()
               : (session.name || "WOD");
+
+            // ── Canonical wod field (new schema) ──────────────────────────────
+            const wodData = (session as any).wod as {
+              blocks?: Array<{
+                id?: string;
+                type?: string;
+                steps?: Array<{
+                  id?: string;
+                  movement?: { name?: string };
+                  target?: { type?: string; value?: number; unit?: string };
+                  load?: { display?: string };
+                }>;
+              }>;
+            } | undefined | null;
+
+            // Flatten all steps across all blocks for the movement list
+            const canonicalSteps = wodData?.blocks?.flatMap(b => b.steps ?? []) ?? [];
+
+            // ── Legacy fallback: exercises[].notes ────────────────────────────
+            // Sanitize any corrupted notes that contain "undefined" from old saves
+            const sanitizeNotes = (notes: string | null | undefined): string => {
+              if (!notes) return "";
+              // Strip any "undefined " prefix that may have been saved
+              return notes.replace(/\bundefined\s*/gi, "").trim();
+            };
+            const legacyExercises = (session.exercises || []);
+
+            // Build the display rows from canonical steps (preferred) or legacy exercises
+            const useCanonical = canonicalSteps.length > 0;
+
+            // Format a canonical step label — "35 seconds" / "15 reps" / "200 m"
+            const stepLabel = (step: typeof canonicalSteps[0]): string => {
+              const val = step.target?.value;
+              const unit = step.target?.unit ?? "";
+              const load = step.load?.display;
+              if (val == null) return load ?? "";
+              return load ? `${val} ${unit} (${load})` : `${val} ${unit}`;
+            };
 
             return (
               <>
@@ -1478,17 +1512,36 @@ export default function ClientSession() {
                     <p className="text-white font-bold text-xl leading-tight">{fmtHeader}</p>
                   </div>
 
-                  {/* Movements */}
+                  {/* Movements — canonical steps preferred, legacy exercises fallback */}
                   <div className="px-5 py-4 space-y-2">
-                    {movements.length > 0 ? movements.map((ex, i) => (
-                      <div key={ex.id} className="flex items-baseline gap-3">
-                        <span className="text-xs font-bold text-purple-400 shrink-0 w-4">{i + 1}.</span>
-                        <span className="text-sm font-semibold text-foreground">
-                          {ex.notes ? `${ex.notes} ` : ""}
-                          <span className="capitalize">{ex.name}</span>
-                        </span>
-                      </div>
-                    )) : structureStr ? (
+                    {useCanonical ? (
+                      canonicalSteps.map((step, i) => {
+                        const label = stepLabel(step);
+                        const movName = step.movement?.name ?? "";
+                        return (
+                          <div key={step.id ?? i} className="flex items-baseline gap-3">
+                            <span className="text-xs font-bold text-purple-400 shrink-0 w-4">{i + 1}.</span>
+                            <span className="text-sm font-semibold text-foreground">
+                              {label && <span className="text-purple-700">{label} </span>}
+                              <span className="capitalize">{movName}</span>
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : legacyExercises.length > 0 ? (
+                      legacyExercises.map((ex, i) => {
+                        const notes = sanitizeNotes(ex.notes);
+                        return (
+                          <div key={ex.id ?? i} className="flex items-baseline gap-3">
+                            <span className="text-xs font-bold text-purple-400 shrink-0 w-4">{i + 1}.</span>
+                            <span className="text-sm font-semibold text-foreground">
+                              {notes && <span className="text-purple-700">{notes} </span>}
+                              <span className="capitalize">{ex.name}</span>
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : structureStr ? (
                       <p className="text-sm text-purple-900 italic leading-relaxed">
                         {structureStr.includes(":") ? structureStr.split(":").slice(1).join(":").trim() : structureStr}
                       </p>
