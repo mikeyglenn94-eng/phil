@@ -1,4 +1,4 @@
-# Axis - Voice Training Programme Builder
+# MG Coaching - Voice Training Programme Builder
 
 ## Overview
 
@@ -125,6 +125,31 @@ The intended next phase is B2C self-serve, with the coach acting as a guide/bran
 5. **Coach-as-guide content** — A curated library of WODs, run sessions, and strength programmes in the Brain that all users draw from; plus optional weekly check-in or community touchpoint
 
 The core product (calendar, sessions, nutrition diary, AI parsing, Brain search) is already user-ready. The gap is auth/payments/multi-tenancy — roughly a few weeks of build work.
+
+## Workout Editor Architecture (Unified)
+
+### Shared Component: `artifacts/coach-app/src/components/workout-preview-editor.tsx`
+- **Types**: `EditableRow`, `EditableSession` (exported — used in both creation and edit-saved flows)
+- **Converters**: `parseStrengthToEditable`, `parseWodToEditable`, `parseRunToEditable` — parse API responses/saved sessions → `EditableSession`
+- **`sessionToEditable(session)`** — converts any saved session (strength/wod/run) to editable; detects type from `session.source`
+- **`editableSessionToSession(es)`** — converts `EditableSession` back to canonical save format (handles ranges)
+- **`WorkoutPreviewEditorCard`** — shared React component used in both creation preview and edit-saved-workout flows
+- **Range support**: `value` field accepts strings like "12-18" or "35"; `editableSessionToSession` encodes as `{ valueRange: [12, 18] }` in canonical
+
+### WOD Canonical Schema (range support)
+- `step.target.value` — numeric for single values
+- `step.target.valueRange` — `[number, number]` for ranges (e.g. [12, 18])
+- `step.target.targetText` — formatted display string (e.g. "12–18 reps")
+
+### Edit Mode in `client-session.tsx`
+- Pencil icon in header → `enterEditMode()` → `sessionToEditable(session)` → `editDraft` state
+- `isEditMode` controls which view is shown: `WorkoutPreviewEditorCard` (edit) vs. normal log/view content
+- `saveEdit()` → `editableSessionToSession(editDraft)` → preserves `clientComment`, `wodResult`, `runLog` → `updateMutation`
+
+### Parser: Range Preservation (`artifacts/api-server/src/routes/parse.ts`)
+- `wodExtractRawAmount(block)` — returns `{ single: number }` or `{ range: [number, number] }` from AI response
+- `wodBuildCanonical()` — stores range in `target.valueRange` + `target.targetText` if AI returns range strings
+- Prompt instructs AI to preserve ranges (e.g. "12 to 18" → `amount: "12-18"`) instead of averaging
 
 ## Important Workflow
 

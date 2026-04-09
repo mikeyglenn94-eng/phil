@@ -5,7 +5,14 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
   Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2,
+  Pencil,
 } from "lucide-react";
+import {
+  WorkoutPreviewEditorCard,
+  type EditableSession,
+  sessionToEditable,
+  editableSessionToSession,
+} from "@/components/workout-preview-editor";
 import { useMicrophone } from "@/hooks/use-microphone";
 import {
   AlertDialog,
@@ -253,6 +260,58 @@ export default function ClientSession() {
     }
     return map;
   }, [programme, sessionId, session]);
+
+  // ── Edit-mode state (edit published workout inline) ────────────────────────
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editDraft, setEditDraft] = useState<EditableSession | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  function enterEditMode() {
+    if (!session) return;
+    setEditDraft(sessionToEditable(session));
+    setIsEditMode(true);
+  }
+
+  function cancelEditMode() {
+    setIsEditMode(false);
+    setEditDraft(null);
+  }
+
+  async function saveEdit() {
+    if (!programme || !session || !editDraft) return;
+    setIsSavingEdit(true);
+    try {
+      const updatedSessionData = editableSessionToSession(editDraft);
+      // Preserve logging data that should not be wiped by a structural edit
+      const preserved = {
+        clientComment: (session as any).clientComment ?? null,
+        wodResult: (session as any).wodResult ?? null,
+        runLog: (session as any).runLog ?? null,
+        setWeights: undefined,
+        setReps: undefined,
+      };
+      const merged = {
+        ...updatedSessionData,
+        id: session.id,
+        date: session.date,
+        clientComment: preserved.clientComment,
+        ...(preserved.wodResult ? { wodResult: preserved.wodResult } : {}),
+        ...(preserved.runLog ? { runLog: preserved.runLog } : {}),
+      };
+      const updatedSessions = (programme.sessions || []).map((s: Session) =>
+        s.id !== sessionId ? s : merged
+      );
+      await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
+      queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      toast({ title: "Workout updated!" });
+      setIsEditMode(false);
+      setEditDraft(null);
+    } catch {
+      toast({ title: "Error saving changes", variant: "destructive" });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
 
   // Local name overrides for swapped exercises
   const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
@@ -1351,23 +1410,52 @@ export default function ClientSession() {
       <div className="sticky top-0 z-20 bg-background border-b shadow-sm">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/client?tab=training")}>
+            <Button variant="ghost" size="icon" onClick={isEditMode ? cancelEditMode : () => setLocation("/client?tab=training")}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground truncate">{dateLabel}</p>
-              <h1 className="font-bold text-lg leading-tight truncate">{session.name || "Session"}</h1>
+              <p className="text-xs text-muted-foreground truncate">{isEditMode ? "Editing workout" : dateLabel}</p>
+              <h1 className="font-bold text-lg leading-tight truncate">{isEditMode ? (editDraft?.title || session.name || "Session") : (session.name || "Session")}</h1>
             </div>
           </div>
-          <Button
-            onClick={handleSave} disabled={isSaving}
-            className={`rounded-xl px-5 gap-2 shrink-0 ${saved ? "bg-green-600 hover:bg-green-700" : ""}`}
-          >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            {saved ? "Saved" : "Save"}
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {isEditMode ? (
+              <>
+                <Button variant="outline" size="sm" className="rounded-xl" onClick={cancelEditMode}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="rounded-xl px-5 gap-2 bg-primary"
+                  onClick={() => void saveEdit()}
+                  disabled={isSavingEdit}
+                >
+                  {isSavingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Save changes
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="ghost" size="icon"
+                  className="rounded-xl text-muted-foreground hover:text-foreground"
+                  onClick={enterEditMode}
+                  title="Edit workout"
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
+                <Button
+                  onClick={handleSave} disabled={isSaving}
+                  className={`rounded-xl px-5 gap-2 ${saved ? "bg-green-600 hover:bg-green-700" : ""}`}
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                  {saved ? "Saved" : "Save"}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
-        {totalSets > 0 && (
+        {!isEditMode && totalSets > 0 && (
           <div className="max-w-lg mx-auto px-4 pb-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
               <span>{loggedSets} / {totalSets} sets logged</span>
@@ -1379,6 +1467,23 @@ export default function ClientSession() {
           </div>
         )}
       </div>
+
+      {/* ── EDIT MODE: full-page inline editor ── */}
+      {isEditMode && editDraft && (
+        <div className="max-w-lg mx-auto px-4 pt-5 pb-8">
+          <WorkoutPreviewEditorCard
+            editableSession={editDraft}
+            onChange={setEditDraft as (v: EditableSession) => void}
+            compact
+          />
+          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
+            <strong>Note:</strong> Editing the workout structure won't delete any logged results or feedback you've already saved.
+          </div>
+        </div>
+      )}
+
+      {/* ── NORMAL VIEW (hidden while editing) ── */}
+      {!isEditMode && (<>
 
       {/* Last time you did this session */}
       {prevSession && (prevSession.comment || Object.keys(prevSession.exerciseComments).length > 0) && (
@@ -1468,8 +1573,9 @@ export default function ClientSession() {
                 type?: string;
                 steps?: Array<{
                   id?: string;
+                  label?: string;
                   movement?: { name?: string };
-                  target?: { type?: string; value?: number; unit?: string };
+                  target?: { type?: string; value?: number | null; valueRange?: [number, number]; targetText?: string; unit?: string };
                   load?: { display?: string };
                 }>;
               }>;
@@ -1490,13 +1596,20 @@ export default function ClientSession() {
             // Build the display rows from canonical steps (preferred) or legacy exercises
             const useCanonical = canonicalSteps.length > 0;
 
-            // Format a canonical step label — "35 seconds" / "15 reps" / "200 m"
+            // Format a canonical step quantity — supports ranges: "12–18 reps", "10–12 cal", "35 sec"
             const stepLabel = (step: typeof canonicalSteps[0]): string => {
-              const val = step.target?.value;
-              const unit = step.target?.unit ?? "";
+              const t = step.target;
+              const unit = t?.unit ?? "";
               const load = step.load?.display;
-              if (val == null) return load ?? "";
-              return load ? `${val} ${unit} (${load})` : `${val} ${unit}`;
+              // targetText takes priority (already formatted range string)
+              const amountStr = t?.targetText
+                ? t.targetText.replace(/ ?(reps|cal|sec|m|km|seconds)$/i, "").trim()
+                : t?.valueRange
+                  ? `${t.valueRange[0]}–${t.valueRange[1]}`
+                  : (t?.value != null ? String(t.value) : "");
+              if (!amountStr) return load ?? "";
+              const display = `${amountStr} ${unit}`.trim();
+              return load ? `${display} (${load})` : display;
             };
 
             return (
@@ -2398,6 +2511,8 @@ export default function ClientSession() {
           </div>
         </div>
       )}
+
+      </>)} {/* end !isEditMode */}
 
       {/* Delete exercise confirmation */}
       <AlertDialog open={!!confirmDeleteExId} onOpenChange={open => { if (!open) setConfirmDeleteExId(null); }}>

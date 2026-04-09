@@ -1,0 +1,139 @@
+Two more core product fixes are needed based on the latest screenshots.
+
+1) Fix the published workout card / post-save edit flow
+
+Once a workout has been saved or published, the user still needs to be able to edit it easily. This is true for all workout types: Strength, WOD, and Run.
+
+Right now the published workout screen feels read-only apart from logging results. That is not enough. Users will often need to:
+- correct a parsing error they only notice later
+- shorten a workout because they have less time than planned
+- tweak reps, cals, intervals, load, or block structure
+- update a workout that is already linked to calendar
+
+Please implement this exactly:
+
+A. Add an Edit workout action on the saved/published workout screen
+- Add a clear Edit button near the top of the page
+- The user must be able to enter edit mode from any saved workout
+
+B. Edit mode must use the same structured inline editor as creation
+- Do not create a separate admin form
+- Load the canonical saved workout object
+- Render the same structured preview/editor pattern used during creation
+- Allow direct inline editing of title, duration, repeat logic, movements, reps, cals, seconds, distance, load, notes, and block structure
+
+C. Keep view mode and edit mode separate
+- View mode: clean card, result logging, share
+- Edit mode: structured editable preview, Save changes, Cancel
+- Do not mix result logging controls into edit mode
+
+D. Calendar-linked behaviour
+- If the workout is already saved to calendar, editing the workout must not create silent mismatch
+- Preferred behaviour:
+  - on save, ask: “Update the calendar version too?”
+  - options: Update workout + calendar, or workout only
+- If simpler for now, updating the workout should update the existing calendar event automatically
+
+E. Preserve existing logged result data
+- Editing the workout structure must not silently delete completion status, score, notes, or feedback
+- If a structural edit could affect recorded results, show a warning instead of deleting anything
+
+F. Acceptance criteria
+This is only complete when:
+- a saved workout can be opened and edited
+- edits happen inline on the structured workout
+- changes save successfully
+- the updated version appears immediately
+- calendar-linked workouts stay in sync
+- users do not need to recreate a workout from scratch just to make a small correction
+
+2) Fix the WOD preview/editor polish, support ranges, and make repeat logic properly editable
+
+The editable preview is functionally on the right track, but it still needs product-level refinement before it feels good enough to trust and publish.
+
+Please implement this exactly:
+
+A. Improve the preview/editor UI
+The current structured preview works, but it still feels rough and slightly debug-like. It needs to look like a polished workout card, not a builder table.
+
+Please refine the UI with these goals:
+- cleaner spacing and alignment throughout
+- stronger visual hierarchy for title, format, duration, steps, and notes
+- step rows easier to scan on mobile
+- movement name should be visually primary
+- quantities and units should feel attached to the movement, not floating separately
+- repeat/rest notes should look intentional and useful
+- the whole card should feel premium enough to save to calendar or public library
+
+B. Support ranges in workout values
+The app must support prescribed ranges instead of collapsing everything to one guessed number.
+
+Examples that must be supported:
+- 10 to 12 cal
+- 12 to 18 reps
+- 20 to 25 air squats
+- 30 to 40 seconds
+- 200 to 300 metres
+
+Please update the canonical schema and editor so target values can be either:
+- a single value
+- or a min/max range
+
+This must work for:
+- reps
+- calories
+- seconds
+- distance
+
+The preview/editor should display ranges cleanly, for example:
+- 12 to 18 reps
+- 10 to 12 cal
+- 30 to 40 sec
+
+Do not average ranges into one midpoint unless the user explicitly chooses that.
+
+C. Make repeat logic directly editable
+Right now the repeat logic is too rigid and can be wrong.
+
+The user must be able to tap and edit:
+- total duration
+- repeat count
+- repeat note / sequence logic
+
+For example, the user should be able to change:
+- “25 min EMOM”
+- “Repeat for 6 rounds”
+
+If those conflict mathematically, do not silently choose one. Instead:
+- either recalculate and confirm the new result
+- or show a subtle validation warning and let the user decide the intended final structure
+
+D. Preserve uncertainty honestly
+If the parser hears:
+- “12 or 10 cal”
+- “12 to 18”
+- “20 to 25”
+
+Do not convert that to:
+- 10
+- 15
+- 22
+
+That fake precision is not acceptable. Preserve the range or ambiguity in the structured editor so the user can tidy it properly.
+
+E. Acceptance criteria
+This is only complete when:
+- the preview/editor card looks polished on mobile
+- ranges are supported and editable
+- repeat logic is editable
+- duration is editable
+- parser does not flatten ranges into a single guessed number
+- the final preview feels good enough to publish directly
+
+Important implementation note for both points:
+Please build this on top of the canonical workout schema and structured inline editor already being introduced. Do not create separate one-off edit forms or patchy UI flows. The same structured workout object should power:
+- creation
+- preview
+- post-save editing
+- calendar publishing
+- saved workout display

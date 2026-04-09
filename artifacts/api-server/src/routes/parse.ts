@@ -1196,31 +1196,46 @@ function wodResolveUnit(unit: string | undefined): WodStepUnit {
   return "reps";
 }
 
-/** Defensively extract a numeric amount — tries every field name the AI might use */
-function wodExtractAmount(block: Record<string, unknown>): number | undefined {
+/**
+ * Extract the raw amount string from a block — may be a number OR a range like "12-18".
+ * Returns { single: number } | { range: [number, number] } | undefined
+ */
+function wodExtractRawAmount(block: Record<string, unknown>): { single: number } | { range: [number, number] } | undefined {
   const candidates = ["amount", "reps", "duration", "time", "seconds", "distance", "calories", "value", "count"];
   for (const key of candidates) {
     const v = block[key];
-    if (v !== undefined && v !== null && v !== "") {
-      const n = Number(v);
-      if (!Number.isNaN(n)) return n;
-      // handle strings like "21-15-9" — take first number
-      if (typeof v === "string") {
-        const m = v.match(/\d+/);
-        if (m) return Number(m[0]);
-      }
+    if (v === undefined || v === null || v === "") continue;
+    // Numeric single value
+    const n = Number(v);
+    if (!Number.isNaN(n)) return { single: n };
+    if (typeof v === "string") {
+      // Range string e.g. "12-18" or "10-12"
+      const rangeMatch = v.match(/^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/);
+      if (rangeMatch) return { range: [Number(rangeMatch[1]), Number(rangeMatch[2])] };
+      // Fallback: first number
+      const m = v.match(/\d+/);
+      if (m) return { single: Number(m[0]) };
     }
   }
   return undefined;
 }
 
+/** Defensively extract a numeric amount (for legacy display use) */
+function wodExtractAmount(block: Record<string, unknown>): number | undefined {
+  const raw = wodExtractRawAmount(block);
+  if (!raw) return undefined;
+  if ("single" in raw) return raw.single;
+  return raw.range[0]; // for display: use min of range
+}
+
 /** Build a safe notes display string — never produces "undefined ..." */
 function wodBuildNotes(block: Record<string, unknown>): string {
-  const amount = wodExtractAmount(block);
+  const raw = wodExtractRawAmount(block);
   const unit = wodResolveUnit(block.unit as string | undefined);
   const loadDisplay = block.weight as string | undefined;
-  if (amount == null) return loadDisplay ?? "";
-  return loadDisplay ? `${amount} ${unit} (${loadDisplay})` : `${amount} ${unit}`;
+  if (!raw) return loadDisplay ?? "";
+  const display = "range" in raw ? `${raw.range[0]}-${raw.range[1]}` : String(raw.single);
+  return loadDisplay ? `${display} ${unit} (${loadDisplay})` : `${display} ${unit}`;
 }
 
 /** Build a canonical WodWorkout object from raw AI blocks */
@@ -1232,7 +1247,7 @@ function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], du
   const canonicalFormat = fmtMap[(format ?? "").toLowerCase()] ?? "custom";
 
   const steps = blocks.map((block, idx) => {
-    const amount = wodExtractAmount(block);
+    const raw = wodExtractRawAmount(block);
     const rawUnit = block.unit as string | undefined;
     const targetType = wodNormaliseUnit(rawUnit);
     const unit = wodResolveUnit(rawUnit);
@@ -1240,10 +1255,23 @@ function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], du
     const movName = movementRaw.charAt(0).toUpperCase() + movementRaw.slice(1);
     const loadDisplay = block.weight as string | undefined;
     const minuteLabel = block.minuteLabel as string | undefined;
+
+    // Build target — preserve ranges
+    const target: Record<string, unknown> = { type: targetType, unit };
+    if (raw) {
+      if ("range" in raw) {
+        target.valueRange = raw.range;
+        target.targetText = `${raw.range[0]}–${raw.range[1]} ${unit}`;
+        target.value = null;
+      } else {
+        target.value = raw.single;
+      }
+    }
+
     return {
       id: `step-${idx}`,
       movement: { name: movName },
-      target: { type: targetType, value: amount, unit },
+      target,
       ...(loadDisplay ? { load: { display: loadDisplay } } : {}),
       ...(minuteLabel ? { label: minuteLabel } : {}),
     };
@@ -1287,13 +1315,16 @@ TITLE RULES — "name" field:
 - If the user provided a title hint, use it only if it is meaningful.
 
 CRITICAL — blocks field rules:
-- ALWAYS include "amount" as a number. NEVER use "duration", "time", "reps", or other synonyms — only "amount".
-- For time-based: amount=35, unit="seconds"
-- For reps: amount=15, unit="reps"
+- ALWAYS include "amount". NEVER use "duration", "time", "reps", or other synonyms — only "amount".
+- amount can be a NUMBER (e.g. 15) OR a RANGE STRING (e.g. "12-18") when the user specifies a range or ambiguity.
+- For time-based: amount=35, unit="seconds" (or "30-40" if user said "30 to 40 seconds")
+- For reps: amount=15, unit="reps" (or "12-18" if user said "12 to 18 reps")
 - For distance: amount=200, unit="m"
-- For calories: amount=12, unit="cal"
+- For calories: amount=12, unit="cal" (or "10-12" if user said "10 or 12 cal")
+- PRESERVE ranges — if user says "12 or 10 cal", write amount="10-12". Do NOT average or pick one number.
+- If user says "20 to 25 reps", write amount="20-25", NOT 22 or 25.
 - For EMOM, add "minuteLabel" to each block, e.g. "Minute 1", "Minute 2", "Minute 3".
-- Never leave amount null or omit it — make a coaching decision.
+- Only use a single number when the prescription is unambiguously exact.
 
 EXTRA FIELDS (include when relevant):
 - "rounds": integer — how many times the block sequence repeats. For EMOM 21 with 3 movements: rounds=7.
