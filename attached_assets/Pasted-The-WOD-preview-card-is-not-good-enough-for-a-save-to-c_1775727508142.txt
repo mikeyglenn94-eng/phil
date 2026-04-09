@@ -1,0 +1,99 @@
+The WOD preview card is not good enough for a save-to-calendar or publish flow.
+
+Right now it is showing what looks like an internal AI parse preview, not a user-ready structured workout. The user enters natural language, but before any save action the app should transform that into a clean, publish-ready workout summary.
+
+Current behaviour is too loose:
+- title can stay as “test”
+- movements are listed without structure
+- duration/format detail is missing
+- no minute/round logic is shown
+- it does not feel trustworthy enough to save to calendar or public library
+
+Please change the WOD preview flow as follows:
+
+1) The preview card must render a clean final structured summary, not raw parse fragments
+
+For example, for this input:
+“Every minute on the minute for 21 minutes first minute is 35 seconds of burpees second minute is 40 seconds of wall balls final minute is 40 seconds on a machine rest the remaining seconds of all minutes”
+
+The preview should show something like:
+
+EMOM 21
+21 min
+- Minute 1: 35 sec Burpees
+- Minute 2: 40 sec Wall Balls
+- Minute 3: 40 sec Machine (row, bike, or ski)
+- Repeat for 7 rounds
+- Rest the remainder of each minute
+
+This is the minimum acceptable standard before save.
+
+2) Separate natural language input from final workout output
+
+The WOD description box is raw user input.
+The preview card should be the polished structured output.
+
+The preview must not look like a partial parse. It should look like the exact version that will be saved to:
+- My Sessions
+- Calendar
+- Public Library
+
+3) Add a proper “formatted workout preview” layer
+
+Please create a formatter that converts the canonical WOD schema into a clean human-readable summary for preview and publishing.
+
+Suggested output sections:
+- Workout title
+- Format
+- Total duration or time cap
+- Structured step list
+- Rest/repeat logic
+- Optional score/result format
+
+4) Use better fallback title generation
+
+If the user enters “test” or leaves title blank, auto-generate a better title from the parsed workout, e.g.:
+- EMOM 21
+- 12 Min AMRAP
+- For Time: 21-15-9
+- Intervals: 6 x 2 min run / 1 min walk
+
+The title shown in preview should feel publishable.
+
+5) Preview card should match saved output
+
+The preview card, saved session, calendar entry, and public library card should all be derived from the same canonical schema and same formatter logic.
+No separate rendering styles that cause mismatch.
+
+6) Add “Edit structure” capability if parsing is uncertain
+
+If the parser is not confident, do not show a weak preview. Instead:
+- show a parse warning
+- let the user edit the structured output before save
+
+Examples:
+- edit title
+- edit format
+- edit duration
+- edit steps
+- edit rest/repeat note
+
+7) Improve preview card UX
+
+The preview card should visually feel like a finished workout card, not a debug box.
+It should include:
+- clear format badge, e.g. EMOM / AMRAP / FOR TIME
+- strong title
+- duration line
+- properly formatted movement lines
+- repeat/rest instruction
+- optional “Ready to save” status only if validation passes
+
+8) Acceptance criteria
+
+This is only done when:
+- the user’s natural language stays in the description input
+- the preview shows a polished structured workout
+- the preview is good enough to save directly to calendar
+- the preview and saved result match exactly
+- weak outputs like “Burpees / Wall Balls / Machine Cal” no longer appear as the final preview

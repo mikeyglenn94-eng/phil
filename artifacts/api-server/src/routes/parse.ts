@@ -1219,7 +1219,7 @@ function wodBuildNotes(block: Record<string, unknown>): string {
 }
 
 /** Build a canonical WodWorkout object from raw AI blocks */
-function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], durationMinutes?: number) {
+function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], durationMinutes?: number, rounds?: number) {
   const fmtMap: Record<string, string> = {
     emom: "emom", amrap: "amrap", for_time: "for_time",
     rounds_for_time: "for_time", chipper: "chipper", interval: "intervals", intervals: "intervals",
@@ -1234,11 +1234,13 @@ function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], du
     const movementRaw = (block.movement as string | undefined) ?? "";
     const movName = movementRaw.charAt(0).toUpperCase() + movementRaw.slice(1);
     const loadDisplay = block.weight as string | undefined;
+    const minuteLabel = block.minuteLabel as string | undefined;
     return {
       id: `step-${idx}`,
       movement: { name: movName },
       target: { type: targetType, value: amount, unit },
       ...(loadDisplay ? { load: { display: loadDisplay } } : {}),
+      ...(minuteLabel ? { label: minuteLabel } : {}),
     };
   });
 
@@ -1247,6 +1249,7 @@ function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], du
     type: canonicalFormat,
     steps,
     ...(durationMinutes != null ? { durationSeconds: durationMinutes * 60 } : {}),
+    ...(rounds != null ? { rounds } : {}),
   };
 
   return {
@@ -1267,37 +1270,52 @@ router.post("/parse-wod-session", async (req, res): Promise<void> => {
 Supported formats: amrap, for_time, emom, rounds_for_time, chipper, interval.
 
 Rules:
-- Choose the TWO most appropriate formats for the movements given. Default to AMRAP + one other (for_time, emom, or rounds_for_time).
-- Design SPECIFIC workouts — decide reps, distances, weights, and timing yourself.
-- Write a concise human-readable STRUCTURE string as a coach would write on a whiteboard:
-    AMRAP:          "AMRAP 20: 15 Wall Balls (9kg), 200m Run, 10 Burpees"
-    FOR TIME:       "For Time: 21-15-9 Thrusters (43kg), Pull-ups"
-    EMOM:           "EMOM 18: Min 1: 12 Wall Balls | Min 2: 200m Run | Min 3: 8 Burpees"
-    ROUNDS FOR TIME:"5 Rounds for Time: 400m Run, 15 Box Jumps, 10 Dumbbell Snatches (22kg)"
-    CHIPPER:        "Chipper for Time: 50 Wall Balls, 40 Box Jumps, 30 Pull-ups, 20 Thrusters"
-    INTERVAL:       "10 Rounds: 30s Max Effort Row / 30s Rest"
-- AMRAP rounds should complete in 60-90s per round. EMOM minutes achievable in 35-45s.
+- Choose the TWO most appropriate formats given the movements. If the user specifies a format (e.g. "EMOM"), use it for the first option.
+- Design SPECIFIC workouts — decide all reps, distances, loads, and timing yourself.
+- Write a concise human-readable STRUCTURE string as a coach would write on a whiteboard.
+- AMRAP rounds should complete in 60-90s. EMOM minutes achievable in 35-45s.
 - Return ONLY valid JSON, no markdown fences.
 
+TITLE RULES — "name" field:
+- Use a publish-ready title like "EMOM 21", "AMRAP 20", "For Time: 21-15-9", "Intervals: 6×2 Min Row".
+- Do NOT use generic names like "WOD", "test", or "Session".
+- If the user provided a title hint, use it only if it is meaningful.
+
 CRITICAL — blocks field rules:
-- ALWAYS include "amount" as a number in every block. NEVER use "duration", "time", "reps", or other synonyms — only "amount".
-- For time-based movements (e.g. "35 seconds burpees"): amount=35, unit="seconds"
-- For rep-based movements (e.g. "15 wall balls"): amount=15, unit="reps"
-- For distance (e.g. "200m run"): amount=200, unit="m"
-- For calories (e.g. "12 cal bike"): amount=12, unit="cal"
-- If amount is ambiguous, make a reasonable coaching decision — never leave it null or omit it.
+- ALWAYS include "amount" as a number. NEVER use "duration", "time", "reps", or other synonyms — only "amount".
+- For time-based: amount=35, unit="seconds"
+- For reps: amount=15, unit="reps"
+- For distance: amount=200, unit="m"
+- For calories: amount=12, unit="cal"
+- For EMOM, add "minuteLabel" to each block, e.g. "Minute 1", "Minute 2", "Minute 3".
+- Never leave amount null or omit it — make a coaching decision.
+
+EXTRA FIELDS (include when relevant):
+- "rounds": integer — how many times the block sequence repeats. For EMOM 21 with 3 movements: rounds=7.
+- "repeatNote": string — plain English repeat instruction, e.g. "Repeat for 7 rounds".
+- "restNote": string — rest instruction if applicable, e.g. "Rest the remainder of each minute", "60s rest between rounds".
 
 Result type per format:
-  amrap          → rounds + additional_reps
-  for_time       → finish_time
-  emom           → completed (bool) + optional score
-  rounds_for_time → finish_time
-  chipper        → finish_time
-  interval       → total_output (text)
+  amrap → "rounds_reps" | for_time → "finish_time" | emom → "completed" | rounds_for_time → "finish_time" | chipper → "finish_time" | interval → "total_output"
 
-Response format:
+Response format — EMOM example:
 {
   "options": [
+    {
+      "format": "emom",
+      "name": "EMOM 21",
+      "structure": "EMOM 21: Min 1: 35s Burpees | Min 2: 40s Wall Balls | Min 3: 40s Machine",
+      "duration": 21,
+      "rounds": 7,
+      "repeatNote": "Repeat for 7 rounds",
+      "restNote": "Rest the remainder of each minute",
+      "resultType": "completed",
+      "blocks": [
+        { "movement": "Burpees", "amount": 35, "unit": "seconds", "minuteLabel": "Minute 1" },
+        { "movement": "Wall Balls", "amount": 40, "unit": "seconds", "minuteLabel": "Minute 2" },
+        { "movement": "Machine", "amount": 40, "unit": "seconds", "minuteLabel": "Minute 3" }
+      ]
+    },
     {
       "format": "amrap",
       "name": "AMRAP 20",
@@ -1308,16 +1326,6 @@ Response format:
         { "movement": "Wall Balls", "amount": 15, "unit": "reps", "weight": "9kg" },
         { "movement": "Run", "amount": 200, "unit": "m" },
         { "movement": "Burpees", "amount": 10, "unit": "reps" }
-      ]
-    },
-    {
-      "format": "interval",
-      "name": "35s Intervals",
-      "structure": "10 Rounds: 35s Burpees / 25s Rest",
-      "duration": 10,
-      "resultType": "total_output",
-      "blocks": [
-        { "movement": "Burpees", "amount": 35, "unit": "seconds" }
       ]
     }
   ]
@@ -1340,9 +1348,10 @@ Response format:
     const sessionOptions = options.map((opt: any, oi: number) => {
       const rawBlocks: Record<string, unknown>[] = opt.blocks ?? [];
       const durationMin: number | undefined = typeof opt.duration === "number" ? opt.duration : undefined;
+      const rounds: number | undefined = typeof opt.rounds === "number" ? opt.rounds : undefined;
 
-      // Build canonical wod structure (new schema)
-      const wodCanonical = wodBuildCanonical(opt.format ?? "amrap", rawBlocks, durationMin);
+      // Build canonical wod structure (new schema) — pass rounds for EMOM
+      const wodCanonical = wodBuildCanonical(opt.format ?? "amrap", rawBlocks, durationMin, rounds);
 
       // Build legacy exercises array for backward compat — with safe notes (never "undefined ...")
       const exercises = rawBlocks.map((block, idx) => {
@@ -1360,11 +1369,18 @@ Response format:
         };
       });
 
+      // Use AI-generated name unless user provided a clearly meaningful name
+      const userNameMeaningful = name?.trim() && name.trim().toLowerCase() !== "test" && name.trim().length > 2;
+      const sessionName = userNameMeaningful ? name!.trim() : (opt.name || "WOD");
+
       return {
-        name: name?.trim() || opt.name || "WOD",
+        name: sessionName,
         source: "wod_brain",
         format: opt.format ?? "amrap",
         structure: opt.structure ?? description.trim(),
+        repeatNote: opt.repeatNote ?? "",
+        restNote: opt.restNote ?? "",
+        scoreType: opt.resultType ?? "",
         wod: wodCanonical,
         exercises,
       };

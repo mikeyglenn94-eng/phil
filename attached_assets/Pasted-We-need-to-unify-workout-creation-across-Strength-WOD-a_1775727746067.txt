@@ -1,0 +1,169 @@
+We need to unify workout creation across Strength, WOD, and Run.
+
+The product rule should be:
+
+natural language input
+→ AI structures it into a canonical workout schema
+→ user manually tidies the structured version inline
+→ final structured workout is saved
+
+This should be the same creation flow for all three workout types:
+- Strength
+- WOD
+- Run
+
+I do not want separate creation logic where one type is voice-first, another is form-first, and another is preview-only.
+I want one unified workout creation experience.
+
+Please implement this system design:
+
+1) One shared creation flow across all workout types
+
+For Strength, WOD, and Run, the user should be able to:
+- type or speak naturally
+- have AI structure the workout
+- review a formatted preview
+- click directly into the preview to make manual edits
+- save the final cleaned version
+
+2) Shared mental model
+
+The UX should feel the same across all workout types:
+
+Step 1: Raw input
+- free text or voice input
+- user describes workout naturally
+
+Step 2: Structured preview
+- app converts input into a clean structured workout
+- preview should look publishable, not like a debug parse
+
+Step 3: Manual tidy
+- user can click any field in the structured preview and edit inline
+- this should be the main correction path
+
+Step 4: Save
+- final canonical workout object is saved
+
+3) Keep raw input and structured output separate
+
+For all workout types:
+- raw description/transcript is input only
+- structured preview is the editable saved version
+
+Do not force the user to edit the raw text box to make small corrections.
+
+4) Canonical schema by workout type, but unified flow
+
+The flow should be unified, even if the canonical data structure differs slightly by workout type.
+
+We should have:
+- one shared create-workout experience
+- one shared parsing pipeline pattern
+- one shared editable preview pattern
+- one shared save pattern
+
+Internally this can map to:
+- canonical Strength schema
+- canonical WOD schema
+- canonical Run schema
+
+But the user experience should feel like one system.
+
+5) Inline editing must work across all types
+
+Strength preview should allow editing:
+- title
+- exercise names
+- sets
+- reps
+- load
+- RPE / tempo / rest if present
+- notes
+
+WOD preview should allow editing:
+- title
+- format
+- duration / time cap
+- movement names
+- reps / seconds / distance / calories
+- load
+- rest notes
+- repeat logic
+
+Run preview should allow editing:
+- title
+- run type
+- intervals
+- pace / effort / duration / distance
+- warm-up
+- cool-down
+- notes
+
+6) Build a shared editable preview component pattern
+
+Please create a reusable structured preview / inline editor pattern that all three workout types use.
+
+The goal is not three separate UI systems.
+The goal is one common pattern with type-specific fields.
+
+For example:
+- header area: editable title, type badge, duration summary
+- body area: structured sections/steps
+- each row or block editable on click/tap
+- save action commits the edited canonical object
+
+7) The preview must be publish-ready
+
+The structured preview for all workout types should feel good enough to:
+- save to my sessions
+- save to calendar
+- save to public library
+
+That means the preview must look like the final workout, not a half-parsed internal representation.
+
+8) Editing should be lightweight, not clunky
+
+I do not want the user to tap “edit”, open a massive admin form, and manually rebuild everything.
+
+I want quick direct edits in place:
+- tap field
+- edit
+- done
+
+This should feel fast and fluid.
+
+9) Shared architecture pattern
+
+For each workout type, the flow should be:
+
+raw input / transcript
+→ AI parse
+→ map to canonical schema
+→ editable formatted preview
+→ save canonical schema
+
+Please keep this pattern consistent across strength, WOD, and run.
+
+10) Important product rule
+
+The app should not make the user choose between:
+- AI mode
+- manual mode
+
+Instead, the product should assume:
+all workouts start as natural language
+then can be manually tidied before final save
+
+That is the unified creation model.
+
+11) Acceptance criteria
+
+This is complete only when:
+- Strength, WOD, and Run all use the same create-workout flow
+- all three allow natural language input
+- all three generate a clean structured preview
+- all three allow inline manual edits before save
+- all three save from canonical structured objects
+- the preview for all three is good enough to publish to calendar/public library
+- users do not need to go back to the raw text box for small corrections

@@ -1,0 +1,87 @@
+Also, the WOD preview must be directly editable before final save.
+
+Speech parsing will never be perfect, and sometimes the user will:
+- slightly misspeak
+- change their mind
+- want to tidy wording
+- need to correct reps / seconds / movement names / title
+
+So the structured workout preview cannot be read-only.
+
+Please add an editable structured preview flow with these rules:
+
+1) Make the formatted workout preview clickable and editable inline
+
+The user should be able to click directly into the structured workout and edit fields without going back to the raw natural language description.
+
+Editable fields should include:
+- title
+- format
+- duration / time cap
+- each movement name
+- reps / seconds / distance / calories
+- load
+- rest notes
+- repeat logic
+- round/minute labels where relevant
+
+2) Keep raw description and structured output separate
+
+The WOD description box is raw input only.
+The editable preview is the cleaned structured version that will actually be saved.
+
+Do not force the user to edit the raw natural language box just to make a small correction.
+
+3) Inline editing UX
+
+The preview should work like a polished workout card, but each element should be editable on tap/click.
+
+Examples:
+- tap title → edit title
+- tap “35 sec Burpees” → edit seconds or movement name
+- tap “Repeat for 7 rounds” → edit repeat logic
+- tap duration → edit total duration
+
+This should feel lightweight and fast, not like opening a separate complex form.
+
+4) Allow quick correction of parse errors
+
+Common examples:
+- speech parser hears the wrong movement
+- parser gets load wrong
+- parser misses “rest remainder”
+- parser gets duration right but title wrong
+- parser hears “wall balls” but not the load
+- parser hears “cal” instead of “machine”
+
+The user must be able to fix any of these quickly in the preview before save.
+
+5) Save canonical schema from edited preview
+
+Any inline edits made in the preview must update the same canonical WOD schema object that will be saved.
+Do not keep a separate display-only edited layer.
+
+Flow should be:
+raw input
+→ AI parse
+→ canonical schema
+→ editable formatted preview
+→ save canonical schema
+
+6) Add clear actions
+
+The preview area should support:
+- Edit directly inline
+- Save
+- Optional “Back to raw description” only if the user wants to fully rewrite
+
+But the main correction path should be editing the structured preview, not the raw text.
+
+7) Acceptance criteria
+
+This is only done when:
+- user can speak a WOD
+- app generates a structured preview
+- user can click directly into the structured preview and make small edits
+- edits update the final saved version
+- user does not need to go back and rewrite the raw description for minor corrections

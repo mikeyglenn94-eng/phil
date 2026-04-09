@@ -1,0 +1,213 @@
+Unified Workout Builder UX
+1) Entry point
+
+User taps:
+
+“Add Session” (or similar)
+Screen: Create Workout
+
+Top:
+
+Toggle: Strength | WOD | Run
+
+Below:
+
+Input box (primary)
+Placeholder:
+Strength: “e.g. 5x5 squat at 100kg”
+WOD: “e.g. EMOM 12, 10 burpees, 15 wall balls”
+Run: “e.g. 5k easy + 4x400m fast”
+Voice button (same across all types)
+
+CTA:
+
+“Generate workout”
+2) Generate → Structured Preview
+
+After submit:
+
+Screen transforms (same screen, no navigation)
+
+Input box collapses slightly
+Structured preview appears below
+
+3) Structured Preview (core of the product)
+
+This is the most important component.
+
+Header
+Editable title
+Default:
+EMOM 21
+5x5 Back Squat
+5k Easy + Intervals
+Type badge
+Strength / WOD / Run
+Summary line
+WOD: “21 min EMOM”
+Strength: “5 sets × 5 reps”
+Run: “6 km total”
+
+All editable on tap.
+
+Body (structured, editable)
+WOD example
+Minute 1: 35 sec Burpees
+Minute 2: 40 sec Wall Balls (9kg)
+Minute 3: 40 sec Machine
+Repeat for 7 rounds
+Rest remainder of each minute
+Strength example
+Back Squat — 5 × 5 @ 100kg
+Rest 2–3 min
+Run example
+Warm-up: 1 km easy
+Main:
+4 × 400m fast
+90 sec rest
+Cool-down: 1 km easy
+Editing behaviour (this is key)
+
+Everything is inline editable.
+
+Interaction pattern
+Tap text → turns into input
+Edit → blur or press enter → updates
+Examples
+
+Tap:
+
+“35 sec Burpees” → edit seconds or name
+“9kg” → edit load
+“Repeat for 7 rounds” → edit rounds
+“5 × 5” → edit sets/reps
+“400m” → edit distance
+
+No modal unless necessary.
+
+4) Add / remove elements
+
+Keep this simple, not a full builder.
+
+WOD
+“+ Add step”
+“+ Add block”
+Strength
+“+ Add exercise”
+Run
+“+ Add interval”
+“+ Add warm-up / cool-down”
+5) Parse confidence / errors
+
+If AI is unsure:
+
+Show small warning:
+
+“We might have misread part of this. Tap to edit.”
+
+Do NOT block save.
+
+6) Save section
+
+At bottom:
+
+Save to My Sessions
+Save to Calendar
+Save to Public Library
+
+Important:
+
+What user sees here = exactly what gets saved
+
+No transformation after this point.
+
+7) Optional: Raw input access
+
+Small link:
+
+“Edit original description”
+
+This expands the raw text box again.
+
+But this is secondary.
+Primary path is editing structured preview.
+
+Critical product rules
+1) Preview = source of truth
+Not the raw text
+Not the initial AI parse
+
+Only the structured, edited preview gets saved.
+
+2) One interaction model
+
+Do NOT build:
+
+separate WOD builder
+separate strength form
+separate run flow
+
+Everything uses:
+
+input → preview → inline edit → save
+3) No “AI vs manual” modes
+
+Do not force choice between:
+
+“AI mode”
+“Manual mode”
+
+Everything starts AI, then becomes manual.
+
+4) Speed > completeness
+
+User should be able to:
+
+speak workout
+fix 1–2 things
+save
+
+in under 20 seconds.
+
+What NOT to build
+
+Tell Replit to avoid:
+
+Big admin-style forms
+Separate edit screens
+Requiring user to rewrite raw text
+Over-structured inputs too early
+Multiple conflicting data models
+Acceptance test (important)
+
+You should be able to:
+
+WOD
+
+Say:
+“EMOM 12, 10 burpees, 15 wall balls”
+
+Then:
+
+change 10 → 12
+add “9kg”
+save
+Strength
+
+Type:
+“5x5 squat 100kg”
+
+Then:
+
+change to 110kg
+add second exercise
+save
+Run
+
+Say:
+“5k easy then 4x400 fast”
+
+Then:
+
+change rest to 90 sec
+save

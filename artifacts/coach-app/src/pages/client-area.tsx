@@ -375,6 +375,100 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const quickAddInterimRef = useRef("");
   const quickAddRecRef = useRef<any>(null);
 
+  // ── Editable WOD preview state ────────────────────────────────────────────
+  interface EditableWodStep {
+    id: string; label: string; movement: string; value: string; unit: string; load: string;
+  }
+  interface EditableWod {
+    title: string; format: string; durationMinutes: string;
+    steps: EditableWodStep[]; repeatNote: string; restNote: string;
+    scoreType: string; _rawOpt: any;
+  }
+  const [editableWod, setEditableWod] = useState<EditableWod | null>(null);
+
+  const FORMAT_LABELS: Record<string, string> = {
+    emom: "EMOM", amrap: "AMRAP", for_time: "For Time", chipper: "Chipper",
+    intervals: "Intervals", interval: "Intervals", rounds_for_time: "Rounds For Time", custom: "Custom",
+  };
+
+  function parseOptToEditable(opt: any): EditableWod {
+    const canonical = opt.wod;
+    const steps: EditableWodStep[] = [];
+    if (canonical?.blocks?.length) {
+      for (const block of canonical.blocks) {
+        for (const step of (block.steps ?? [])) {
+          steps.push({
+            id: step.id ?? `step-${steps.length}`,
+            label: step.label ?? "",
+            movement: step.movement?.name ?? "",
+            value: step.target?.value != null ? String(step.target.value) : "",
+            unit: step.target?.unit ?? "reps",
+            load: step.load?.display ?? "",
+          });
+        }
+      }
+    } else {
+      for (const ex of (opt.exercises ?? [])) {
+        steps.push({ id: ex.id, label: "", movement: ex.name ?? "", value: "", unit: "reps", load: "" });
+      }
+    }
+    const dur = canonical?.totalDurationSeconds
+      ? String(Math.round(canonical.totalDurationSeconds / 60))
+      : "";
+    return {
+      title: opt.name || "",
+      format: opt.format ?? "amrap",
+      durationMinutes: dur,
+      steps,
+      repeatNote: opt.repeatNote ?? "",
+      restNote: opt.restNote ?? "",
+      scoreType: opt.scoreType ?? opt.resultType ?? "",
+      _rawOpt: opt,
+    };
+  }
+
+  function editableWodToSession(ew: EditableWod): any {
+    const now = Date.now();
+    const durationMin = ew.durationMinutes ? Number(ew.durationMinutes) : undefined;
+    const wodBlocks = [{
+      id: "block-0",
+      type: ew.format,
+      durationSeconds: durationMin != null ? durationMin * 60 : undefined,
+      steps: ew.steps.map((s, idx) => ({
+        id: s.id || `step-${idx}`,
+        ...(s.label ? { label: s.label } : {}),
+        movement: { name: s.movement },
+        target: {
+          type: s.unit === "seconds" ? "seconds" : s.unit === "m" || s.unit === "km" ? "distance" : s.unit === "cal" ? "calories" : "reps",
+          value: s.value !== "" ? Number(s.value) : undefined,
+          unit: s.unit,
+        },
+        ...(s.load ? { load: { display: s.load } } : {}),
+      })),
+    }];
+    const exercises = ew.steps.map((s, idx) => {
+      const notes = s.value ? (s.load ? `${s.value} ${s.unit} (${s.load})` : `${s.value} ${s.unit}`) : (s.load || "");
+      return {
+        id: s.id || `ex-${now}-${idx}`,
+        name: s.movement,
+        sets: null, reps: null, rpe: null, rest: null, tempo: null,
+        notes, rawText: `${notes} ${s.movement}`.trim(),
+        weekProgression: [], clientComment: null,
+        perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
+      };
+    });
+    return {
+      ...ew._rawOpt,
+      name: ew.title || ew._rawOpt?.name || "WOD",
+      format: ew.format,
+      structure: ew._rawOpt?.structure ?? "",
+      repeatNote: ew.repeatNote,
+      restNote: ew.restNote,
+      wod: { format: ew.format, totalDurationSeconds: durationMin != null ? durationMin * 60 : undefined, blocks: wodBlocks },
+      exercises,
+    };
+  }
+
   function toggleQuickAddListening() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
@@ -418,6 +512,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setQuickAddParsing(true);
     setQuickAddError("");
     setParsedQuickSession(null);
+    setEditableWod(null);
     setQuickAddWodOptions(null);
     try {
       const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
@@ -432,7 +527,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       if (data.options && Array.isArray(data.options) && data.options.length > 1) {
         setQuickAddWodOptions(data.options);
       } else {
-        setParsedQuickSession(data.options?.[0] ?? data);
+        const single = data.options?.[0] ?? data;
+        setParsedQuickSession(single);
+        if (quickAddType === "wod" && single?.source === "wod_brain") {
+          setEditableWod(parseOptToEditable(single));
+        }
       }
     } catch {
       setQuickAddError(quickAddType === "wod" ? "Couldn't design your WOD — please try again." : "Couldn't parse your session — please try again.");
@@ -445,32 +544,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (!parsedQuickSession || !quickAddDate) return;
     setSavingQuickSession(dest);
     try {
-      const newSession = { ...parsedQuickSession, id: `session-${Date.now()}`, date: quickAddDate };
-
-      // ── Save-point diagnostic log ──────────────────────────────────────────
-      if (newSession.source === "wod_brain") {
-        const steps = (newSession as any).wod?.blocks?.[0]?.steps ?? [];
-        console.log("[WOD SAVE] session.wod present:", !!(newSession as any).wod);
-        console.log("[WOD SAVE] canonical steps:", steps.map((s: any) => ({
-          movement: s.movement?.name,
-          value: s.target?.value,
-          unit: s.target?.unit,
-          type: s.target?.type,
-        })));
-        console.log("[WOD SAVE] legacy exercises notes:", (newSession.exercises ?? []).map((e: any) => e.notes));
-        if (steps.some((s: any) => s.target?.value === undefined || s.target?.value === null)) {
-          console.warn("[WOD SAVE] ⚠️ One or more steps missing target.value — renderer will fallback to legacy notes");
-        }
-      }
+      // ── Build session from editable WOD if available, else fall back to raw parse ──
+      const baseSession = editableWod
+        ? editableWodToSession(editableWod)
+        : parsedQuickSession;
+      const newSession = { ...baseSession, id: `session-${Date.now()}`, date: quickAddDate };
 
       if (dest === "private" || dest === "public") {
         await fetch("/api/session-library", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: parsedQuickSession.name || quickAddName || "Saved Session",
+            name: newSession.name || quickAddName || "Saved Session",
             type: quickAddType,
-            sessionData: parsedQuickSession,
+            sessionData: newSession,
             clientId: dest === "private" ? clientId : null,
           }),
         });
@@ -479,13 +566,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       await addSessionToClientCalendar(quickAddDate, newSession, () => {}, newSession.id, () => {
         setQuickAddOpen(false);
         setParsedQuickSession(null);
+        setEditableWod(null);
         setQuickAddName("");
         setQuickAddDesc("");
         setQuickAddType("strength");
         navigateToWeekOf(quickAddDate);
         if (dest === "private") toast({ title: "Saved to your sessions", description: "Find it in Build From Library." });
         if (dest === "public") toast({ title: "Added to public library", description: "Visible to all coaches and clients." });
-      }, parsedQuickSession.name);
+      }, newSession.name);
     } catch {
       setQuickAddError("Something went wrong — please try again.");
     } finally {
@@ -4039,11 +4127,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 <button
                   key={i}
                   className="w-full text-left rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5 hover:border-primary/50 hover:bg-primary/10 transition-colors"
-                  onClick={() => { setParsedQuickSession(opt); setQuickAddWodOptions(null); }}
+                  onClick={() => {
+                    setParsedQuickSession(opt);
+                    setEditableWod(parseOptToEditable(opt));
+                    setQuickAddWodOptions(null);
+                  }}
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider">
-                      {opt.format === "emom" ? "EMOM" : opt.format === "amrap" ? "AMRAP" : opt.format === "for_time" ? "For Time" : "WOD"}
+                      {FORMAT_LABELS[opt.format] ?? "WOD"}
                     </p>
                     <p className="text-xs text-primary font-medium">Tap to select →</p>
                   </div>
@@ -4060,30 +4152,152 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 ← Edit description
               </button>
             </div>
-          ) : parsedQuickSession ? (
+          ) : parsedQuickSession && editableWod ? (
             <div className="space-y-3 pt-1">
-              <div className="rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5">
-                <div className="flex items-center justify-between mb-0.5">
-                  <p className="text-xs font-semibold text-primary/60 uppercase tracking-wider">AI generated</p>
-                  <p className="text-xs text-emerald-600 font-medium">✓ Ready to add</p>
+              {/* ── Polished editable WOD preview card ── */}
+              <div className="rounded-xl border border-primary/25 bg-gradient-to-b from-primary/5 to-primary/[0.02] overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-primary/10">
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/10 text-primary/70">
+                    {FORMAT_LABELS[editableWod.format] ?? editableWod.format.toUpperCase()}
+                  </span>
+                  <input
+                    className="flex-1 text-sm font-bold bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/40 min-w-0"
+                    value={editableWod.title}
+                    onChange={e => setEditableWod(prev => prev ? { ...prev, title: e.target.value } : prev)}
+                    placeholder="Workout title…"
+                  />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <input
+                      type="number"
+                      className="w-10 text-xs text-right bg-transparent border-none outline-none focus:ring-0 text-muted-foreground font-mono"
+                      value={editableWod.durationMinutes}
+                      onChange={e => setEditableWod(prev => prev ? { ...prev, durationMinutes: e.target.value } : prev)}
+                      placeholder="—"
+                      min={1}
+                    />
+                    <span className="text-xs text-muted-foreground">min</span>
+                  </div>
                 </div>
-                <p className="text-sm font-bold leading-snug">{parsedQuickSession.name || "Session"}</p>
-                {(parsedQuickSession.exercises ?? []).length > 0 && (
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {(parsedQuickSession.exercises as any[]).map((e: any, i: number) => (
-                      <div key={i} className="flex items-baseline justify-between gap-2">
-                        <span className="text-xs text-foreground/80 truncate">{e.name}</span>
-                        <span className="text-xs text-muted-foreground shrink-0 font-mono">
-                          {[e.sets && e.reps ? `${e.sets}×${e.reps}` : e.sets ? `${e.sets} sets` : null, e.weight, e.rpe ? `@RPE ${e.rpe}` : null].filter(Boolean).join(" ")}
-                        </span>
+
+                {/* Steps */}
+                <div className="px-3 py-2 space-y-1.5">
+                  {editableWod.steps.map((step, si) => (
+                    <div key={step.id} className="flex items-center gap-2 group">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0 mt-0.5" />
+                      <input
+                        className="text-[11px] text-muted-foreground bg-transparent border-none outline-none focus:ring-0 w-20 shrink-0 placeholder:text-muted-foreground/30"
+                        value={step.label}
+                        onChange={e => setEditableWod(prev => {
+                          if (!prev) return prev;
+                          const steps = [...prev.steps];
+                          steps[si] = { ...steps[si], label: e.target.value };
+                          return { ...prev, steps };
+                        })}
+                        placeholder="label…"
+                      />
+                      <input
+                        className="flex-1 text-sm font-medium bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/40 min-w-0"
+                        value={step.movement}
+                        onChange={e => setEditableWod(prev => {
+                          if (!prev) return prev;
+                          const steps = [...prev.steps];
+                          steps[si] = { ...steps[si], movement: e.target.value };
+                          return { ...prev, steps };
+                        })}
+                        placeholder="Movement…"
+                      />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <input
+                          type="text"
+                          className="w-10 text-xs text-right bg-transparent border-none outline-none focus:ring-0 font-mono text-foreground/80"
+                          value={step.value}
+                          onChange={e => setEditableWod(prev => {
+                            if (!prev) return prev;
+                            const steps = [...prev.steps];
+                            steps[si] = { ...steps[si], value: e.target.value };
+                            return { ...prev, steps };
+                          })}
+                          placeholder="—"
+                        />
+                        <select
+                          className="text-[11px] bg-transparent border-none outline-none focus:ring-0 text-muted-foreground cursor-pointer"
+                          value={step.unit}
+                          onChange={e => setEditableWod(prev => {
+                            if (!prev) return prev;
+                            const steps = [...prev.steps];
+                            steps[si] = { ...steps[si], unit: e.target.value };
+                            return { ...prev, steps };
+                          })}
+                        >
+                          <option value="reps">reps</option>
+                          <option value="seconds">sec</option>
+                          <option value="m">m</option>
+                          <option value="km">km</option>
+                          <option value="cal">cal</option>
+                        </select>
                       </div>
-                    ))}
+                      {step.load !== undefined && (
+                        <input
+                          className="w-14 text-[11px] text-muted-foreground bg-transparent border-none outline-none focus:ring-0 text-right font-mono placeholder:text-muted-foreground/30"
+                          value={step.load}
+                          onChange={e => setEditableWod(prev => {
+                            if (!prev) return prev;
+                            const steps = [...prev.steps];
+                            steps[si] = { ...steps[si], load: e.target.value };
+                            return { ...prev, steps };
+                          })}
+                          placeholder="load…"
+                        />
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    className="text-[11px] text-primary/50 hover:text-primary transition-colors mt-1"
+                    onClick={() => setEditableWod(prev => {
+                      if (!prev) return prev;
+                      const newStep = { id: `step-new-${Date.now()}`, label: "", movement: "", value: "", unit: "reps", load: "" };
+                      return { ...prev, steps: [...prev.steps, newStep] };
+                    })}
+                  >
+                    + Add movement
+                  </button>
+                </div>
+
+                {/* Repeat / Rest notes */}
+                {(editableWod.repeatNote || editableWod.restNote) && (
+                  <div className="px-3 pb-2 pt-1 space-y-1 border-t border-primary/10">
+                    {editableWod.repeatNote && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted-foreground/60 shrink-0">↻</span>
+                        <input
+                          className="flex-1 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/30"
+                          value={editableWod.repeatNote}
+                          onChange={e => setEditableWod(prev => prev ? { ...prev, repeatNote: e.target.value } : prev)}
+                          placeholder="Repeat logic…"
+                        />
+                      </div>
+                    )}
+                    {editableWod.restNote && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted-foreground/60 shrink-0">⏸</span>
+                        <input
+                          className="flex-1 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/30"
+                          value={editableWod.restNote}
+                          onChange={e => setEditableWod(prev => prev ? { ...prev, restNote: e.target.value } : prev)}
+                          placeholder="Rest note…"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
-                {parsedQuickSession.structure && !(parsedQuickSession.exercises ?? []).length && (
-                  <p className="text-xs text-muted-foreground leading-relaxed">{parsedQuickSession.structure}</p>
-                )}
+
+                {/* Footer validation tag */}
+                <div className="px-3 py-1.5 border-t border-primary/10 bg-emerald-50/50">
+                  <p className="text-[11px] text-emerald-700 font-medium">✓ Ready to save — edit any field above before saving</p>
+                </div>
               </div>
+
               <p className="text-xs text-muted-foreground text-center font-medium">Where would you like to save this?</p>
               <div className="grid grid-cols-1 gap-2">
                 <Button
@@ -4118,7 +4332,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               </div>
               <button
                 className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
-                onClick={() => setParsedQuickSession(null)}
+                onClick={() => { setParsedQuickSession(null); setEditableWod(null); }}
               >
                 ← Edit description
               </button>
