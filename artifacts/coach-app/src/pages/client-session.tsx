@@ -6,6 +6,7 @@ import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
   Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2,
 } from "lucide-react";
+import { useMicrophone } from "@/hooks/use-microphone";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +51,32 @@ function extractSwapName(raw: string): string {
 
 function toTitleCase(s: string): string {
   return s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
+}
+
+// ── Bodyweight exercise detection ──────────────────────────────────────────────
+const BW_TERMS = [
+  "pull-up", "pull up", "pullup", "pullups",
+  "chin-up", "chin up", "chinup", "chinups",
+  "muscle-up", "muscle up", "muscleup",
+  "ring dip",
+  "push-up", "push up", "pushup", "pushups",
+  "sit-up", "sit up", "situp",
+  "pistol squat", "pistol",
+  "handstand",
+  "burpee",
+  "box jump",
+  "toes to bar", "toes-to-bar",
+  "knees to elbow", "knees-to-elbow",
+  "rope climb",
+  "air squat",
+  "hollow hold", "hollow rock",
+  "double under",
+  "wall walk",
+  "dip",
+];
+function detectLoadType(name: string): "bodyweight" | "external_load" {
+  const lower = (name || "").toLowerCase();
+  return BW_TERMS.some(t => lower.includes(t)) ? "bodyweight" : "external_load";
 }
 
 // ── Muscle heat map ────────────────────────────────────────────────────────────
@@ -297,6 +324,15 @@ export default function ClientSession() {
   const [sessionCommentInterim, setSessionCommentInterim] = useState("");
   const sessionCommentRecRef = useRef<any>(null);
   const sessionCommentInterimRef = useRef("");
+  // Session comment MediaRecorder (Whisper pass — same pattern as strength log)
+  const sessionCommentActiveRef = useRef(false);
+  const sessionCommentMrRef = useRef<MediaRecorder | null>(null);
+  const sessionCommentChunksRef = useRef<Blob[]>([]);
+  const sessionCommentUsingMrRef = useRef(false);
+
+  // Mic permission + bodyweight overrides
+  const { requestPermission: warmMic } = useMicrophone();
+  const [loadTypeOverrides, setLoadTypeOverrides] = useState<Record<string, "bodyweight" | "external_load">>({});
 
   // WOD result state
   const [wodResult, setWodResult] = useState<WodResult>({});
@@ -352,6 +388,23 @@ export default function ClientSession() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [shareShowTopSet, shareShowComment, showShareModal, shareIsStrength]);
 
+  // ── Pre-warm mic permission (prevents iOS freeze on first Record tap) ─────────
+  useEffect(() => {
+    const timer = setTimeout(() => { warmMic(); }, 1000);
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Bodyweight helpers ────────────────────────────────────────────────────────
+  const getExLoadType = (exId: string, exName: string): "bodyweight" | "external_load" => {
+    const override = loadTypeOverrides[exId];
+    if (override) return override;
+    return detectLoadType(nameOverrides[exId] || exName);
+  };
+  const toggleExLoadType = (exId: string, exName: string) => {
+    const current = getExLoadType(exId, exName);
+    setLoadTypeOverrides(prev => ({ ...prev, [exId]: current === "bodyweight" ? "external_load" : "bodyweight" }));
+  };
+
   // ── Mobile-safe speech recognition ──────────────────────────────────────────
   // iOS Safari requires a *fresh* SpeechRecognition instance for every start()
   // call, and does not support continuous:true. We create new instances each
@@ -406,13 +459,69 @@ export default function ClientSession() {
     try { r.start(); } catch {}
   };
 
-  // ── Session-level comment voice ───────────────────────────────────────────
+  // ── Session-level comment voice (WOD/Run Brain) ───────────────────────────
+  // Mirrors the strength log recording: Web Speech for live preview +
+  // MediaRecorder → Whisper for accuracy. Fixes the WOD-only recording issue.
   const toggleSessionCommentListening = () => {
-    if (sessionCommentListening) { stopRef(sessionCommentRecRef); return; }
-    stopRef(sessionCommentRecRef);
-    const r = makeSR();
-    if (!r) return;
+    if (sessionCommentActiveRef.current) {
+      // STOP
+      sessionCommentActiveRef.current = false;
+      stopRef(sessionCommentRecRef);
+      if (sessionCommentUsingMrRef.current && sessionCommentMrRef.current?.state === "recording") {
+        sessionCommentMrRef.current.stop(); // onstop handles Whisper + cleanup
+      } else {
+        const leftover = sessionCommentInterimRef.current.trim();
+        if (leftover) setSessionComment(prev => (prev ? prev + " " : "") + leftover);
+        sessionCommentInterimRef.current = "";
+        setSessionCommentInterim("");
+        setSessionCommentListening(false);
+      }
+      return;
+    }
+    // START
+    sessionCommentActiveRef.current = true;
+    sessionCommentUsingMrRef.current = false;
     sessionCommentInterimRef.current = "";
+    setSessionCommentInterim("");
+    setSessionCommentListening(true);
+    // MediaRecorder for Whisper accuracy (async — Web Speech starts immediately)
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then(stream => {
+          if (!sessionCommentActiveRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
+          const mimeType = ["audio/webm", "audio/mp4", "audio/ogg"].find(t => MediaRecorder.isTypeSupported(t)) ?? "";
+          const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+          sessionCommentChunksRef.current = [];
+          mr.ondataavailable = e => { if (e.data.size > 0) sessionCommentChunksRef.current.push(e.data); };
+          mr.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            sessionCommentUsingMrRef.current = false;
+            const blob = new Blob(sessionCommentChunksRef.current, { type: mimeType || "audio/webm" });
+            let transcript = sessionCommentInterimRef.current.trim();
+            if (blob.size > 1500) {
+              try {
+                const result = await transcribeAudio({ audio: blob });
+                if (result.transcript?.trim()) transcript = result.transcript.trim();
+              } catch {}
+            }
+            if (transcript) setSessionComment(prev => (prev ? prev + " " : "") + transcript);
+            sessionCommentInterimRef.current = "";
+            setSessionCommentInterim("");
+            setSessionCommentListening(false);
+          };
+          mr.start(500);
+          sessionCommentMrRef.current = mr;
+          sessionCommentUsingMrRef.current = true;
+        })
+        .catch(() => { /* mic denied — Web Speech only continues */ });
+    }
+    spawnSessionCommentRec();
+  };
+
+  function spawnSessionCommentRec() {
+    if (!sessionCommentActiveRef.current) return;
+    const r = makeSR();
+    if (!r) { sessionCommentActiveRef.current = false; setSessionCommentListening(false); return; }
     r.onresult = (e: any) => {
       let fin = ""; let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -421,25 +530,23 @@ export default function ClientSession() {
       }
       sessionCommentInterimRef.current = interim;
       setSessionCommentInterim(interim);
-      if (fin) {
+      if (fin) { sessionCommentInterimRef.current = fin; setSessionCommentInterim(""); }
+    };
+    r.onerror = () => { sessionCommentInterimRef.current = ""; setSessionCommentInterim(""); };
+    r.onend = () => {
+      if (sessionCommentActiveRef.current) { setTimeout(spawnSessionCommentRec, 100); return; }
+      // Stopped by user and no MediaRecorder running — commit Web Speech text
+      if (!sessionCommentUsingMrRef.current) {
+        const leftover = sessionCommentInterimRef.current.trim();
+        if (leftover) setSessionComment(prev => (prev ? prev + " " : "") + leftover);
         sessionCommentInterimRef.current = "";
-        setSessionComment(prev => (prev ? prev + " " : "") + fin.trim());
         setSessionCommentInterim("");
+        setSessionCommentListening(false);
       }
     };
-    r.onerror = () => { sessionCommentInterimRef.current = ""; setSessionCommentListening(false); setSessionCommentInterim(""); };
-    r.onend = () => {
-      const leftover = sessionCommentInterimRef.current.trim();
-      if (leftover) setSessionComment(prev => (prev ? prev + " " : "") + leftover);
-      sessionCommentInterimRef.current = "";
-      setSessionCommentListening(false);
-      setSessionCommentInterim("");
-    };
     sessionCommentRecRef.current = r;
-    setSessionCommentListening(true);
-    setSessionCommentInterim("");
-    try { r.start(); } catch {}
-  };
+    try { r.start(); } catch { sessionCommentActiveRef.current = false; setSessionCommentListening(false); }
+  }
 
   // ── Feedback voice ────────────────────────────────────────────────────────
   const toggleFeedbackListening = () => {
@@ -1622,7 +1729,8 @@ export default function ClientSession() {
           const isSwapping = swappingExId === ex.id;
           const displayName = nameOverrides[ex.id] || ex.name;
           const wasSwapped = !!nameOverrides[ex.id];
-          const loggedCount = exLogs.filter(l => l.weight !== null || l.reps !== null).length;
+          const isBw = getExLoadType(ex.id, ex.name) === "bodyweight";
+          const loggedCount = exLogs.filter(l => isBw ? l.reps !== null : (l.weight !== null || l.reps !== null)).length;
           const allLogged = setsCount > 0 && loggedCount === setsCount;
 
           return (
@@ -1651,6 +1759,18 @@ export default function ClientSession() {
                   </div>
                 </div>
                 <div className="exercise-actions">
+                  {!isSwapping && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExLoadType(ex.id, ex.name)}
+                      title={isBw ? "Bodyweight — tap to add weight" : "Mark as bodyweight"}
+                      className={`h-8 px-2 rounded-xl text-[10px] font-bold border transition-colors ${
+                        isBw ? "bg-blue-100 text-blue-700 border-blue-300" : "text-muted-foreground border-border hover:border-blue-300 hover:text-blue-600"
+                      }`}
+                    >
+                      BW
+                    </button>
+                  )}
                   <Button
                     size="sm" variant="ghost"
                     className={`rounded-xl gap-1 h-8 px-2 text-xs ${isSwapping ? "text-orange-600 bg-orange-50" : "text-muted-foreground hover:text-foreground"}`}
@@ -1703,6 +1823,7 @@ export default function ClientSession() {
                 if (!prev) return null;
                 const setsText = prev.sets
                   .map(s => {
+                    if (isBw) return s.reps !== null ? `BW×${s.reps}` : null;
                     if (s.weight !== null && s.reps !== null) return `${s.weight}×${s.reps}`;
                     if (s.weight !== null) return `${s.weight}kg`;
                     if (s.reps !== null) return `×${s.reps}`;
@@ -1795,7 +1916,9 @@ export default function ClientSession() {
                   <>
                     <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-2 mb-1">
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Set</span>
-                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Weight (kg)</span>
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">
+                        {isBw ? "Load" : "Weight (kg)"}
+                      </span>
                       <div className="text-center">
                         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Reps done</span>
                         {ex.perSetReps && ex.perSetReps.length > 0 ? (
@@ -1807,7 +1930,7 @@ export default function ClientSession() {
                     </div>
                     {Array.from({ length: setsCount }, (_, setIdx) => {
                       const log = exLogs[setIdx] || { weight: null, reps: null };
-                      const isDone = log.weight !== null || log.reps !== null;
+                      const isDone = isBw ? log.reps !== null : (log.weight !== null || log.reps !== null);
                       const perSetTarget = ex.perSetReps?.[setIdx];
                       const perSetRpeTarget = ex.perSetRpe?.[setIdx];
                       return (
@@ -1816,13 +1939,19 @@ export default function ClientSession() {
                             <div>{setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}</div>
                             {perSetRpeTarget && <div className="text-[9px] font-semibold text-muted-foreground normal-case">RPE {perSetRpeTarget}</div>}
                           </div>
-                          <Input
-                            type="number" inputMode="decimal" step="0.5" min="0"
-                            placeholder="—"
-                            value={log.weight ?? ""}
-                            onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
-                            className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
-                          />
+                          {isBw ? (
+                            <div className="flex items-center justify-center">
+                              <span className="text-sm font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 h-10 flex items-center">BW</span>
+                            </div>
+                          ) : (
+                            <Input
+                              type="number" inputMode="decimal" step="0.5" min="0"
+                              placeholder="—"
+                              value={log.weight ?? ""}
+                              onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
+                              className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
+                            />
+                          )}
                           <div className="relative">
                             <Input
                               type="number" inputMode="numeric" step="1" min="0"
