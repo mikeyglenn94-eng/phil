@@ -375,99 +375,219 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const quickAddInterimRef = useRef("");
   const quickAddRecRef = useRef<any>(null);
 
-  // ── Editable WOD preview state ────────────────────────────────────────────
-  interface EditableWodStep {
-    id: string; label: string; movement: string; value: string; unit: string; load: string;
+  // ── Unified editable session state (Strength + WOD + Run) ─────────────────
+  interface EditableRow {
+    id: string;
+    label: string;       // "Minute 1", "Warm-up", "Exercise 1", etc.
+    name: string;        // movement / exercise / segment description
+    // strength fields
+    sets: string; reps: string; weight: string; rpe: string; rest: string; tempo: string;
+    // wod fields (also used for run reps)
+    value: string; unit: string; load: string;
+    // shared notes
+    notes: string;
   }
-  interface EditableWod {
-    title: string; format: string; durationMinutes: string;
-    steps: EditableWodStep[]; repeatNote: string; restNote: string;
-    scoreType: string; _rawOpt: any;
+  interface EditableSession {
+    title: string;
+    type: "strength" | "wod" | "run";
+    format: string;         // wod: "emom"|"amrap"|… run: "Intervals"|"Steady"|… strength: ""
+    summary: string;        // human-readable summary line
+    durationMinutes: string;
+    rows: EditableRow[];
+    repeatNote: string;
+    restNote: string;
+    _raw: any;              // original parsed session/opt
   }
-  const [editableWod, setEditableWod] = useState<EditableWod | null>(null);
+
+  const [editableSession, setEditableSession] = useState<EditableSession | null>(null);
+  // Keep editableWod alias so existing confirmQuickAdd / save paths still work
+  const editableWod = editableSession;
 
   const FORMAT_LABELS: Record<string, string> = {
     emom: "EMOM", amrap: "AMRAP", for_time: "For Time", chipper: "Chipper",
     intervals: "Intervals", interval: "Intervals", rounds_for_time: "Rounds For Time", custom: "Custom",
   };
 
-  function parseOptToEditable(opt: any): EditableWod {
+  function blankRow(id: string, label = ""): EditableRow {
+    return { id, label, name: "", sets: "", reps: "", weight: "", rpe: "", rest: "", tempo: "", value: "", unit: "reps", load: "", notes: "" };
+  }
+
+  // ── Converters: parsed API response → unified EditableSession ─────────────
+  function parseStrengthToEditable(session: any): EditableSession {
+    const rows: EditableRow[] = (session.exercises ?? []).map((ex: any, i: number) => ({
+      id: ex.id || `row-${i}`,
+      label: "",
+      name: ex.name ?? "",
+      sets: ex.sets != null ? String(ex.sets) : "",
+      reps: ex.reps != null ? String(ex.reps) : "",
+      weight: ex.weight ?? "",
+      rpe: ex.rpe ?? "",
+      rest: ex.rest ?? "",
+      tempo: ex.tempo ?? "",
+      value: "", unit: "reps", load: "",
+      notes: ex.notes ?? "",
+    }));
+    const totalSets = rows.reduce((s, r) => s + (Number(r.sets) || 0), 0);
+    return {
+      title: session.name || "Strength Session",
+      type: "strength",
+      format: "",
+      summary: rows.length ? `${rows.length} exercise${rows.length > 1 ? "s" : ""}${totalSets ? ` · ${totalSets} sets` : ""}` : "",
+      durationMinutes: "",
+      rows,
+      repeatNote: "", restNote: "",
+      _raw: session,
+    };
+  }
+
+  function parseWodToEditable(opt: any): EditableSession {
     const canonical = opt.wod;
-    const steps: EditableWodStep[] = [];
+    const rows: EditableRow[] = [];
     if (canonical?.blocks?.length) {
       for (const block of canonical.blocks) {
         for (const step of (block.steps ?? [])) {
-          steps.push({
-            id: step.id ?? `step-${steps.length}`,
+          rows.push({
+            id: step.id ?? `row-${rows.length}`,
             label: step.label ?? "",
-            movement: step.movement?.name ?? "",
+            name: step.movement?.name ?? "",
+            sets: "", reps: "", weight: "", rpe: "", rest: "", tempo: "",
             value: step.target?.value != null ? String(step.target.value) : "",
             unit: step.target?.unit ?? "reps",
             load: step.load?.display ?? "",
+            notes: "",
           });
         }
       }
     } else {
       for (const ex of (opt.exercises ?? [])) {
-        steps.push({ id: ex.id, label: "", movement: ex.name ?? "", value: "", unit: "reps", load: "" });
+        rows.push({ ...blankRow(ex.id || `row-${rows.length}`), name: ex.name ?? "" });
       }
     }
-    const dur = canonical?.totalDurationSeconds
-      ? String(Math.round(canonical.totalDurationSeconds / 60))
-      : "";
+    const dur = canonical?.totalDurationSeconds ? String(Math.round(canonical.totalDurationSeconds / 60)) : "";
+    const fmtLabel = FORMAT_LABELS[opt.format] ?? opt.format?.toUpperCase() ?? "WOD";
     return {
-      title: opt.name || "",
+      title: opt.name || fmtLabel,
+      type: "wod",
       format: opt.format ?? "amrap",
+      summary: dur ? `${dur} min ${fmtLabel}` : fmtLabel,
       durationMinutes: dur,
-      steps,
+      rows,
       repeatNote: opt.repeatNote ?? "",
       restNote: opt.restNote ?? "",
-      scoreType: opt.scoreType ?? opt.resultType ?? "",
-      _rawOpt: opt,
+      _raw: opt,
     };
   }
 
-  function editableWodToSession(ew: EditableWod): any {
+  function parseRunToEditable(session: any): EditableSession {
+    const rows: EditableRow[] = (session.segments ?? []).map((seg: any, i: number) => ({
+      id: `seg-${i}`,
+      label: seg.label ?? "",
+      name: seg.description ?? "",
+      sets: "", reps: seg.reps != null ? String(seg.reps) : "", weight: "", rpe: "", rest: seg.rest ?? "", tempo: "",
+      value: seg.distance ?? seg.duration ?? "", unit: "", load: "",
+      notes: seg.effort ?? "",
+    }));
+    if (!rows.length && session.structure) {
+      rows.push({ ...blankRow("seg-0", "Session"), name: session.structure, notes: session.intensity ?? "" });
+    }
+    const parts: string[] = [];
+    if (session.duration) parts.push(`${session.duration} min`);
+    if (session.distanceKm) parts.push(`${session.distanceKm} km`);
+    if (session.intensity) parts.push(session.intensity);
+    return {
+      title: session.name || "Run Session",
+      type: "run",
+      format: session.intensity ?? "Run",
+      summary: parts.join(" · "),
+      durationMinutes: session.duration ? String(session.duration) : "",
+      rows,
+      repeatNote: "", restNote: "",
+      _raw: session,
+    };
+  }
+
+  // ── Converter: EditableSession → canonical save object ────────────────────
+  function editableSessionToSession(es: EditableSession): any {
     const now = Date.now();
-    const durationMin = ew.durationMinutes ? Number(ew.durationMinutes) : undefined;
+    if (es.type === "strength") {
+      const exercises = es.rows.map((r, i) => ({
+        id: r.id || `ex-${now}-${i}`,
+        name: r.name,
+        sets: r.sets ? Number(r.sets) : null,
+        reps: r.reps || null,
+        rpe: r.rpe || null,
+        rest: r.rest || null,
+        tempo: r.tempo || null,
+        notes: r.notes || null,
+        weight: r.weight || null,
+        rawText: [r.sets && r.reps ? `${r.sets}×${r.reps}` : null, r.weight, r.name].filter(Boolean).join(" "),
+        weekProgression: [], clientComment: null,
+        perSetReps: null, perSetRpe: null, setWeights: null, setReps: null,
+      }));
+      return { ...es._raw, name: es.title || es._raw?.name, source: "strength_block", exercises };
+    }
+    if (es.type === "run") {
+      const segments = es.rows.map((r) => ({
+        label: r.label, description: r.name, distance: r.value || null, effort: r.notes || null,
+        rest: r.rest || null, reps: r.reps ? Number(r.reps) : null,
+      }));
+      const exercises = [{
+        id: es._raw?.exercises?.[0]?.id || `ex-${now}-0`,
+        name: es.title,
+        sets: null, reps: null, rpe: null, rest: null, tempo: null,
+        notes: es.summary,
+        rawText: es.rows.map(r => [r.reps ? `${r.reps}×` : "", r.value, r.name, r.notes].filter(Boolean).join(" ")).join(" · "),
+        weekProgression: [], clientComment: null,
+        perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
+      }];
+      return {
+        ...es._raw, name: es.title || es._raw?.name, source: "run_brain",
+        structure: es.rows.map(r => [r.label, r.reps ? `${r.reps}×` : "", r.name, r.notes].filter(Boolean).join(" ")).join(" · "),
+        segments, exercises,
+      };
+    }
+    // WOD
+    const durationMin = es.durationMinutes ? Number(es.durationMinutes) : undefined;
     const wodBlocks = [{
-      id: "block-0",
-      type: ew.format,
+      id: "block-0", type: es.format,
       durationSeconds: durationMin != null ? durationMin * 60 : undefined,
-      steps: ew.steps.map((s, idx) => ({
-        id: s.id || `step-${idx}`,
-        ...(s.label ? { label: s.label } : {}),
-        movement: { name: s.movement },
+      steps: es.rows.map((r, idx) => ({
+        id: r.id || `step-${idx}`,
+        ...(r.label ? { label: r.label } : {}),
+        movement: { name: r.name },
         target: {
-          type: s.unit === "seconds" ? "seconds" : s.unit === "m" || s.unit === "km" ? "distance" : s.unit === "cal" ? "calories" : "reps",
-          value: s.value !== "" ? Number(s.value) : undefined,
-          unit: s.unit,
+          type: r.unit === "seconds" ? "seconds" : (r.unit === "m" || r.unit === "km") ? "distance" : r.unit === "cal" ? "calories" : "reps",
+          value: r.value !== "" ? Number(r.value) : undefined,
+          unit: r.unit,
         },
-        ...(s.load ? { load: { display: s.load } } : {}),
+        ...(r.load ? { load: { display: r.load } } : {}),
       })),
     }];
-    const exercises = ew.steps.map((s, idx) => {
-      const notes = s.value ? (s.load ? `${s.value} ${s.unit} (${s.load})` : `${s.value} ${s.unit}`) : (s.load || "");
+    const exercises = es.rows.map((r, idx) => {
+      const notes = r.value ? (r.load ? `${r.value} ${r.unit} (${r.load})` : `${r.value} ${r.unit}`) : (r.load || "");
       return {
-        id: s.id || `ex-${now}-${idx}`,
-        name: s.movement,
+        id: r.id || `ex-${now}-${idx}`,
+        name: r.name,
         sets: null, reps: null, rpe: null, rest: null, tempo: null,
-        notes, rawText: `${notes} ${s.movement}`.trim(),
+        notes, rawText: `${notes} ${r.name}`.trim(),
         weekProgression: [], clientComment: null,
         perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
       };
     });
     return {
-      ...ew._rawOpt,
-      name: ew.title || ew._rawOpt?.name || "WOD",
-      format: ew.format,
-      structure: ew._rawOpt?.structure ?? "",
-      repeatNote: ew.repeatNote,
-      restNote: ew.restNote,
-      wod: { format: ew.format, totalDurationSeconds: durationMin != null ? durationMin * 60 : undefined, blocks: wodBlocks },
+      ...es._raw,
+      name: es.title || es._raw?.name || "WOD",
+      format: es.format,
+      structure: es._raw?.structure ?? "",
+      repeatNote: es.repeatNote, restNote: es.restNote,
+      wod: { format: es.format, totalDurationSeconds: durationMin != null ? durationMin * 60 : undefined, blocks: wodBlocks },
       exercises,
     };
   }
+
+  // Keep legacy alias for any remaining references
+  function editableWodToSession(ew: EditableSession): any { return editableSessionToSession(ew); }
+  function parseOptToEditable(opt: any): EditableSession { return parseWodToEditable(opt); }
 
   function toggleQuickAddListening() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -512,7 +632,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setQuickAddParsing(true);
     setQuickAddError("");
     setParsedQuickSession(null);
-    setEditableWod(null);
+    setEditableSession(null);
     setQuickAddWodOptions(null);
     try {
       const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
@@ -529,8 +649,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       } else {
         const single = data.options?.[0] ?? data;
         setParsedQuickSession(single);
-        if (quickAddType === "wod" && single?.source === "wod_brain") {
-          setEditableWod(parseOptToEditable(single));
+        if (quickAddType === "wod") {
+          setEditableSession(parseWodToEditable(single));
+        } else if (quickAddType === "run") {
+          setEditableSession(parseRunToEditable(single));
+        } else {
+          setEditableSession(parseStrengthToEditable(single));
         }
       }
     } catch {
@@ -544,9 +668,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (!parsedQuickSession || !quickAddDate) return;
     setSavingQuickSession(dest);
     try {
-      // ── Build session from editable WOD if available, else fall back to raw parse ──
-      const baseSession = editableWod
-        ? editableWodToSession(editableWod)
+      // ── Build session from editable session (always preferred) ──
+      const baseSession = editableSession
+        ? editableSessionToSession(editableSession)
         : parsedQuickSession;
       const newSession = { ...baseSession, id: `session-${Date.now()}`, date: quickAddDate };
 
@@ -566,7 +690,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       await addSessionToClientCalendar(quickAddDate, newSession, () => {}, newSession.id, () => {
         setQuickAddOpen(false);
         setParsedQuickSession(null);
-        setEditableWod(null);
+        setEditableSession(null);
         setQuickAddName("");
         setQuickAddDesc("");
         setQuickAddType("strength");
@@ -4129,7 +4253,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   className="w-full text-left rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5 hover:border-primary/50 hover:bg-primary/10 transition-colors"
                   onClick={() => {
                     setParsedQuickSession(opt);
-                    setEditableWod(parseOptToEditable(opt));
+                    setEditableSession(parseWodToEditable(opt));
                     setQuickAddWodOptions(null);
                   }}
                 >
@@ -4152,139 +4276,189 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 ← Edit description
               </button>
             </div>
-          ) : parsedQuickSession && editableWod ? (
+          ) : parsedQuickSession && editableSession ? (
             <div className="space-y-3 pt-1">
-              {/* ── Polished editable WOD preview card ── */}
+              {/* ── Unified editable workout preview card ── */}
               <div className="rounded-xl border border-primary/25 bg-gradient-to-b from-primary/5 to-primary/[0.02] overflow-hidden">
-                {/* Header */}
+
+                {/* ── Header: type badge · title · duration ── */}
                 <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-primary/10">
-                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/10 text-primary/70">
-                    {FORMAT_LABELS[editableWod.format] ?? editableWod.format.toUpperCase()}
+                  <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full shrink-0 ${
+                    editableSession.type === "strength" ? "bg-amber-100 text-amber-700" :
+                    editableSession.type === "run" ? "bg-emerald-100 text-emerald-700" :
+                    "bg-primary/10 text-primary/70"
+                  }`}>
+                    {editableSession.type === "wod"
+                      ? (FORMAT_LABELS[editableSession.format] ?? (editableSession.format ? editableSession.format.toUpperCase() : "WOD"))
+                      : editableSession.type === "run"
+                      ? (editableSession.format || "Run")
+                      : "Strength"}
                   </span>
                   <input
                     className="flex-1 text-sm font-bold bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/40 min-w-0"
-                    value={editableWod.title}
-                    onChange={e => setEditableWod(prev => prev ? { ...prev, title: e.target.value } : prev)}
+                    value={editableSession.title}
+                    onChange={e => setEditableSession(prev => prev ? { ...prev, title: e.target.value } : prev)}
                     placeholder="Workout title…"
                   />
-                  <div className="flex items-center gap-1 shrink-0">
-                    <input
-                      type="number"
-                      className="w-10 text-xs text-right bg-transparent border-none outline-none focus:ring-0 text-muted-foreground font-mono"
-                      value={editableWod.durationMinutes}
-                      onChange={e => setEditableWod(prev => prev ? { ...prev, durationMinutes: e.target.value } : prev)}
-                      placeholder="—"
-                      min={1}
-                    />
-                    <span className="text-xs text-muted-foreground">min</span>
-                  </div>
+                  {(editableSession.type === "wod" || editableSession.type === "run") && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <input
+                        type="number"
+                        className="w-10 text-xs text-right bg-transparent border-none outline-none focus:ring-0 text-muted-foreground font-mono"
+                        value={editableSession.durationMinutes}
+                        onChange={e => setEditableSession(prev => prev ? { ...prev, durationMinutes: e.target.value } : prev)}
+                        placeholder="—"
+                        min={1}
+                      />
+                      <span className="text-xs text-muted-foreground">min</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Steps */}
+                {/* ── Summary line ── */}
+                {editableSession.summary && (
+                  <div className="px-3 pt-1.5 pb-0">
+                    <p className="text-[11px] text-muted-foreground">{editableSession.summary}</p>
+                  </div>
+                )}
+
+                {/* ── Rows: type-specific fields ── */}
                 <div className="px-3 py-2 space-y-1.5">
-                  {editableWod.steps.map((step, si) => (
-                    <div key={step.id} className="flex items-center gap-2 group">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0 mt-0.5" />
+                  {editableSession.rows.map((row, ri) => (
+                    <div key={row.id} className="flex items-center gap-1.5 group">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/30 shrink-0 mt-0.5" />
+
+                      {/* Label (Minute 1, Warm-up, etc.) */}
                       <input
-                        className="text-[11px] text-muted-foreground bg-transparent border-none outline-none focus:ring-0 w-20 shrink-0 placeholder:text-muted-foreground/30"
-                        value={step.label}
-                        onChange={e => setEditableWod(prev => {
+                        className="text-[11px] text-muted-foreground/70 bg-transparent border-none outline-none focus:ring-0 w-[72px] shrink-0 placeholder:text-muted-foreground/25 italic"
+                        value={row.label}
+                        onChange={e => setEditableSession(prev => {
                           if (!prev) return prev;
-                          const steps = [...prev.steps];
-                          steps[si] = { ...steps[si], label: e.target.value };
-                          return { ...prev, steps };
+                          const rows = [...prev.rows];
+                          rows[ri] = { ...rows[ri], label: e.target.value };
+                          return { ...prev, rows };
                         })}
                         placeholder="label…"
                       />
+
+                      {/* Name (exercise / movement / segment) */}
                       <input
                         className="flex-1 text-sm font-medium bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/40 min-w-0"
-                        value={step.movement}
-                        onChange={e => setEditableWod(prev => {
+                        value={row.name}
+                        onChange={e => setEditableSession(prev => {
                           if (!prev) return prev;
-                          const steps = [...prev.steps];
-                          steps[si] = { ...steps[si], movement: e.target.value };
-                          return { ...prev, steps };
+                          const rows = [...prev.rows];
+                          rows[ri] = { ...rows[ri], name: e.target.value };
+                          return { ...prev, rows };
                         })}
-                        placeholder="Movement…"
+                        placeholder={editableSession.type === "strength" ? "Exercise…" : editableSession.type === "run" ? "Segment…" : "Movement…"}
                       />
-                      <div className="flex items-center gap-1 shrink-0">
-                        <input
-                          type="text"
-                          className="w-10 text-xs text-right bg-transparent border-none outline-none focus:ring-0 font-mono text-foreground/80"
-                          value={step.value}
-                          onChange={e => setEditableWod(prev => {
-                            if (!prev) return prev;
-                            const steps = [...prev.steps];
-                            steps[si] = { ...steps[si], value: e.target.value };
-                            return { ...prev, steps };
-                          })}
-                          placeholder="—"
-                        />
-                        <select
-                          className="text-[11px] bg-transparent border-none outline-none focus:ring-0 text-muted-foreground cursor-pointer"
-                          value={step.unit}
-                          onChange={e => setEditableWod(prev => {
-                            if (!prev) return prev;
-                            const steps = [...prev.steps];
-                            steps[si] = { ...steps[si], unit: e.target.value };
-                            return { ...prev, steps };
-                          })}
-                        >
-                          <option value="reps">reps</option>
-                          <option value="seconds">sec</option>
-                          <option value="m">m</option>
-                          <option value="km">km</option>
-                          <option value="cal">cal</option>
-                        </select>
-                      </div>
-                      {step.load !== undefined && (
-                        <input
-                          className="w-14 text-[11px] text-muted-foreground bg-transparent border-none outline-none focus:ring-0 text-right font-mono placeholder:text-muted-foreground/30"
-                          value={step.load}
-                          onChange={e => setEditableWod(prev => {
-                            if (!prev) return prev;
-                            const steps = [...prev.steps];
-                            steps[si] = { ...steps[si], load: e.target.value };
-                            return { ...prev, steps };
-                          })}
-                          placeholder="load…"
-                        />
+
+                      {/* Strength: sets × reps @ weight */}
+                      {editableSession.type === "strength" && (
+                        <div className="flex items-center gap-1 shrink-0 text-xs font-mono text-foreground/70">
+                          <input className="w-7 text-right bg-transparent border-none outline-none focus:ring-0"
+                            value={row.sets} placeholder="—"
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], sets: e.target.value }; return { ...prev, rows }; })}
+                          />
+                          <span className="text-muted-foreground/50">×</span>
+                          <input className="w-7 bg-transparent border-none outline-none focus:ring-0"
+                            value={row.reps} placeholder="—"
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], reps: e.target.value }; return { ...prev, rows }; })}
+                          />
+                          <input className="w-14 bg-transparent border-none outline-none focus:ring-0 text-muted-foreground placeholder:text-muted-foreground/30"
+                            value={row.weight} placeholder="kg/lb…"
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], weight: e.target.value }; return { ...prev, rows }; })}
+                          />
+                          {row.rpe && <span className="text-[10px] text-muted-foreground/60">RPE</span>}
+                          <input className="w-6 bg-transparent border-none outline-none focus:ring-0 text-muted-foreground/60 placeholder:text-muted-foreground/25"
+                            value={row.rpe} placeholder="—"
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], rpe: e.target.value }; return { ...prev, rows }; })}
+                          />
+                        </div>
+                      )}
+
+                      {/* WOD: value + unit + load */}
+                      {editableSession.type === "wod" && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input type="text"
+                            className="w-10 text-xs text-right bg-transparent border-none outline-none focus:ring-0 font-mono text-foreground/80"
+                            value={row.value} placeholder="—"
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], value: e.target.value }; return { ...prev, rows }; })}
+                          />
+                          <select className="text-[11px] bg-transparent border-none outline-none focus:ring-0 text-muted-foreground cursor-pointer"
+                            value={row.unit}
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], unit: e.target.value }; return { ...prev, rows }; })}
+                          >
+                            <option value="reps">reps</option>
+                            <option value="seconds">sec</option>
+                            <option value="m">m</option>
+                            <option value="km">km</option>
+                            <option value="cal">cal</option>
+                          </select>
+                          <input className="w-14 text-[11px] text-muted-foreground bg-transparent border-none outline-none focus:ring-0 text-right font-mono placeholder:text-muted-foreground/25"
+                            value={row.load} placeholder="load…"
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], load: e.target.value }; return { ...prev, rows }; })}
+                          />
+                        </div>
+                      )}
+
+                      {/* Run: distance/duration + effort + rest */}
+                      {editableSession.type === "run" && (
+                        <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+                          <input className="w-14 text-right bg-transparent border-none outline-none focus:ring-0 font-mono placeholder:text-muted-foreground/25"
+                            value={row.value} placeholder="dist…"
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], value: e.target.value }; return { ...prev, rows }; })}
+                          />
+                          <input className="w-16 bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25 italic"
+                            value={row.notes} placeholder="effort…"
+                            onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], notes: e.target.value }; return { ...prev, rows }; })}
+                          />
+                          {(row.reps || row.rest) && (
+                            <input className="w-14 bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25"
+                              value={row.rest} placeholder="rest…"
+                              onChange={e => setEditableSession(prev => { if (!prev) return prev; const rows = [...prev.rows]; rows[ri] = { ...rows[ri], rest: e.target.value }; return { ...prev, rows }; })}
+                            />
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
+
+                  {/* Add row button */}
                   <button
                     className="text-[11px] text-primary/50 hover:text-primary transition-colors mt-1"
-                    onClick={() => setEditableWod(prev => {
+                    onClick={() => setEditableSession(prev => {
                       if (!prev) return prev;
-                      const newStep = { id: `step-new-${Date.now()}`, label: "", movement: "", value: "", unit: "reps", load: "" };
-                      return { ...prev, steps: [...prev.steps, newStep] };
+                      const newRow = blankRow(`row-new-${Date.now()}`);
+                      return { ...prev, rows: [...prev.rows, newRow] };
                     })}
                   >
-                    + Add movement
+                    {editableSession.type === "strength" ? "+ Add exercise" : editableSession.type === "run" ? "+ Add segment" : "+ Add movement"}
                   </button>
                 </div>
 
-                {/* Repeat / Rest notes */}
-                {(editableWod.repeatNote || editableWod.restNote) && (
+                {/* ── Repeat / Rest notes (WOD + Run) ── */}
+                {(editableSession.repeatNote || editableSession.restNote) && (
                   <div className="px-3 pb-2 pt-1 space-y-1 border-t border-primary/10">
-                    {editableWod.repeatNote && (
+                    {editableSession.repeatNote && (
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] text-muted-foreground/60 shrink-0">↻</span>
                         <input
                           className="flex-1 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/30"
-                          value={editableWod.repeatNote}
-                          onChange={e => setEditableWod(prev => prev ? { ...prev, repeatNote: e.target.value } : prev)}
+                          value={editableSession.repeatNote}
+                          onChange={e => setEditableSession(prev => prev ? { ...prev, repeatNote: e.target.value } : prev)}
                           placeholder="Repeat logic…"
                         />
                       </div>
                     )}
-                    {editableWod.restNote && (
+                    {editableSession.restNote && (
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] text-muted-foreground/60 shrink-0">⏸</span>
                         <input
                           className="flex-1 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/30"
-                          value={editableWod.restNote}
-                          onChange={e => setEditableWod(prev => prev ? { ...prev, restNote: e.target.value } : prev)}
+                          value={editableSession.restNote}
+                          onChange={e => setEditableSession(prev => prev ? { ...prev, restNote: e.target.value } : prev)}
                           placeholder="Rest note…"
                         />
                       </div>
@@ -4292,9 +4466,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   </div>
                 )}
 
-                {/* Footer validation tag */}
-                <div className="px-3 py-1.5 border-t border-primary/10 bg-emerald-50/50">
-                  <p className="text-[11px] text-emerald-700 font-medium">✓ Ready to save — edit any field above before saving</p>
+                {/* ── Footer ── */}
+                <div className="px-3 py-1.5 border-t border-primary/10 bg-emerald-50/50 dark:bg-emerald-950/20">
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">✓ Ready to save — tap any field to edit before saving</p>
                 </div>
               </div>
 
@@ -4332,7 +4506,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               </div>
               <button
                 className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
-                onClick={() => { setParsedQuickSession(null); setEditableWod(null); }}
+                onClick={() => { setParsedQuickSession(null); setEditableSession(null); }}
               >
                 ← Edit description
               </button>

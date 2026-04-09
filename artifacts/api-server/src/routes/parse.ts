@@ -1105,17 +1105,29 @@ Rules:
 - Extract DURATION in minutes (number, null if not mentioned)
 - Extract DISTANCE in km (number, null if not mentioned). Convert miles to km (1 mile = 1.609 km), convert metres to km.
 - Extract INTENSITY as a short label: "Easy", "Steady", "Tempo", "Intervals", "Hill Repeats", "Time Trial", "Sprint", "Recovery", or infer from context
-- Generate a concise SESSION NAME (e.g. "Easy Run", "Tempo Intervals", "Long Run", "Hill Repeats", "5K Time Trial")
-- Write a human-readable STRUCTURE string that fully describes the session (e.g. "30 min easy run at conversational pace", "5 × 1km at tempo pace, 90s jog recovery")
+- Generate a concise SESSION NAME that is publish-ready: e.g. "Tempo Intervals", "Long Steady Run", "Hill Repeats", "5K Time Trial". Never use generic names like "Run" or "Session".
+- Write a human-readable STRUCTURE string that fully describes the session
+- Break the session into SEGMENTS — each segment is an individual part of the run (warm-up, interval sets, cool-down, steady blocks)
+- Never use "easy run" — use "steady run", "quality session", "long steady run", or "recovery run" instead
 - Return ONLY valid JSON, no markdown fences
+
+Segment rules:
+- Each segment has: label (e.g. "Warm-up", "Main Set", "Cool-down", "Interval 1"), description (short text), distance (e.g. "1 km", null), duration (e.g. "10 min", null), effort (e.g. "easy pace", "tempo", "fast", "all-out"), rest (e.g. "90s jog", null)
+- For interval sets with repeats, use label "Main Set", include reps count as integer, distance/duration per rep, effort, rest
+- Always include warm-up and cool-down if implied by the description
 
 Response format:
 {
-  "name": "Tempo Intervals",
-  "duration": 35,
-  "distanceKm": 8,
-  "intensity": "Tempo",
-  "structure": "5 × 1 km at tempo pace, 90s jog recovery, total ~35 min"
+  "name": "5k Tempo + Intervals",
+  "duration": 40,
+  "distanceKm": 9,
+  "intensity": "Intervals",
+  "structure": "1 km warm-up · 4 × 400m fast (90s rest) · 5 km tempo · 1 km cool-down",
+  "segments": [
+    { "label": "Warm-up", "description": "1 km at easy pace", "distance": "1 km", "duration": null, "effort": "easy pace", "rest": null, "reps": null },
+    { "label": "Main Set", "description": "4 × 400m fast", "distance": "400m", "duration": null, "effort": "fast", "rest": "90s jog", "reps": 4 },
+    { "label": "Cool-down", "description": "1 km easy jog", "distance": "1 km", "duration": null, "effort": "easy pace", "rest": null, "reps": null }
+  ]
 }`;
 
   try {
@@ -1129,11 +1141,13 @@ Response format:
     });
 
     const parsed = JSON.parse(completion.choices[0].message.content || "{}");
-    const sessionName = name?.trim() || parsed.name || "Run";
+    const userNameMeaningful = name?.trim() && name.trim().toLowerCase() !== "test" && name.trim().length > 2;
+    const sessionName = userNameMeaningful ? name!.trim() : (parsed.name || "Run Session");
     const duration: number | null = typeof parsed.duration === "number" ? parsed.duration : null;
     const distanceKm: number | null = typeof parsed.distanceKm === "number" ? Math.round(parsed.distanceKm * 10) / 10 : null;
     const intensity: string = parsed.intensity ?? "";
     const structure: string = parsed.structure ?? description.trim();
+    const segments: any[] = Array.isArray(parsed.segments) ? parsed.segments : [];
 
     const notesParts: string[] = [];
     if (duration) notesParts.push(`${duration} min`);
@@ -1145,23 +1159,14 @@ Response format:
     const exercises = [{
       id: `ex-${now}-0`,
       name: sessionName,
-      sets: null,
-      reps: null,
-      rpe: null,
-      rest: null,
-      tempo: null,
+      sets: null, reps: null, rpe: null, rest: null, tempo: null,
       notes,
       rawText: structure,
-      weekProgression: [],
-      clientComment: null,
-      perSetReps: null,
-      perSetRpe: null,
-      setWeights: null,
-      setReps: null,
-      weight: null,
+      weekProgression: [], clientComment: null,
+      perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
     }];
 
-    res.json({ name: sessionName, source: "run_brain", structure, exercises });
+    res.json({ name: sessionName, source: "run_brain", structure, segments, duration, distanceKm, intensity, exercises });
   } catch (err) {
     req.log.error({ err }, "Error parsing run session");
     res.status(500).json({ error: "Failed to parse run session" });
