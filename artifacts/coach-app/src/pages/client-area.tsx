@@ -509,18 +509,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   }
 
   /** Build Through AI — single session mode: parses and shows preview with save options */
-  async function handleAiSession() {
-    if (!quickAddDesc.trim() || !assignStartDate) return;
+  async function handleAiSession(overrides?: { desc?: string; type?: "strength" | "wod" | "run" }) {
+    const desc = overrides?.desc ?? quickAddDesc;
+    const type = overrides?.type ?? quickAddType;
+    if (!desc.trim() || !assignStartDate) return;
     setAiSessionGenerating(true);
     setQuickAddError("");
     setParsedAiSession(null);
     setQuickAddWodOptions(null);
     try {
-      const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
+      const endpoint = type === "wod" ? "/api/parse-wod-session" : type === "run" ? "/api/parse-run-session" : "/api/parse-session";
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
+        body: JSON.stringify({ description: desc.trim(), name: quickAddName.trim() || undefined }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
@@ -1215,25 +1217,48 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     }
   };
 
+  // ── Infer session type from a natural-language brief ─────────────────────
+  function inferSessionTypeFromBrief(brief: string): "strength" | "wod" | "run" {
+    const lower = brief.toLowerCase();
+    if (/\b(wod|amrap|emom|for time|metcon|box jump|wall ball|burpee|double under|pull.?up|kb|kettlebell|row.*cal|cal.*row|chipper)\b/.test(lower)) return "wod";
+    if (/\b(run|km|kilometer|metre|meter|mile|interval|tempo|sprint|jog|5k|10k|half marathon|marathon|parkrun|pace|treadmill|track)\b/.test(lower)) return "run";
+    return "strength";
+  }
+
   // ── Open the plan/session builder pre-filled from a parse result ─────────
+  // For sessions: auto-generates immediately without requiring another click.
+  // For programmes: pre-fills the programme builder describe field.
   const handleBuildFromParse = () => {
     if (!coachParseResult) return;
     const brief = coachParseResult.suggestedBrief ?? originalCoachInput;
     const isSession = coachParseResult.requestType === "session";
-    setDescribeText(brief);
-    setAiMode(isSession ? "session" : "programme");
-    setBuildMode("describe");
-    setGeneratedPreview(null);
-    setFromScratchTitle("");
-    setStrengthStyle(null);
-    setQuickAddName("");
-    setQuickAddDesc("");
-    setQuickAddType("strength");
-    setQuickAddError("");
-    setAssignStartDate(format(new Date(), "yyyy-MM-dd"));
-    setAssignDialogOpen(true);
     setCoachParseResult(null);
     setCoachFollowUpInput("");
+
+    if (isSession) {
+      const inferredType = inferSessionTypeFromBrief(brief);
+      // Pre-fill the session form
+      setQuickAddDesc(brief);
+      setQuickAddType(inferredType);
+      setQuickAddName("");
+      setQuickAddError("");
+      setAiMode("session");
+      setParsedAiSession(null);
+      setQuickAddWodOptions(null);
+      setAssignDialogOpen(true);
+      // Auto-generate immediately using overrides to bypass stale state
+      void handleAiSession({ desc: brief, type: inferredType });
+    } else {
+      // Programme flow — pre-fill the describe field and open the builder
+      setDescribeText(brief);
+      setAiMode("programme");
+      setBuildMode("describe");
+      setGeneratedPreview(null);
+      setFromScratchTitle("");
+      setStrengthStyle(null);
+      setAssignStartDate(format(new Date(), "yyyy-MM-dd"));
+      setAssignDialogOpen(true);
+    }
   };
 
   // ── Handle user's answer to a coach follow-up question ──────────────────
@@ -3021,7 +3046,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                         onClick={() => {
                           const brief = coachParseResult.suggestedBrief ?? originalCoachInput;
                           const isSession = coachParseResult.requestType === "session";
-                          setDescribeText(brief);
+                          if (isSession) {
+                            // For sessions: pre-fill form so user can adjust then manually click Generate
+                            setQuickAddDesc(brief);
+                            setQuickAddType(inferSessionTypeFromBrief(brief));
+                            setQuickAddName("");
+                            setQuickAddError("");
+                            setParsedAiSession(null);
+                            setQuickAddWodOptions(null);
+                          } else {
+                            setDescribeText(brief);
+                          }
                           setAiMode(isSession ? "session" : "programme");
                           setBuildMode("describe");
                           setGeneratedPreview(null);
