@@ -270,9 +270,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setRunEnv(prev => prev.includes(env) ? prev.filter(e => e !== env) : [...prev, env]);
   }
 
-  async function handleGenerateProgramme(overrides?: { description?: string }) {
+  async function handleGenerateProgramme(overrides?: { description?: string; startDate?: string }) {
     const description = overrides?.description ?? describeText;
-    if (!description.trim() || !assignStartDate) return;
+    const startDate = overrides?.startDate ?? assignStartDate;
+    if (!description.trim() || !startDate) return;
     setDescribeGenerating(true);
     setGeneratedPreview(null);
     setRationaleText("");
@@ -281,7 +282,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     try {
       // Step 1: get rationale quickly (shows during the long wait)
       const envSuffix = runEnv.length > 0 ? ` Running environment: ${runEnv.join(", ")}.` : "";
-      const body = { description: description.trim() + envSuffix, startDate: assignStartDate, strengthStyle: strengthStyle ?? "straight", clientId };
+      const body = { description: description.trim() + envSuffix, startDate, strengthStyle: strengthStyle ?? "straight", clientId };
       const rationaleRes = await fetch("/api/generate-rationale", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -612,7 +613,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     planSummary?: string[];
     intentNote?: string;
     suggestedBrief?: string;
-    parsedConstraints: Record<string, unknown>;
+    parsedConstraints: Record<string, unknown> & { progressionStyle?: "straight" | "variety" | null };
   }
   const [coachParseResult, setCoachParseResult] = useState<CoachParseResult | null>(null);
   const [coachFollowUpInput, setCoachFollowUpInput] = useState("");
@@ -1250,17 +1251,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       // Auto-generate immediately using overrides to bypass stale state
       void handleAiSession({ desc: brief, type: inferredType });
     } else {
-      // Programme flow — pre-fill and auto-generate immediately
+      // Programme flow — pre-fill description + pre-select progression style, then let user review + click Generate
+      const today = format(new Date(), "yyyy-MM-dd");
+      const inferredStyle = coachParseResult.parsedConstraints?.progressionStyle ?? "straight";
       setDescribeText(brief);
       setAiMode("programme");
       setBuildMode("describe");
       setGeneratedPreview(null);
       setFromScratchTitle("");
-      setStrengthStyle(null);
-      setAssignStartDate(format(new Date(), "yyyy-MM-dd"));
+      setStrengthStyle(inferredStyle);
+      setAssignStartDate(today);
       setAssignDialogOpen(true);
-      // Auto-generate using overrides to bypass stale state
-      void handleGenerateProgramme({ description: brief });
+      // Do NOT auto-generate — user must review the pre-selected progression style then click Generate
     }
   };
 

@@ -154,9 +154,16 @@ Return a JSON object with EXACTLY this shape:
     "simplicity": null or "simple" or "moderate" or "advanced",
     "performancePriorities": null or string,
     "runningEnvironment": null or string[],
-    "runningPreferences": null or string
+    "runningPreferences": null or string,
+    "progressionStyle": null or "straight" or "variety"
   }
 }
+
+progressionStyle rules (for programmes only — null for sessions):
+- "straight" = same exercises every week, progress through load/reps/sets. Best for beginners, most clients, anyone who hasn't explicitly asked for variety.
+- "variety" = primary lifts stay fixed, accessory exercises can rotate week to week. For intermediate/advanced athletes who explicitly want variation, are experienced lifters, or describe a more complex programme.
+- Infer from context: "variety"/"rotating"/"different exercises"/"advanced"/"intermediate" → "variety". Anything else, or if not mentioned → "straight".
+- When defaulting to "straight", add it to assumptions: "Strict progression — same exercises each week, progress through load and reps."
 
 planSummary rules:
 - Only include when hasEnough is true.
