@@ -1601,21 +1601,25 @@ router.post("/parse-session", async (req, res): Promise<void> => {
   const { description, name } = req.body as { description?: string; name?: string };
   if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
 
-  const systemPrompt = `You are a personal training assistant. Convert the user's exercise list into a structured session.
+  const systemPrompt = `You are a personal training assistant. Your job is to produce a complete, ready-to-use strength session from whatever the user provides — either an explicit exercise list or a vague description.
 
-Rules:
-- Parse each exercise extracting: name, sets (integer), reps (string e.g. "8", "8-10", "AMRAP"), rpe (string e.g. "7", "8-9" — if mentioned), rest (string e.g. "90s", "2 min" — if mentioned), weight (string e.g. "80kg", "185lb" — if mentioned), notes (anything else)
-- Accept any common format: "4x8 bench press", "bench press 4 sets 8 reps", "3×10 squat @80kg @RPE8"
-- If a field is not mentioned, set it to null
-- Generate a descriptive session name from the exercises if the user didn't provide one (e.g. "Upper Body Push", "Leg Day", "Back & Biceps")
+## Mode A — Explicit exercise list (e.g. "4x8 bench press, 3x10 squat @RPE8")
+Parse each exercise: name, sets (integer), reps (string e.g. "8", "8-10", "AMRAP"), rpe (string e.g. "7", "8-9"), rest (string e.g. "90s", "2 min"), weight (string e.g. "80kg", "185lb"), notes. Accept any common format. If a field is not mentioned, set it to null.
+
+## Mode B — Vague description (e.g. "full body session using barbell and dumbbells, 45 mins")
+Generate a complete, well-programmed session appropriate for the description. Choose 5–8 exercises that match the equipment, muscle groups, duration, and goals mentioned. Assign sensible sets (3–5), reps (e.g. "6-8" for strength, "10-12" for hypertrophy, "12-15" for conditioning), and rest periods (e.g. "90s" for compounds, "60s" for accessories). Leave weight as null unless specified. Add brief coaching notes where useful.
+
+## Rules for both modes
+- Always produce at least 4 exercises — never return an empty list
+- Generate a descriptive session name (e.g. "Full Body Strength", "Upper Body Push", "Leg Day — Barbell Focus")
 - Return ONLY valid JSON, no markdown fences
 
 Response format:
 {
-  "name": "Upper Body Push",
+  "name": "Full Body Strength",
   "exercises": [
-    { "name": "Bench Press", "sets": 4, "reps": "8", "rpe": "8", "rest": "90s", "weight": null, "notes": null },
-    { "name": "Barbell Row", "sets": 3, "reps": "10", "rpe": null, "rest": null, "weight": "80kg", "notes": null }
+    { "name": "Barbell Back Squat", "sets": 4, "reps": "6-8", "rpe": "8", "rest": "2 min", "weight": null, "notes": "Brace core, drive through heels" },
+    { "name": "Romanian Deadlift", "sets": 3, "reps": "10", "rpe": null, "rest": "90s", "weight": null, "notes": null }
   ]
 }`;
 
@@ -1624,7 +1628,7 @@ Response format:
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Session name (optional): ${name?.trim() || "(auto-generate)"}\n\nExercises:\n${description.trim()}` },
+        { role: "user", content: `Session name (optional): ${name?.trim() || "(auto-generate)"}\n\nDescription:\n${description.trim()}` },
       ],
       response_format: { type: "json_object" },
     });
