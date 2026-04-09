@@ -270,8 +270,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     setRunEnv(prev => prev.includes(env) ? prev.filter(e => e !== env) : [...prev, env]);
   }
 
-  async function handleGenerateProgramme() {
-    if (!describeText.trim() || !assignStartDate) return;
+  async function handleGenerateProgramme(overrides?: { description?: string }) {
+    const description = overrides?.description ?? describeText;
+    if (!description.trim() || !assignStartDate) return;
     setDescribeGenerating(true);
     setGeneratedPreview(null);
     setRationaleText("");
@@ -280,7 +281,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     try {
       // Step 1: get rationale quickly (shows during the long wait)
       const envSuffix = runEnv.length > 0 ? ` Running environment: ${runEnv.join(", ")}.` : "";
-      const body = { description: describeText.trim() + envSuffix, startDate: assignStartDate, strengthStyle: strengthStyle ?? "straight", clientId };
+      const body = { description: description.trim() + envSuffix, startDate: assignStartDate, strengthStyle: strengthStyle ?? "straight", clientId };
       const rationaleRes = await fetch("/api/generate-rationale", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1249,7 +1250,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       // Auto-generate immediately using overrides to bypass stale state
       void handleAiSession({ desc: brief, type: inferredType });
     } else {
-      // Programme flow — pre-fill the describe field and open the builder
+      // Programme flow — pre-fill and auto-generate immediately
       setDescribeText(brief);
       setAiMode("programme");
       setBuildMode("describe");
@@ -1258,6 +1259,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       setStrengthStyle(null);
       setAssignStartDate(format(new Date(), "yyyy-MM-dd"));
       setAssignDialogOpen(true);
+      // Auto-generate using overrides to bypass stale state
+      void handleGenerateProgramme({ description: brief });
     }
   };
 
