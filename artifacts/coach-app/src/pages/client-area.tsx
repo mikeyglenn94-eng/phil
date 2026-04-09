@@ -3546,7 +3546,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
       {/* Build Your Plan Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setQuickAddWodOptions(null); setSavingAiSession(null); setRunEnv([]); } }}>
-        <DialogContent className="max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent className="max-w-md max-h-[92dvh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />
@@ -3572,7 +3572,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           )}
 
           {/* Scrollable content — footer is pinned below, never clipped */}
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-1">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4 py-1 pb-6" style={{ WebkitOverflowScrolling: "touch" }}>
 
               {/* ── SINGLE SESSION MODE ── */}
               {aiMode === "session" && (
@@ -3963,16 +3963,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
       {/* Quick-add single session dialog */}
       <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); setParsedQuickSession(null); setQuickAddWodOptions(null); setSavingQuickSession(null); } }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Add Session — {quickAddDate ? format(parseISO(quickAddDate), "EEE d MMM") : ""}</DialogTitle>
-            <DialogDescription>
-              {quickAddType === "wod" ? "Describe your WOD in any format. The AI will structure it."
-                : quickAddType === "run" ? "Describe your run. The AI will structure it."
-                : "List your exercises in any format. The AI will structure them for you."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
+        <DialogContent className="max-w-sm flex flex-col max-h-[92dvh] overflow-hidden p-0">
+          <div className="px-6 pt-6 pb-3 shrink-0">
+            <DialogHeader>
+              <DialogTitle>Add Session — {quickAddDate ? format(parseISO(quickAddDate), "EEE d MMM") : ""}</DialogTitle>
+              <DialogDescription>
+                {quickAddType === "wod" ? "Describe your WOD in any format. The AI will structure it."
+                  : quickAddType === "run" ? "Describe your run. The AI will structure it."
+                  : "List your exercises in any format. The AI will structure them for you."}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 pb-6 space-y-3" style={{ WebkitOverflowScrolling: "touch" }}>
             {/* Type toggle */}
             <div className="flex rounded-xl overflow-hidden border border-muted p-0.5 gap-0.5 bg-muted/30">
               {(["strength", "wod", "run"] as const).map(t => (
@@ -4046,7 +4048,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               )}
             </div>
             {quickAddError && <p className="text-sm text-red-500">{quickAddError}</p>}
-          </div>
+
           {quickAddWodOptions && !parsedQuickSession ? (
             <div className="space-y-3 pt-1">
               <p className="text-xs text-muted-foreground text-center font-medium">Pick a workout option</p>
@@ -4134,6 +4136,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               </Button>
             </div>
           )}
+          </div>{/* end scroll container */}
         </DialogContent>
       </Dialog>
 
