@@ -1,0 +1,118 @@
+We need to stop patching WOD parsing case-by-case and move to one clean canonical schema for all saved WODs.
+
+The issue we just saw with “undefined seconds” is a schema consistency problem:
+- transcript is fine
+- AI preview is fine
+- saved/rendered workout is not
+- fields are being renamed, dropped, or read inconsistently between parsing, save, and render
+
+Please implement the following architecture.
+
+1) Create one canonical saved schema for WODs
+
+Use this exact TypeScript structure as the target saved format:
+
+```ts
+type WorkoutType = "strength" | "wod" | "run";
+
+type WorkoutFormat =
+  | "emom"
+  | "amrap"
+  | "for_time"
+  | "intervals"
+  | "chipper"
+  | "tabata"
+  | "custom";
+
+type WorkoutSource =
+  | "manual"
+  | "voice"
+  | "ai_generated"
+  | "library"
+  | "coach_assigned";
+
+interface Workout {
+  id: string;
+  type: WorkoutType;
+  format: WorkoutFormat;
+  title?: string;
+  description?: string;
+  source: WorkoutSource;
+
+  scheduledDate?: string;
+  createdAt: string;
+  updatedAt: string;
+
+  wod?: WodWorkout;
+  strength?: unknown;
+  run?: unknown;
+
+  rawInput?: {
+    transcript?: string;
+    aiSummary?: string;
+  };
+
+  metadata?: {
+    parseVersion?: string;
+    needsReview?: boolean;
+    parseWarnings?: string[];
+  };
+}
+
+interface WodWorkout {
+  format: WorkoutFormat;
+  totalDurationSeconds?: number;
+  timeCapSeconds?: number;
+  blocks: WodBlock[];
+  scoring?: {
+    type?: "rounds_reps" | "time" | "reps" | "distance" | "calories" | "custom";
+    label?: string;
+  };
+}
+
+type WodBlockType =
+  | "emom"
+  | "amrap"
+  | "for_time"
+  | "intervals"
+  | "task_list"
+  | "rest";
+
+interface WodBlock {
+  id: string;
+  type: WodBlockType;
+  label?: string;
+  durationSeconds?: number;
+  intervalSeconds?: number;
+  rounds?: number | "until_time";
+  steps: WodStep[];
+}
+
+type StepTargetType =
+  | "reps"
+  | "seconds"
+  | "distance"
+  | "calories"
+  | "rest"
+  | "free_text";
+
+interface WodStep {
+  id: string;
+  movement: {
+    name: string;
+    category?: "gymnastics" | "barbell" | "dumbbell" | "machine" | "running" | "bodyweight" | "other";
+    loadingType?: "bodyweight" | "external_load" | "bodyweight_plus_load" | "none";
+  };
+  target: {
+    type: StepTargetType;
+    value?: number;
+    unit?: "reps" | "seconds" | "metres" | "km" | "calories";
+    notes?: string;
+  };
+  load?: {
+    value?: number;
+    unit?: "kg" | "lb";
+    display?: string;
+  };
+  notes?: string;
+}
