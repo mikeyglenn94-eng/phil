@@ -447,6 +447,22 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     try {
       const newSession = { ...parsedQuickSession, id: `session-${Date.now()}`, date: quickAddDate };
 
+      // ── Save-point diagnostic log ──────────────────────────────────────────
+      if (newSession.source === "wod_brain") {
+        const steps = (newSession as any).wod?.blocks?.[0]?.steps ?? [];
+        console.log("[WOD SAVE] session.wod present:", !!(newSession as any).wod);
+        console.log("[WOD SAVE] canonical steps:", steps.map((s: any) => ({
+          movement: s.movement?.name,
+          value: s.target?.value,
+          unit: s.target?.unit,
+          type: s.target?.type,
+        })));
+        console.log("[WOD SAVE] legacy exercises notes:", (newSession.exercises ?? []).map((e: any) => e.notes));
+        if (steps.some((s: any) => s.target?.value === undefined || s.target?.value === null)) {
+          console.warn("[WOD SAVE] ⚠️ One or more steps missing target.value — renderer will fallback to legacy notes");
+        }
+      }
+
       if (dest === "private" || dest === "public") {
         await fetch("/api/session-library", {
           method: "POST",
@@ -1532,6 +1548,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         rawText: `${_buildNotes(block)} ${block.movement}`.trim(),
       })),
     };
+    // ── Save-point diagnostic log (library WOD path) ──────────────────────────
+    {
+      const steps = newSession.wod?.blocks?.[0]?.steps ?? [];
+      console.log("[WOD LIBRARY SAVE] wod present:", !!newSession.wod);
+      console.log("[WOD LIBRARY SAVE] canonical steps:", steps.map((s: any) => ({
+        movement: s.movement?.name, value: s.target?.value, unit: s.target?.unit,
+      })));
+      console.log("[WOD LIBRARY SAVE] legacy notes:", newSession.exercises.map((e: any) => e.notes));
+    }
+
     const navigateWod = () => {
       if (wodClientTargetDate) {
         const target = startOfWeek(parseISO(wodClientTargetDate), { weekStartsOn: 1 });
