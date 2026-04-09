@@ -1,0 +1,103 @@
+Improve the UX of the workout preview editor across all session types, with WOD as the priority. The goal is to make previews feel like editing a clean note, not filling out a form.
+
+Core product rule:
+The preview is the main editing surface. Users should be able to review and edit the structured session directly, quickly, and with minimal UI noise.
+
+Make these changes:
+
+1. Replace field-by-field editing with full-line inline editing
+- Each workout line should render as a single editable row, not separate inputs for movement, reps, load, unit, etc.
+- Tapping anywhere on the row should activate inline edit mode for that row.
+- Example WOD row:
+  Min 1 · Bike Erg 12 cals
+- Example strength row:
+  Back Squat · 5x5 @ 100kg
+- Example run row:
+  1 km @ 4:30/km
+- The line should edit in place without opening a modal and without shifting the layout dramatically.
+
+2. Simplify WOD preview layout heavily
+- Remove visible per-movement load fields by default
+- Remove unit dropdowns by default
+- Remove visible rounds calculations like “24 min ÷ 4 mvt = 6”
+- Remove excessive labels and spacing between fields
+- Make the WOD preview a compact single-column list
+
+Target WOD layout:
+Title
+Format / duration
+Then rows like:
+Min 1 · Bike Erg 12 cals
+Min 2 · Box Step-Ups 16
+Min 3 · Air Squats 20
+Min 4 · Deficit Press-Ups 8-12
+
+3. Use progressive disclosure for advanced detail
+- Keep the default editor minimal
+- Add a subtle expand or “more” affordance per row for optional metadata only when needed
+- Advanced options can include load, rest notes, tempo, side-specific notes, etc.
+- Do not show advanced controls unless the user asks for them or expands that row
+
+4. Keep one universal preview pattern across WOD, strength, and run
+Build one reusable preview-row system that works for all session types:
+- optional label
+- main exercise / interval text
+- structured details rendered as clean inline text
+Examples:
+- Min 1 · Bike Erg 12 cals
+- Bench Press · 4x8 @ 70kg
+- 400m · easy
+This should be the same component with different content, not separate editing systems.
+
+5. Preserve stable layout during editing
+- Editing a row should not cause the card to jump, expand awkwardly, or rearrange surrounding rows
+- Avoid swapping to a totally different form layout when a row is selected
+- Keep row height as stable as possible
+- Make it feel like editing text in Notes, not opening a mini form builder
+
+6. Improve touch usability on mobile
+- Entire row is tappable
+- Inputs must be finger-friendly
+- Ensure preview remains scrollable while editing
+- Keyboard opening must not trap the user or block access to lower content
+- Add enough bottom padding so sticky action bars do not cover final rows
+
+7. Simplify row actions
+Each row should support:
+- tap to edit
+- drag handle to reorder
+- delete row
+- add row below
+Do not bury these in complex menus.
+
+8. Improve add-row flow
+Replace “+ Add movement” with a simpler “+ Add line”
+Reason: this preview pattern needs to work for movements, rests, intervals, notes, and other session content across WOD, strength, and run.
+
+9. Keep formatting smart but invisible
+Let users type naturally, then parse in the background where possible.
+Examples:
+- “Bike 12 cals”
+- “Back squat 5x5 @ 100”
+- “1km @ 4:30/km”
+Do not force users to pick units or fill separate fields unless parsing fails.
+
+10. WOD-specific polish
+For EMOMs, AMRAPs, FT, and intervals:
+- show the overall format once at the top
+- keep each row visually simple
+- use labels like Min 1, Round 1, or Interval 1 only when they help clarity
+- avoid repeating obvious structure everywhere
+
+Implementation notes:
+- Refactor current preview card away from grid/form layout and toward stacked editable rows
+- Use one shared PreviewRow component for all modalities
+- Default state should be clean, readable, compact
+- Advanced controls should be hidden behind expansion
+- Prioritise speed, clarity, and low cognitive load over perfect explicit structure
+
+Success criteria:
+- A user can create or fix a WOD in a few taps without touching raw input
+- The preview is easier to scan than the current version
+- The same editing model works cleanly for WOD, strength, and run
+- On mobile, users can scroll, edit, reorder, and save without friction

@@ -1,12 +1,18 @@
 /**
  * Shared Workout Preview / Inline Editor
  * Used in: creation flow (client-area.tsx) + edit-saved-workout (client-session.tsx)
+ *
+ * Design: each row is a single-line readable text. Tap to edit inline.
+ * Progressive disclosure: advanced fields hidden behind "···" expand.
  */
+
+import { useState, useRef, useEffect } from "react";
+import { GripVertical, X, Plus, MoreHorizontal, ChevronDown } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 export interface EditableRow {
   id: string;
-  label: string;    // "Minute 1", "Warm-up", exercise number etc.
+  label: string;    // "Minute 1", "Warm-up", etc.
   name: string;     // movement / exercise / segment description
   // strength
   sets: string; reps: string; weight: string; rpe: string; rest: string; tempo: string;
@@ -26,7 +32,7 @@ export interface EditableSession {
   rows: EditableRow[];
   repeatNote: string;
   restNote: string;
-  rounds: string;    // editable round count
+  rounds: string;
   _raw: any;
 }
 
@@ -71,7 +77,6 @@ export function parseWodToEditable(opt: any): EditableSession {
   if (canonical?.blocks?.length) {
     for (const block of canonical.blocks) {
       for (const step of (block.steps ?? [])) {
-        // Prefer targetText for ranges, otherwise numeric value
         const rawVal = step.target?.targetText
           ? step.target.targetText.replace(/[^\d\-–.]/g, "").replace("–", "-")
           : step.target?.valueRange
@@ -195,7 +200,6 @@ export function editableSessionToSession(es: EditableSession): any {
     durationSeconds: durationMin != null ? durationMin * 60 : undefined,
     ...(rounds != null ? { rounds } : {}),
     steps: es.rows.map((r, idx) => {
-      // Parse range strings like "12-18" or "10-12"
       const rawVal = r.value.trim();
       const rangeMatch = rawVal.match(/^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/);
       const numVal = rangeMatch ? null : (rawVal !== "" ? Number(rawVal) : undefined);
@@ -249,6 +253,309 @@ export function editableSessionToSession(es: EditableSession): any {
   };
 }
 
+// ── Row text helpers ───────────────────────────────────────────────────────────
+
+/** Render a row as a single human-readable line */
+function rowToText(row: EditableRow, type: EditableSession["type"]): string {
+  if (type === "wod") {
+    const labelPart = row.label ? `${row.label} · ` : "";
+    const unitStr = row.unit && row.unit !== "reps" ? ` ${row.unit}` : "";
+    const amountPart = row.value ? ` · ${row.value}${unitStr}` : "";
+    const loadPart = row.load ? ` @ ${row.load}` : "";
+    return `${labelPart}${row.name}${amountPart}${loadPart}`.trim();
+  }
+  if (type === "strength") {
+    const scheme = row.sets && row.reps
+      ? ` · ${row.sets}×${row.reps}`
+      : row.reps
+      ? ` · ${row.reps} reps`
+      : "";
+    const wt = row.weight ? ` @ ${row.weight}` : "";
+    const rpe = row.rpe ? ` RPE ${row.rpe}` : "";
+    return `${row.name}${scheme}${wt}${rpe}`.trim();
+  }
+  // run
+  const labelPart = row.label ? `${row.label} · ` : "";
+  const repsPart = row.reps ? `${row.reps} × ` : "";
+  const distPart = row.value ? `${row.value} · ` : "";
+  const notesPart = row.notes ? ` · ${row.notes}` : "";
+  return `${labelPart}${repsPart}${distPart}${row.name}${notesPart}`.trim();
+}
+
+/** Parse a natural-language line back to row fields */
+function textToRow(text: string, type: EditableSession["type"], existing: EditableRow): EditableRow {
+  const t = text.trim();
+  if (!t) return { ...existing, name: "" };
+
+  if (type === "wod") {
+    // Extract load after last " @ "
+    let rest = t;
+    let load = existing.load;
+    const atIdx = t.lastIndexOf(" @ ");
+    if (atIdx !== -1) {
+      load = t.slice(atIdx + 3).trim();
+      rest = t.slice(0, atIdx).trim();
+    }
+    // Split on "·" or "•"
+    const parts = rest.split(/\s*[·•]\s*/).map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      const amountStr = parts[parts.length - 1];
+      const am = amountStr.match(/^([\d\-–]+(?:\.\d+)?)\s*(.*)$/);
+      return {
+        ...existing,
+        label: parts.slice(0, parts.length - 2).join(" · "),
+        name: parts[parts.length - 2],
+        value: am ? am[1].replace("–", "-") : "",
+        unit: am?.[2]?.trim() || existing.unit,
+        load,
+      };
+    } else if (parts.length === 2) {
+      const am = parts[1].match(/^([\d\-–]+(?:\.\d+)?)\s*(.*)$/);
+      if (am) {
+        return { ...existing, name: parts[0], value: am[1].replace("–", "-"), unit: am[2]?.trim() || existing.unit, load };
+      }
+      // label · movement (no amount detected)
+      return { ...existing, label: parts[0], name: parts[1], load };
+    }
+    return { ...existing, name: rest, load };
+  }
+
+  if (type === "strength") {
+    // Extract RPE suffix
+    const rpeM = t.match(/\s+RPE\s+([\d.]+)\s*$/i);
+    const rpe = rpeM ? rpeM[1] : existing.rpe;
+    const withoutRpe = rpeM ? t.replace(/\s+RPE\s+[\d.]+\s*$/i, "").trim() : t;
+    // Extract weight after "@"
+    const wtM = withoutRpe.match(/\s*@\s*([\w/.\s]+)$/);
+    const weight = wtM ? wtM[1].trim() : existing.weight;
+    const withoutWt = wtM ? withoutRpe.slice(0, withoutRpe.lastIndexOf("@")).trim() : withoutRpe;
+    // Split on "·"
+    const parts = withoutWt.split(/\s*[·•]\s*/).map(s => s.trim()).filter(Boolean);
+    const name = parts[0] || "";
+    let sets = existing.sets;
+    let reps = existing.reps;
+    if (parts[1]) {
+      const schemeM = parts[1].match(/^(\d+)\s*[×xX]\s*(\S+)$/);
+      if (schemeM) { sets = schemeM[1]; reps = schemeM[2]; }
+      else { reps = parts[1].replace(/\s*reps?\s*$/i, "").trim(); }
+    }
+    return { ...existing, name, sets, reps, weight, rpe };
+  }
+
+  // run
+  const parts = t.split(/\s*[·•]\s*/).map(s => s.trim()).filter(Boolean);
+  const repsM = parts[0]?.match(/^(\d+)\s*[×x]\s*$/);
+  if (repsM && parts.length > 1) {
+    const remainder = parts.slice(1).join(" · ");
+    const distM = remainder.match(/^([\d.]+\s*(?:km|m|mi)?)\s*·?\s*(.*)$/i);
+    if (distM) {
+      return { ...existing, reps: repsM[1], value: distM[1].trim(), name: distM[2].trim() || existing.name };
+    }
+    return { ...existing, reps: repsM[1], name: remainder };
+  }
+  // value · description  or  just description
+  if (parts.length >= 2) {
+    const distM = parts[0].match(/^([\d.]+\s*(?:km|m|mi)?)$/i);
+    if (distM) {
+      return { ...existing, value: distM[1].trim(), name: parts.slice(1).join(" · ") };
+    }
+  }
+  return { ...existing, name: parts.join(" · ") };
+}
+
+function rowPlaceholder(type: EditableSession["type"], index: number): string {
+  if (type === "wod") return index === 0 ? "e.g. Min 1 · Bike Erg · 12 cal" : "Movement · amount";
+  if (type === "strength") return "e.g. Back Squat · 5×5 @ 100kg";
+  return "e.g. 5 × 1 km · tempo";
+}
+
+// ── PreviewRow component ───────────────────────────────────────────────────────
+interface PreviewRowProps {
+  row: EditableRow;
+  type: EditableSession["type"];
+  isActive: boolean;
+  isExpanded: boolean;
+  editingText: string;
+  index: number;
+  onActivate: () => void;
+  onEditChange: (v: string) => void;
+  onCommit: () => void;
+  onDelete: () => void;
+  onAddBelow: () => void;
+  onToggleExpand: () => void;
+  onChangeField: (patch: Partial<EditableRow>) => void;
+}
+
+function PreviewRow({
+  row, type, isActive, isExpanded, editingText, index,
+  onActivate, onEditChange, onCommit, onDelete, onAddBelow, onToggleExpand, onChangeField,
+}: PreviewRowProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isActive) {
+      // Small delay so the input is mounted
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        // Place cursor at end
+        const len = inputRef.current?.value.length ?? 0;
+        inputRef.current?.setSelectionRange(len, len);
+      });
+    }
+  }, [isActive]);
+
+  const displayText = rowToText(row, type);
+  const hasContent = row.name.trim() !== "";
+
+  return (
+    <div className="group/row">
+      <div className="flex items-center gap-1 min-h-[44px]">
+        {/* Drag handle */}
+        <span className="text-muted-foreground/15 group-hover/row:text-muted-foreground/35 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none transition-colors">
+          <GripVertical className="w-3.5 h-3.5" />
+        </span>
+
+        {/* Main editable area */}
+        <div className="flex-1 min-w-0 py-0.5">
+          {isActive ? (
+            <input
+              ref={inputRef}
+              className="w-full text-sm bg-transparent border-none outline-none focus:ring-0 leading-snug py-1 text-foreground"
+              value={editingText}
+              onChange={e => onEditChange(e.target.value)}
+              onBlur={onCommit}
+              onKeyDown={e => {
+                if (e.key === "Enter") { e.preventDefault(); onCommit(); }
+                if (e.key === "Escape") { onCommit(); }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className={`w-full text-left text-sm leading-snug py-1 transition-colors ${
+                hasContent
+                  ? "text-foreground hover:text-foreground/80"
+                  : "text-muted-foreground/30 italic"
+              }`}
+              onClick={onActivate}
+            >
+              {hasContent ? displayText : rowPlaceholder(type, index)}
+            </button>
+          )}
+        </div>
+
+        {/* Advanced expand */}
+        <button
+          type="button"
+          className={`shrink-0 p-1.5 rounded-md transition-colors ${
+            isExpanded
+              ? "text-primary bg-primary/10"
+              : "text-muted-foreground/20 hover:text-muted-foreground/50 group-hover/row:text-muted-foreground/40"
+          }`}
+          onClick={onToggleExpand}
+          title="Advanced options"
+        >
+          <MoreHorizontal className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Delete */}
+        <button
+          type="button"
+          className="shrink-0 p-1.5 rounded-md text-muted-foreground/20 hover:text-destructive group-hover/row:text-muted-foreground/40 transition-colors"
+          onClick={onDelete}
+          title="Remove line"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Advanced panel — progressive disclosure */}
+      {isExpanded && (
+        <div className="ml-5 mb-1 mt-0.5 grid grid-cols-2 gap-x-4 gap-y-2 px-3 py-2.5 rounded-xl bg-muted/40 text-xs">
+          {type === "wod" && (
+            <>
+              <label className="flex items-center gap-2 col-span-2 sm:col-span-1">
+                <span className="text-muted-foreground/60 w-8 shrink-0">Load</span>
+                <input
+                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                  value={row.load}
+                  onChange={e => onChangeField({ load: e.target.value })}
+                  placeholder="e.g. 20kg"
+                />
+              </label>
+              <label className="flex items-center gap-2 col-span-2 sm:col-span-1">
+                <span className="text-muted-foreground/60 w-8 shrink-0">Unit</span>
+                <select
+                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 cursor-pointer text-foreground font-medium"
+                  value={row.unit}
+                  onChange={e => onChangeField({ unit: e.target.value })}
+                >
+                  <option value="reps">reps</option>
+                  <option value="seconds">seconds</option>
+                  <option value="m">metres</option>
+                  <option value="km">km</option>
+                  <option value="cal">calories</option>
+                </select>
+              </label>
+            </>
+          )}
+          {type === "strength" && (
+            <>
+              <label className="flex items-center gap-2">
+                <span className="text-muted-foreground/60 w-8 shrink-0">RPE</span>
+                <input
+                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                  value={row.rpe}
+                  onChange={e => onChangeField({ rpe: e.target.value })}
+                  placeholder="e.g. 8"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-muted-foreground/60 w-8 shrink-0">Rest</span>
+                <input
+                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                  value={row.rest}
+                  onChange={e => onChangeField({ rest: e.target.value })}
+                  placeholder="e.g. 90s"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-muted-foreground/60 w-8 shrink-0">Tempo</span>
+                <input
+                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                  value={row.tempo}
+                  onChange={e => onChangeField({ tempo: e.target.value })}
+                  placeholder="e.g. 3-1-1"
+                />
+              </label>
+            </>
+          )}
+          {type === "run" && (
+            <label className="flex items-center gap-2">
+              <span className="text-muted-foreground/60 w-8 shrink-0">Rest</span>
+              <input
+                className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+                value={row.rest}
+                onChange={e => onChangeField({ rest: e.target.value })}
+                placeholder="e.g. 90s jog"
+              />
+            </label>
+          )}
+          <label className="flex items-center gap-2 col-span-2">
+            <span className="text-muted-foreground/60 w-8 shrink-0">Note</span>
+            <input
+              className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 font-medium"
+              value={row.notes}
+              onChange={e => onChangeField({ notes: e.target.value })}
+              placeholder="Optional coaching note…"
+            />
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── WorkoutPreviewEditorCard component ─────────────────────────────────────────
 interface Props {
   editableSession: EditableSession;
@@ -264,6 +571,11 @@ function setRow(es: EditableSession, ri: number, patch: Partial<EditableRow>): E
 }
 
 export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compact }: Props) {
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<string>("");
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [wodFooterOpen, setWodFooterOpen] = useState(false);
+
   const TYPE_BADGE: Record<string, string> = {
     strength: "bg-amber-100 text-amber-700",
     run: "bg-emerald-100 text-emerald-700",
@@ -276,12 +588,48 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
     ? (es.format || "Run")
     : "Strength";
 
+  function activateRow(ri: number) {
+    const row = es.rows[ri];
+    setEditingText(rowToText(row, es.type));
+    setActiveRowId(row.id);
+  }
+
+  function commitEdit() {
+    if (!activeRowId) return;
+    const ri = es.rows.findIndex(r => r.id === activeRowId);
+    if (ri !== -1) {
+      const parsed = textToRow(editingText, es.type, es.rows[ri]);
+      onChange(setRow(es, ri, parsed));
+    }
+    setActiveRowId(null);
+  }
+
+  function deleteRow(ri: number) {
+    setActiveRowId(null);
+    onChange({ ...es, rows: es.rows.filter((_, i) => i !== ri) });
+  }
+
+  function addRowBelow(ri: number) {
+    const newRow = blankRow(`row-${Date.now()}`);
+    const rows = [...es.rows];
+    rows.splice(ri + 1, 0, newRow);
+    onChange({ ...es, rows });
+    setEditingText("");
+    setActiveRowId(newRow.id);
+  }
+
+  function addRowAtEnd() {
+    const newRow = blankRow(`row-${Date.now()}`);
+    onChange({ ...es, rows: [...es.rows, newRow] });
+    setEditingText("");
+    setActiveRowId(newRow.id);
+  }
+
   return (
     <div className="rounded-2xl border border-border/60 bg-card overflow-hidden shadow-sm">
 
       {/* ── Header ── */}
       <div className="px-4 pt-4 pb-3 space-y-1.5">
-        {/* Badge + Duration row */}
         <div className="flex items-center gap-2">
           <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full shrink-0 ${TYPE_BADGE[es.type] ?? "bg-primary/10 text-primary/70"}`}>
             {badgeLabel}
@@ -302,7 +650,6 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
           )}
         </div>
 
-        {/* Title */}
         <input
           className="w-full text-lg font-bold bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/40 leading-tight"
           value={es.title}
@@ -310,210 +657,106 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
           placeholder="Workout title…"
         />
 
-        {/* Summary */}
         {es.summary && (
           <p className="text-xs text-muted-foreground">{es.summary}</p>
         )}
       </div>
 
-      {/* ── Divider ── */}
       <div className="border-t border-border/40" />
 
       {/* ── Rows ── */}
-      <div className="px-4 py-3 space-y-2">
+      <div className="px-3 py-1 pb-2">
         {es.rows.map((row, ri) => (
-          <div key={row.id} className="flex items-start gap-2">
-            {/* Bullet */}
-            <span className="w-1.5 h-1.5 rounded-full bg-primary/30 shrink-0 mt-[7px]" />
-
-            <div className="flex-1 min-w-0">
-              {/* Label on its own line when present */}
-              {row.label && (
-                <input
-                  className="w-full text-[11px] text-muted-foreground/60 italic bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25 mb-0.5 leading-none"
-                  value={row.label}
-                  onChange={e => onChange(setRow(es, ri, { label: e.target.value }))}
-                  placeholder="label…"
-                />
-              )}
-              {!row.label && es.type !== "strength" && (
-                <input
-                  className="w-0 h-0 p-0 border-none outline-none opacity-0 absolute"
-                  value={row.label}
-                  onChange={e => onChange(setRow(es, ri, { label: e.target.value }))}
-                  aria-hidden
-                />
-              )}
-
-              {/* Name (primary) */}
-              <input
-                className="w-full text-sm font-semibold bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/40 leading-snug"
-                value={row.name}
-                onChange={e => onChange(setRow(es, ri, { name: e.target.value }))}
-                placeholder={es.type === "strength" ? "Exercise name…" : es.type === "run" ? "Describe this segment…" : "Movement…"}
-              />
-
-              {/* Type-specific fields */}
-              {es.type === "strength" && (
-                <div className="flex items-center gap-1.5 mt-0.5 text-xs font-mono text-muted-foreground flex-wrap">
-                  <input className="w-8 bg-transparent border-none outline-none focus:ring-0 tabular-nums text-right placeholder:text-muted-foreground/30"
-                    value={row.sets} placeholder="—"
-                    onChange={e => onChange(setRow(es, ri, { sets: e.target.value }))}
-                  />
-                  <span className="text-muted-foreground/40">×</span>
-                  <input className="w-10 bg-transparent border-none outline-none focus:ring-0 tabular-nums placeholder:text-muted-foreground/30"
-                    value={row.reps} placeholder="reps"
-                    onChange={e => onChange(setRow(es, ri, { reps: e.target.value }))}
-                  />
-                  <input className="w-16 bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/30"
-                    value={row.weight} placeholder="kg/lb…"
-                    onChange={e => onChange(setRow(es, ri, { weight: e.target.value }))}
-                  />
-                  {(row.rpe || row.rest) && (
-                    <>
-                      {row.rpe !== "" && (
-                        <span className="flex items-center gap-0.5">
-                          <span className="text-muted-foreground/40">RPE</span>
-                          <input className="w-8 bg-transparent border-none outline-none focus:ring-0 tabular-nums placeholder:text-muted-foreground/25"
-                            value={row.rpe} placeholder="—"
-                            onChange={e => onChange(setRow(es, ri, { rpe: e.target.value }))}
-                          />
-                        </span>
-                      )}
-                    </>
-                  )}
-                  {row.rest && (
-                    <input className="w-16 bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25"
-                      value={row.rest} placeholder="rest…"
-                      onChange={e => onChange(setRow(es, ri, { rest: e.target.value }))}
-                    />
-                  )}
-                </div>
-              )}
-
-              {es.type === "wod" && (
-                <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
-                  <input
-                    className="w-16 font-mono tabular-nums bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/30"
-                    value={row.value} placeholder="amount…"
-                    onChange={e => onChange(setRow(es, ri, { value: e.target.value }))}
-                    title="Enter a number (35) or range (12-18)"
-                  />
-                  <select
-                    className="text-[11px] bg-transparent border-none outline-none focus:ring-0 cursor-pointer"
-                    value={row.unit}
-                    onChange={e => onChange(setRow(es, ri, { unit: e.target.value }))}
-                  >
-                    <option value="reps">reps</option>
-                    <option value="seconds">sec</option>
-                    <option value="m">m</option>
-                    <option value="km">km</option>
-                    <option value="cal">cal</option>
-                  </select>
-                  {(row.load !== undefined) && (
-                    <input
-                      className="w-16 font-mono bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25"
-                      value={row.load} placeholder="load…"
-                      onChange={e => onChange(setRow(es, ri, { load: e.target.value }))}
-                    />
-                  )}
-                </div>
-              )}
-
-              {es.type === "run" && (
-                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                  <input className="w-16 font-mono bg-transparent border-none outline-none focus:ring-0 tabular-nums placeholder:text-muted-foreground/25"
-                    value={row.value} placeholder="dist…"
-                    onChange={e => onChange(setRow(es, ri, { value: e.target.value }))}
-                  />
-                  <input className="w-20 italic bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25"
-                    value={row.notes} placeholder="effort…"
-                    onChange={e => onChange(setRow(es, ri, { notes: e.target.value }))}
-                  />
-                  {(row.reps || row.rest) && (
-                    <input className="w-16 bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25"
-                      value={row.rest} placeholder="rest…"
-                      onChange={e => onChange(setRow(es, ri, { rest: e.target.value }))}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Label add trigger for rows without labels */}
-            {!row.label && es.type !== "strength" && (
-              <button
-                className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/60 shrink-0 mt-1 transition-colors"
-                onClick={() => onChange(setRow(es, ri, { label: es.type === "wod" ? `Minute ${ri + 1}` : "Segment" }))}
-                title="Add label"
-              >
-                +lbl
-              </button>
-            )}
-          </div>
+          <PreviewRow
+            key={row.id}
+            row={row}
+            type={es.type}
+            index={ri}
+            isActive={activeRowId === row.id}
+            isExpanded={expandedRowId === row.id}
+            editingText={activeRowId === row.id ? editingText : ""}
+            onActivate={() => activateRow(ri)}
+            onEditChange={setEditingText}
+            onCommit={commitEdit}
+            onDelete={() => deleteRow(ri)}
+            onAddBelow={() => addRowBelow(ri)}
+            onToggleExpand={() => setExpandedRowId(expandedRowId === row.id ? null : row.id)}
+            onChangeField={patch => onChange(setRow(es, ri, patch))}
+          />
         ))}
 
-        {/* Add row button */}
         <button
-          className="text-[11px] text-primary/50 hover:text-primary transition-colors mt-1 ml-3.5"
-          onClick={() => onChange({ ...es, rows: [...es.rows, blankRow(`row-new-${Date.now()}`)] })}
+          type="button"
+          className="flex items-center gap-1.5 text-[11px] text-primary/40 hover:text-primary/70 transition-colors mt-1 ml-5 py-1.5 touch-manipulation"
+          onClick={addRowAtEnd}
         >
-          {es.type === "strength" ? "+ Add exercise" : es.type === "run" ? "+ Add segment" : "+ Add movement"}
+          <Plus className="w-3 h-3" />
+          Add line
         </button>
       </div>
 
-      {/* ── Repeat / Rest / Rounds (WOD + Run) ── */}
-      {(es.repeatNote || es.restNote || es.rounds || es.type === "wod") && (
-        <div className="border-t border-border/40 px-4 py-2.5 space-y-1.5">
-          {(es.type === "wod") && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground/50 w-3.5 shrink-0">×</span>
-              <span className="text-xs text-muted-foreground shrink-0">Rounds:</span>
-              <input
-                className="w-10 text-xs font-mono bg-transparent border-none outline-none focus:ring-0 tabular-nums placeholder:text-muted-foreground/30"
-                value={es.rounds}
-                onChange={e => onChange({ ...es, rounds: e.target.value })}
-                placeholder="—"
-                type="number"
-                min={1}
-              />
-              {es.durationMinutes && es.rows.length > 0 && es.rounds && (
-                <span className="text-[10px] text-muted-foreground/50 ml-1">
-                  ({es.durationMinutes} min ÷ {es.rows.length} mvt = {Math.round(Number(es.durationMinutes) / es.rows.length)} min/set)
-                </span>
+      {/* ── WOD footer: rounds / repeat / rest (progressive disclosure) ── */}
+      {es.type === "wod" && (es.rounds || es.repeatNote || es.restNote) && (
+        <div className="border-t border-border/40">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+            onClick={() => setWodFooterOpen(o => !o)}
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${wodFooterOpen ? "rotate-180" : ""}`} />
+            <span className="font-medium">
+              {es.rounds ? `× ${es.rounds} rounds` : ""}
+              {es.repeatNote ? (es.rounds ? ` · ${es.repeatNote}` : es.repeatNote) : ""}
+            </span>
+            <span className="ml-auto text-muted-foreground/50">tap to edit</span>
+          </button>
+          {wodFooterOpen && (
+            <div className="px-4 pb-3 space-y-2">
+              <label className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground/60 w-16 shrink-0">Rounds</span>
+                <input
+                  type="number"
+                  className="w-16 text-xs font-mono bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30 tabular-nums"
+                  value={es.rounds}
+                  onChange={e => onChange({ ...es, rounds: e.target.value })}
+                  placeholder="—"
+                  min={1}
+                />
+              </label>
+              {es.repeatNote && (
+                <label className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground/60 w-16 shrink-0">Repeat</span>
+                  <input
+                    className="flex-1 text-xs bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30"
+                    value={es.repeatNote}
+                    onChange={e => onChange({ ...es, repeatNote: e.target.value })}
+                    placeholder="Repeat logic…"
+                  />
+                </label>
               )}
-            </div>
-          )}
-          {es.repeatNote && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground/50 w-3.5 shrink-0">↻</span>
-              <input
-                className="flex-1 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25"
-                value={es.repeatNote}
-                onChange={e => onChange({ ...es, repeatNote: e.target.value })}
-                placeholder="Repeat logic…"
-              />
-            </div>
-          )}
-          {es.restNote && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground/50 w-3.5 shrink-0">⏸</span>
-              <input
-                className="flex-1 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-0 placeholder:text-muted-foreground/25"
-                value={es.restNote}
-                onChange={e => onChange({ ...es, restNote: e.target.value })}
-                placeholder="Rest note…"
-              />
+              {es.restNote && (
+                <label className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground/60 w-16 shrink-0">Rest</span>
+                  <input
+                    className="flex-1 text-xs bg-transparent border-none outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/30"
+                    value={es.restNote}
+                    onChange={e => onChange({ ...es, restNote: e.target.value })}
+                    placeholder="Rest note…"
+                  />
+                </label>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* ── Footer ── */}
+      {/* ── Strength/Run: no extra footer needed ── */}
+
+      {/* ── Status bar ── */}
       {!compact && (
         <div className="border-t border-border/40 px-4 py-2 bg-emerald-50/60 dark:bg-emerald-950/20">
           <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-            ✓ Ready to save — tap any field to edit
+            ✓ Ready to save — tap any line to edit
           </p>
         </div>
       )}
