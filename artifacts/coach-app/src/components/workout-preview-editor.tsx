@@ -21,11 +21,12 @@ export interface EditableRow {
   notes: string;
 }
 
-/** A WOD segment — e.g. buy-in, 4 rounds block, cash-out */
+/** A labelled block of rows — used for both WOD segments and run blocks */
 export interface WodSegment {
   id: string;
-  type: "fixed" | "rounds" | "amrap" | "emom" | "interval" | "chipper" | "for_time";
-  label: string;   // "Buy-in", "4 rounds", "Cash-out", "AMRAP 8 min", etc.
+  type: "fixed" | "rounds" | "amrap" | "emom" | "interval" | "chipper" | "for_time"
+      | "warmup" | "main" | "cooldown" | "recovery" | "strides" | "hills";
+  label: string;   // "Buy-in", "4 rounds", "Warm-up", "Main Set", "Cool-down", etc.
   rounds: string;
   rows: EditableRow[];
 }
@@ -36,8 +37,8 @@ export interface EditableSession {
   format: string;
   summary: string;
   durationMinutes: string;
-  rows: EditableRow[];           // flat — used for strength/run, and as fallback
-  segments?: WodSegment[];       // WOD multi-segment structure (buy-in, rounds, cash-out…)
+  rows: EditableRow[];           // flat — used for strength/run fallback
+  segments?: WodSegment[];       // WOD multi-segment OR run block structure
   repeatNote: string;
   restNote: string;
   rounds: string;
@@ -164,21 +165,66 @@ export function parseWodToEditable(opt: any): EditableSession {
 }
 
 export function parseRunToEditable(session: any): EditableSession {
-  const rows: EditableRow[] = (session.segments ?? []).map((seg: any, i: number) => ({
-    id: `seg-${i}`,
-    label: seg.label ?? "",
-    name: seg.description ?? "",
-    sets: "", reps: seg.reps != null ? String(seg.reps) : "", weight: "", rpe: "", rest: seg.rest ?? "", tempo: "",
-    value: seg.distance ?? seg.duration ?? "", unit: "", load: "",
-    notes: seg.effort ?? "",
-  }));
-  if (!rows.length && session.structure) {
-    rows.push({ ...blankRow("seg-0", "Session"), name: session.structure, notes: session.intensity ?? "" });
-  }
   const parts: string[] = [];
   if (session.duration) parts.push(`${session.duration} min`);
   if (session.distanceKm) parts.push(`${session.distanceKm} km`);
   if (session.intensity) parts.push(session.intensity);
+
+  // ── New block-based structure from updated API ────────────────────────────
+  const runBlocks: any[] = Array.isArray(session.runBlocks) ? session.runBlocks : [];
+  if (runBlocks.length > 0) {
+    const segments: WodSegment[] = runBlocks.map((block: any, bi: number) => ({
+      id: `run-block-${bi}`,
+      type: (block.blockType ?? "main") as WodSegment["type"],
+      label: block.label ?? "",
+      rounds: "",
+      rows: (block.rows ?? []).map((row: any, ri: number): EditableRow => {
+        if (row.rowType === "rest") {
+          return {
+            ...blankRow(`rb-${bi}-${ri}`, "Rest"),
+            name: row.description ?? row.duration ?? "",
+            notes: "rest",
+          };
+        }
+        if (row.rowType === "interval") {
+          return {
+            ...blankRow(`rb-${bi}-${ri}`, String(row.repNumber ?? ri + 1)),
+            value: row.distance ?? row.duration ?? "",
+            name: row.pace ? `@ ${row.pace}` : (row.effort ?? ""),
+            notes: !row.pace && row.effort ? "" : (row.effort ?? ""),
+          };
+        }
+        // rowType === "run" (general block content)
+        return {
+          ...blankRow(`rb-${bi}-${ri}`),
+          value: row.distance ?? row.duration ?? "",
+          name: row.description ?? "",
+          notes: row.effort ?? "",
+        };
+      }),
+    }));
+    return {
+      title: session.name || "Run Session",
+      type: "run", format: session.intensity ?? "Run",
+      summary: parts.join(" · "),
+      durationMinutes: session.duration ? String(session.duration) : "",
+      rows: [], segments, repeatNote: "", restNote: "", rounds: "",
+      _raw: session,
+    };
+  }
+
+  // ── Legacy flat segments fallback ─────────────────────────────────────────
+  const rows: EditableRow[] = (session.segments ?? []).map((seg: any, i: number) => ({
+    id: `seg-${i}`,
+    label: seg.label ?? "",
+    name: seg.description ?? "",
+    sets: "", reps: "", weight: "", rpe: "", rest: seg.rest ?? "", tempo: "",
+    value: seg.distance ?? seg.duration ?? "", unit: "", load: "",
+    notes: seg.effort ?? "",
+  }));
+  if (!rows.length && session.structure) {
+    rows.push({ ...blankRow("seg-0"), name: session.structure, notes: session.intensity ?? "" });
+  }
   return {
     title: session.name || "Run Session",
     type: "run", format: session.intensity ?? "Run",
@@ -245,23 +291,63 @@ export function editableSessionToSession(es: EditableSession): any {
   }
 
   if (es.type === "run") {
-    const segments = es.rows.map((r) => ({
+    const allRows = es.segments?.length ? es.segments.flatMap(s => s.rows) : es.rows;
+
+    // Build runBlocks for re-loading preview after save
+    const runBlocks = es.segments?.length
+      ? es.segments.map(seg => ({
+          blockType: seg.type,
+          label: seg.label,
+          rows: seg.rows.map(r => {
+            if (r.notes === "rest" || r.label.toLowerCase() === "rest") {
+              return { rowType: "rest", description: r.name, duration: r.name };
+            }
+            const repNum = r.label && /^\d+$/.test(r.label) ? Number(r.label) : undefined;
+            return {
+              rowType: repNum != null ? "interval" : "run",
+              ...(repNum != null ? { repNumber: repNum } : {}),
+              distance: r.value || null,
+              duration: null,
+              pace: r.name?.startsWith("@") ? r.name.replace(/^@\s*/, "") : null,
+              effort: r.notes && r.notes !== "rest" ? r.notes : null,
+              description: !r.name?.startsWith("@") ? r.name : null,
+            };
+          }),
+        }))
+      : null;
+
+    // Create one exercise per interval/run row for loggable pre-population
+    const intervalRows = allRows.filter(r => r.notes !== "rest" && r.label.toLowerCase() !== "rest");
+    const exercises = intervalRows.length > 0
+      ? intervalRows.map((r, idx) => ({
+          id: r.id || `ex-${now}-${idx}`,
+          name: r.label && /^\d+$/.test(r.label) ? `Rep ${r.label}` : (r.name || es.title),
+          sets: null, reps: r.value || null, rpe: null, rest: null, tempo: null,
+          notes: r.name && !r.name.startsWith("@") ? r.name : (r.notes || null),
+          rawText: [r.value, r.name].filter(Boolean).join(" "),
+          weekProgression: [], clientComment: null,
+          perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
+        }))
+      : [{
+          id: es._raw?.exercises?.[0]?.id || `ex-${now}-0`,
+          name: es.title,
+          sets: null, reps: null, rpe: null, rest: null, tempo: null,
+          notes: es.summary,
+          rawText: allRows.map(r => [r.value, r.name].filter(Boolean).join(" ")).join(" · "),
+          weekProgression: [], clientComment: null,
+          perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
+        }];
+
+    const segments = allRows.map(r => ({
       label: r.label, description: r.name, distance: r.value || null, effort: r.notes || null,
-      rest: r.rest || null, reps: r.reps ? Number(r.reps) : null,
+      rest: r.rest || null, reps: null, rowType: r.notes === "rest" ? "rest" : "interval",
     }));
-    const exercises = [{
-      id: es._raw?.exercises?.[0]?.id || `ex-${now}-0`,
-      name: es.title,
-      sets: null, reps: null, rpe: null, rest: null, tempo: null,
-      notes: es.summary,
-      rawText: es.rows.map(r => [r.reps ? `${r.reps}×` : "", r.value, r.name, r.notes].filter(Boolean).join(" ")).join(" · "),
-      weekProgression: [], clientComment: null,
-      perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
-    }];
+
     return {
       ...es._raw, name: es.title || es._raw?.name, source: "run_brain",
-      structure: es.rows.map(r => [r.label, r.reps ? `${r.reps}×` : "", r.name, r.notes].filter(Boolean).join(" ")).join(" · "),
+      structure: intervalRows.map(r => [r.value, r.name].filter(Boolean).join(" ")).join(" · "),
       segments, exercises,
+      ...(runBlocks ? { runBlocks } : {}),
     };
   }
 
@@ -330,11 +416,14 @@ function rowToText(row: EditableRow, type: EditableSession["type"]): string {
     const rpe = row.rpe ? ` RPE ${row.rpe}` : "";
     return `${row.name}${scheme}${wt}${rpe}`.trim();
   }
-  const labelPart = row.label ? `${row.label} · ` : "";
-  const repsPart = row.reps ? `${row.reps} × ` : "";
-  const distPart = row.value ? `${row.value} · ` : "";
-  const notesPart = row.notes ? ` · ${row.notes}` : "";
-  return `${labelPart}${repsPart}${distPart}${row.name}${notesPart}`.trim();
+  // Run type: clean rep-number · distance name format
+  const label = row.label.trim();
+  const dist = row.value.trim();
+  // Combine name + effort notes (avoid repeating if already embedded in name)
+  const detail = [row.name, row.notes && row.notes !== "rest" ? row.notes : ""].filter(Boolean).join(" ");
+  if (label && dist) return `${label} · ${dist}${detail ? ` ${detail}` : ""}`.trim();
+  if (label && !dist) return `${label}${detail ? ` · ${detail}` : ""}`.trim();
+  return [dist, detail].filter(Boolean).join(" · ").trim();
 }
 
 function textToRow(text: string, type: EditableSession["type"], existing: EditableRow): EditableRow {
@@ -384,19 +473,26 @@ function textToRow(text: string, type: EditableSession["type"], existing: Editab
     return { ...existing, name, sets, reps, weight, rpe };
   }
 
-  const parts = t.split(/\s*[·•]\s*/).map(s => s.trim()).filter(Boolean);
-  const repsM = parts[0]?.match(/^(\d+)\s*[×x]\s*$/);
-  if (repsM && parts.length > 1) {
-    const remainder = parts.slice(1).join(" · ");
-    const distM = remainder.match(/^([\d.]+\s*(?:km|m|mi)?)\s*·?\s*(.*)$/i);
-    if (distM) return { ...existing, reps: repsM[1], value: distM[1].trim(), name: distM[2].trim() || existing.name };
-    return { ...existing, reps: repsM[1], name: remainder };
-  }
+  // Run type: "label · dist name" or "label · description" or "dist · detail"
+  const parts = t.split(/\s*·\s*/).map(s => s.trim()).filter(Boolean);
   if (parts.length >= 2) {
-    const distM = parts[0].match(/^([\d.]+\s*(?:km|m|mi)?)$/i);
+    const firstIsLabelOrNum = /^(\d+|rest|warm.?up|cool.?down|recovery|strides|hills)$/i.test(parts[0]);
+    if (firstIsLabelOrNum) {
+      const label = parts[0];
+      const rest = parts.slice(1).join(" ");
+      // Check if rest starts with a distance/duration token
+      const distM = rest.match(/^([\d.]+\s*(?:km|m|mi|min|sec|s)\b)\s*(.*)$/i);
+      if (distM) return { ...existing, label, value: distM[1].trim(), name: distM[2].trim() };
+      return { ...existing, label, name: rest };
+    }
+    // "dist · detail" (no label)
+    const distM = parts[0].match(/^([\d.]+\s*(?:km|m|mi|min|sec|s)\b)$/i);
     if (distM) return { ...existing, value: distM[1].trim(), name: parts.slice(1).join(" · ") };
   }
-  return { ...existing, name: parts.join(" · ") };
+  // Single token: check if it looks like a distance
+  const singleDistM = t.match(/^([\d.]+\s*(?:km|m|mi|min|sec|s)\b)\s*(.*)$/i);
+  if (singleDistM) return { ...existing, value: singleDistM[1].trim(), name: singleDistM[2].trim() };
+  return { ...existing, name: t };
 }
 
 function rowPlaceholder(type: EditableSession["type"], index: number): string {
@@ -551,10 +647,11 @@ function PreviewRow({
   );
 }
 
-// ── WodSegmentBlock — renders one labelled WOD segment ─────────────────────────
+// ── SessionBlockSection — renders one labelled block (WOD segment or run block) ─
 interface WodSegmentBlockProps {
   segment: WodSegment;
   segIdx: number;
+  sessionType: EditableSession["type"];
   activeRowId: string | null;
   editingText: string;
   expandedRowId: string | null;
@@ -571,17 +668,25 @@ interface WodSegmentBlockProps {
   onDeleteSegment: (segIdx: number) => void;
 }
 
-/** Colour hint for well-known labels */
-function segmentLabelStyle(label: string): string {
+/** Colour hint for well-known segment / block labels */
+function segmentLabelStyle(label: string, sessionType: EditableSession["type"]): string {
   const l = label.toLowerCase();
+  if (sessionType === "run") {
+    if (l.includes("warm")) return "text-amber-600 dark:text-amber-400";
+    if (l.includes("cool") || l.includes("cool-down")) return "text-sky-600 dark:text-sky-400";
+    if (l.includes("main") || l.includes("interval") || l.includes("set")) return "text-emerald-600 dark:text-emerald-400";
+    if (l.includes("stride")) return "text-violet-600 dark:text-violet-400";
+    if (l.includes("hill")) return "text-orange-600 dark:text-orange-400";
+    return "text-muted-foreground";
+  }
   if (l.includes("buy-in") || l.includes("buy in")) return "text-primary";
   if (l.includes("cash-out") || l.includes("cash out") || l.includes("buy-out") || l.includes("buy out") || l.includes("finisher")) return "text-violet-600 dark:text-violet-400";
   return "text-muted-foreground";
 }
 
 function WodSegmentBlock({
-  segment, segIdx, activeRowId, editingText, expandedRowId,
-  isFirst, isLast,
+  segment, segIdx, sessionType, activeRowId, editingText, expandedRowId,
+  isFirst,
   onActivateRow, onEditChange, onCommitRow, onDeleteRow, onAddRow,
   onToggleExpand, onChangeField, onLabelChange, onDeleteSegment,
 }: WodSegmentBlockProps) {
@@ -595,11 +700,12 @@ function WodSegmentBlock({
   }, [editingLabel]);
 
   const hasLabel = segment.label.trim() !== "";
-  const labelStyle = segmentLabelStyle(segment.label);
+  const labelStyle = segmentLabelStyle(segment.label, sessionType);
+  const isRun = sessionType === "run";
 
   return (
     <div className={`${!isFirst ? "mt-3 pt-3 border-t border-border/30" : ""}`}>
-      {/* Segment header */}
+      {/* Block header */}
       <div className="flex items-center gap-1.5 mb-1 group/seg">
         {editingLabel ? (
           <input
@@ -613,47 +719,67 @@ function WodSegmentBlock({
         ) : (
           <button
             type="button"
-            className={`text-xs font-semibold flex-1 text-left transition-colors hover:opacity-80 ${hasLabel ? labelStyle : "text-muted-foreground/30 italic"}`}
+            className={`text-xs font-semibold flex-1 text-left transition-colors hover:opacity-80 uppercase tracking-widest ${hasLabel ? labelStyle : "text-muted-foreground/30 italic"}`}
             onClick={() => setEditingLabel(true)}
           >
-            {hasLabel ? segment.label : "Untitled segment"}
+            {hasLabel ? segment.label : (isRun ? "Block" : "Untitled segment")}
           </button>
         )}
-        {segment.rounds && (
+        {!isRun && segment.rounds && (
           <span className="text-[10px] text-muted-foreground/50 font-mono shrink-0">×{segment.rounds}</span>
         )}
         <button
           type="button"
           className="shrink-0 p-1 text-muted-foreground/15 hover:text-destructive opacity-0 group-hover/seg:opacity-100 transition-all"
           onClick={() => onDeleteSegment(segIdx)}
-          title="Remove segment"
+          title="Remove block"
         >
           <X className="w-3 h-3" />
         </button>
       </div>
 
       {/* Rows */}
-      {segment.rows.map((row, ri) => (
-        <PreviewRow
-          key={row.id}
-          row={row}
-          type="wod"
-          index={ri}
-          isActive={activeRowId === row.id}
-          isExpanded={expandedRowId === row.id}
-          editingText={activeRowId === row.id ? editingText : ""}
-          onActivate={() => onActivateRow(row.id, rowToText(row, "wod"))}
-          onEditChange={onEditChange}
-          onCommit={() => onCommitRow(segIdx, ri)}
-          onDelete={() => onDeleteRow(segIdx, ri)}
-          onToggleExpand={() => onToggleExpand(row.id)}
-          onChangeField={patch => onChangeField(segIdx, ri, patch)}
-        />
-      ))}
+      {segment.rows.map((row, ri) => {
+        const isRestRow = row.notes === "rest" || row.label.toLowerCase() === "rest";
+        if (isRun && isRestRow) {
+          // Rest rows render as a lightweight divider line, not an editable row
+          return (
+            <div key={row.id} className="flex items-center gap-2 py-0.5 ml-5 my-0.5 group/rest">
+              <span className="text-[11px] text-muted-foreground/50 italic">
+                Rest{row.name ? ` · ${row.name}` : ""}
+              </span>
+              <button
+                type="button"
+                className="opacity-0 group-hover/rest:opacity-100 p-0.5 text-muted-foreground/30 hover:text-destructive transition-all"
+                onClick={() => onDeleteRow(segIdx, ri)}
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          );
+        }
+        return (
+          <PreviewRow
+            key={row.id}
+            row={row}
+            type={sessionType}
+            index={ri}
+            isActive={activeRowId === row.id}
+            isExpanded={expandedRowId === row.id}
+            editingText={activeRowId === row.id ? editingText : ""}
+            onActivate={() => onActivateRow(row.id, rowToText(row, sessionType))}
+            onEditChange={onEditChange}
+            onCommit={() => onCommitRow(segIdx, ri)}
+            onDelete={() => onDeleteRow(segIdx, ri)}
+            onToggleExpand={() => onToggleExpand(row.id)}
+            onChangeField={patch => onChangeField(segIdx, ri, patch)}
+          />
+        );
+      })}
 
       <button
         type="button"
-        className="flex items-center gap-1.5 text-[11px] text-primary/40 hover:text-primary/70 transition-colors mt-0.5 ml-5 py-1 touch-manipulation"
+        className={`flex items-center gap-1.5 text-[11px] transition-colors mt-0.5 ml-5 py-1 touch-manipulation ${isRun ? "text-emerald-500/40 hover:text-emerald-600/70" : "text-primary/40 hover:text-primary/70"}`}
         onClick={() => onAddRow(segIdx)}
       >
         <Plus className="w-3 h-3" />
@@ -731,7 +857,7 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
   function commitSegmentEdit(si: number, ri: number) {
     if (!activeRowId || !es.segments) return;
     const row = es.segments[si].rows[ri];
-    onChange(setSegmentRow(es, si, ri, textToRow(editingText, "wod", row)));
+    onChange(setSegmentRow(es, si, ri, textToRow(editingText, es.type, row)));
     setActiveRowId(null);
   }
 
@@ -776,14 +902,18 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
   function addSegment() {
     const nr = blankRow(`row-${Date.now()}`);
     const newSeg: WodSegment = {
-      id: `seg-${Date.now()}`, type: "fixed", label: "", rounds: "", rows: [nr],
+      id: `seg-${Date.now()}`,
+      type: es.type === "run" ? "main" : "fixed",
+      label: "",
+      rounds: "",
+      rows: [nr],
     };
     const segs = [...(es.segments ?? []), newSeg];
     onChange({ ...es, segments: segs, rows: segs.flatMap(s => s.rows) });
     activateRow(nr.id, "");
   }
 
-  const useSegments = es.type === "wod" && !!es.segments?.length;
+  const useSegments = !!(es.segments?.length) && (es.type === "wod" || es.type === "run");
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card overflow-hidden shadow-sm">
@@ -823,13 +953,14 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
       {/* ── Content ── */}
       <div className="px-3 py-1 pb-2">
         {useSegments ? (
-          // Multi-segment WOD
+          // Multi-segment WOD or run blocks
           <>
             {es.segments!.map((seg, si) => (
               <WodSegmentBlock
                 key={seg.id}
                 segment={seg}
                 segIdx={si}
+                sessionType={es.type}
                 isFirst={si === 0}
                 isLast={si === es.segments!.length - 1}
                 activeRowId={activeRowId}
@@ -848,11 +979,11 @@ export function WorkoutPreviewEditorCard({ editableSession: es, onChange, compac
             ))}
             <button
               type="button"
-              className="flex items-center gap-1.5 text-[11px] text-primary/40 hover:text-primary/70 transition-colors mt-3 ml-0 py-1 touch-manipulation"
+              className={`flex items-center gap-1.5 text-[11px] transition-colors mt-3 ml-0 py-1 touch-manipulation ${es.type === "run" ? "text-emerald-500/40 hover:text-emerald-600/70" : "text-primary/40 hover:text-primary/70"}`}
               onClick={addSegment}
             >
               <Plus className="w-3 h-3" />
-              Add segment
+              {es.type === "run" ? "Add block" : "Add segment"}
             </button>
           </>
         ) : (

@@ -1099,34 +1099,57 @@ router.post("/parse-run-session", async (req, res): Promise<void> => {
   const { description, name } = req.body as { description?: string; name?: string };
   if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
 
-  const systemPrompt = `You are a running coach assistant. Parse the user's run session description into structured JSON.
+  const systemPrompt = `You are a running coach. Parse the user's run description into a structured session.
 
-Rules:
-- Extract DURATION in minutes (number, null if not mentioned)
-- Extract DISTANCE in km (number, null if not mentioned). Convert miles to km (1 mile = 1.609 km), convert metres to km.
-- Extract INTENSITY as a short label: "Easy", "Steady", "Tempo", "Intervals", "Hill Repeats", "Time Trial", "Sprint", "Recovery", or infer from context
-- Generate a concise SESSION NAME that is publish-ready: e.g. "Tempo Intervals", "Long Steady Run", "Hill Repeats", "5K Time Trial". Never use generic names like "Run" or "Session".
-- Write a human-readable STRUCTURE string that fully describes the session
-- Break the session into SEGMENTS — each segment is an individual part of the run (warm-up, interval sets, cool-down, steady blocks)
-- Never use "easy run" — use "steady run", "quality session", "long steady run", or "recovery run" instead
-- Return ONLY valid JSON, no markdown fences
+CRITICAL EXPANSION RULE:
+- "3x500m" → expand into 3 individual interval rows of 500 m each (NOT one row with reps=3)
+- "2x1km" → expand into 2 individual interval rows of 1 km each
+- "5 × 3 min" → expand into 5 individual interval rows of 3 min each
+- NEVER use a "reps" count — always expand fully into individual rows
 
-Segment rules:
-- Each segment has: label (e.g. "Warm-up", "Main Set", "Cool-down", "Interval 1"), description (short text), distance (e.g. "1 km", null), duration (e.g. "10 min", null), effort (e.g. "easy pace", "tempo", "fast", "all-out"), rest (e.g. "90s jog", null)
-- For interval sets with repeats, use label "Main Set", include reps count as integer, distance/duration per rep, effort, rest
-- Always include warm-up and cool-down if implied by the description
+Return ONLY valid JSON, no markdown fences.
+Never use "easy run" — use "steady", "recovery", or "easy jog" instead.
+
+Row types:
+- "interval": a work rep — has repNumber, distance (e.g. "1 km"), duration (e.g. "3 min"), pace (e.g. "4:30/km"), effort (e.g. "threshold")
+- "rest": recovery between reps — has description (e.g. "90 sec jog"), duration
+- "run": a continuous non-interval block — has description, distance, duration, effort, pace
+
+Block types: "warmup", "main", "cooldown", "recovery", "strides", "hills"
 
 Response format:
 {
-  "name": "5k Tempo + Intervals",
-  "duration": 40,
-  "distanceKm": 9,
+  "name": "Pyramid Intervals",
+  "duration": 50,
+  "distanceKm": 10,
   "intensity": "Intervals",
-  "structure": "1 km warm-up · 4 × 400m fast (90s rest) · 5 km tempo · 1 km cool-down",
-  "segments": [
-    { "label": "Warm-up", "description": "1 km at easy pace", "distance": "1 km", "duration": null, "effort": "easy pace", "rest": null, "reps": null },
-    { "label": "Main Set", "description": "4 × 400m fast", "distance": "400m", "duration": null, "effort": "fast", "rest": "90s jog", "reps": 4 },
-    { "label": "Cool-down", "description": "1 km easy jog", "distance": "1 km", "duration": null, "effort": "easy pace", "rest": null, "reps": null }
+  "structure": "10 min warm-up · 2 km + 1 km + 1 km + 500m × 3 + 1 km + 2 km · 10 min cool-down",
+  "blocks": [
+    {
+      "blockType": "warmup",
+      "label": "Warm-up",
+      "rows": [
+        { "rowType": "run", "description": "10 min steady jog", "duration": "10 min", "effort": "easy" }
+      ]
+    },
+    {
+      "blockType": "main",
+      "label": "Main Set",
+      "rows": [
+        { "rowType": "interval", "repNumber": 1, "distance": "2 km", "pace": "4:25/km", "effort": "tempo" },
+        { "rowType": "rest", "description": "2 min jog", "duration": "2 min" },
+        { "rowType": "interval", "repNumber": 2, "distance": "1 km", "pace": "4:15/km", "effort": "threshold" },
+        { "rowType": "rest", "description": "90 sec", "duration": "90 sec" },
+        { "rowType": "interval", "repNumber": 3, "distance": "1 km", "pace": "4:15/km", "effort": "threshold" }
+      ]
+    },
+    {
+      "blockType": "cooldown",
+      "label": "Cool-down",
+      "rows": [
+        { "rowType": "run", "description": "10 min recovery jog", "duration": "10 min", "effort": "easy" }
+      ]
+    }
   ]
 }`;
 
@@ -1147,7 +1170,28 @@ Response format:
     const distanceKm: number | null = typeof parsed.distanceKm === "number" ? Math.round(parsed.distanceKm * 10) / 10 : null;
     const intensity: string = parsed.intensity ?? "";
     const structure: string = parsed.structure ?? description.trim();
-    const segments: any[] = Array.isArray(parsed.segments) ? parsed.segments : [];
+
+    // New: blocks-based structure (individual expanded rows)
+    const runBlocks: any[] = Array.isArray(parsed.blocks) ? parsed.blocks : [];
+
+    // Legacy segments for backward compat — derive from blocks if present
+    const segments: any[] = runBlocks.length > 0
+      ? runBlocks.flatMap((block: any) =>
+          (block.rows ?? []).map((row: any) => ({
+            label: row.rowType === "interval" ? `Rep ${row.repNumber ?? ""}`.trim() : (row.rowType === "rest" ? "Rest" : (block.label || "")),
+            description: row.rowType === "interval"
+              ? [row.distance || row.duration, row.pace ? `@ ${row.pace}` : null, row.effort].filter(Boolean).join(" ")
+              : (row.description || row.duration || ""),
+            distance: row.distance ?? null,
+            duration: row.duration ?? null,
+            effort: row.rowType === "rest" ? "rest" : (row.effort ?? null),
+            rest: null,
+            reps: null,
+            rowType: row.rowType,
+            pace: row.pace ?? null,
+          }))
+        )
+      : [];
 
     const notesParts: string[] = [];
     if (duration) notesParts.push(`${duration} min`);
@@ -1156,17 +1200,37 @@ Response format:
     const notes = notesParts.join(" · ");
 
     const now = Date.now();
-    const exercises = [{
-      id: `ex-${now}-0`,
-      name: sessionName,
-      sets: null, reps: null, rpe: null, rest: null, tempo: null,
-      notes,
-      rawText: structure,
-      weekProgression: [], clientComment: null,
-      perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
-    }];
+    // Create one exercise per interval row (not rest rows) for logging pre-population
+    const intervalRows = runBlocks.flatMap((b: any) =>
+      (b.rows ?? []).filter((r: any) => r.rowType === "interval" || r.rowType === "run")
+    );
+    const exercises = intervalRows.length > 0
+      ? intervalRows.map((row: any, idx: number) => ({
+          id: `ex-${now}-${idx}`,
+          name: row.rowType === "interval" ? `Rep ${row.repNumber ?? idx + 1}` : (row.description || sessionName),
+          sets: null,
+          reps: row.distance || row.duration || null,
+          rpe: null, rest: null, tempo: null,
+          notes: [row.pace ? `@ ${row.pace}` : null, row.effort].filter(Boolean).join(" ") || null,
+          rawText: [row.distance || row.duration, row.pace, row.effort].filter(Boolean).join(" "),
+          weekProgression: [], clientComment: null,
+          perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
+        }))
+      : [{
+          id: `ex-${now}-0`,
+          name: sessionName,
+          sets: null, reps: null, rpe: null, rest: null, tempo: null,
+          notes,
+          rawText: structure,
+          weekProgression: [], clientComment: null,
+          perSetReps: null, perSetRpe: null, setWeights: null, setReps: null, weight: null,
+        }];
 
-    res.json({ name: sessionName, source: "run_brain", structure, segments, duration, distanceKm, intensity, exercises });
+    res.json({
+      name: sessionName, source: "run_brain", structure, segments, duration, distanceKm, intensity,
+      runBlocks: runBlocks.length > 0 ? runBlocks : null,
+      exercises,
+    });
   } catch (err) {
     req.log.error({ err }, "Error parsing run session");
     res.status(500).json({ error: "Failed to parse run session" });

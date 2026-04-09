@@ -40,7 +40,13 @@ import { format, parseISO } from "date-fns";
 
 interface SetLog { weight: number | null; reps: number | null; }
 type LogState = Record<string, SetLog[]>;
-interface RunInterval { distance: string; pace: string; }
+interface RunInterval {
+  label: string;        // "Rep 1", "Warm-up", or empty
+  distance: string;     // planned distance/duration from session, e.g. "2 km"
+  targetPace: string;   // planned target pace, e.g. "4:30/km"
+  pace: string;         // actual pace logged by user
+  notes: string;
+}
 
 // Extract a clean exercise name from spoken swap commands
 function extractSwapName(raw: string): string {
@@ -397,7 +403,7 @@ export default function ClientSession() {
   const [wodResult, setWodResult] = useState<WodResult>({});
 
   // Run interval logging state
-  const [runIntervals, setRunIntervals] = useState<RunInterval[]>([{ distance: "", pace: "" }]);
+  const [runIntervals, setRunIntervals] = useState<RunInterval[]>([{ label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
 
   // Init logs from saved data
   useEffect(() => {
@@ -421,12 +427,51 @@ export default function ClientSession() {
     setSessionComment((session as any).clientComment || "");
     // Init WOD result
     setWodResult((session as any).wodResult || {});
-    // Init run intervals
-    const savedRunLog = (session as any).runLog as Array<{ distance?: number | null; pace?: string | null }> | undefined;
+    // Init run intervals from saved log (first priority) or structured plan data
+    const savedRunLog = (session as any).runLog as Array<{
+      label?: string | null; distance?: number | string | null; targetPace?: string | null; pace?: string | null; notes?: string | null;
+    }> | undefined;
     if (savedRunLog && savedRunLog.length > 0) {
-      setRunIntervals(savedRunLog.map(r => ({ distance: r.distance != null ? String(r.distance) : "", pace: r.pace ?? "" })));
+      setRunIntervals(savedRunLog.map(r => ({
+        label: r.label ?? "",
+        distance: r.distance != null ? String(r.distance) : "",
+        targetPace: r.targetPace ?? "",
+        pace: r.pace ?? "",
+        notes: r.notes ?? "",
+      })));
     } else {
-      setRunIntervals([{ distance: "", pace: "" }]);
+      // Pre-populate from structured runBlocks or exercises (plan data)
+      const runBlocks = (session as any).runBlocks as Array<{ blockType: string; label: string; rows: any[] }> | undefined;
+      if (runBlocks?.length) {
+        const intervals: RunInterval[] = [];
+        for (const block of runBlocks) {
+          for (const row of (block.rows ?? [])) {
+            if (row.rowType === "rest") continue;
+            intervals.push({
+              label: row.rowType === "interval" ? `Rep ${row.repNumber ?? ""}`.trim() : (block.label || ""),
+              distance: row.distance || row.duration || "",
+              targetPace: row.pace || "",
+              pace: "",
+              notes: row.effort || "",
+            });
+          }
+        }
+        setRunIntervals(intervals.length > 0 ? intervals : [{ label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+      } else {
+        // Fallback: one row per exercise that looks like an interval
+        const exs = (session.exercises ?? []).filter((e: any) => e.name?.startsWith("Rep") || (session as any).source === "run_brain");
+        if (exs.length > 1) {
+          setRunIntervals(exs.map((e: any) => ({
+            label: e.name || "",
+            distance: e.reps || "",
+            targetPace: e.notes?.match(/@ ?([\d:]+\/km)/)?.[1] ?? "",
+            pace: "",
+            notes: "",
+          })));
+        } else {
+          setRunIntervals([{ label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+        }
+      }
     }
   }, [session]);
 
@@ -970,10 +1015,13 @@ export default function ClientSession() {
           const base = { ...s, clientComment: sessionComment.trim() || null };
           if (isRunSession) {
             const runLog = runIntervals
-              .filter(r => r.distance !== "" || r.pace !== "")
+              .filter(r => r.distance !== "" || r.pace !== "" || r.label !== "")
               .map(r => ({
-                distance: r.distance !== "" ? parseFloat(r.distance) : null,
+                label: r.label || null,
+                distance: r.distance !== "" ? r.distance : null,
+                targetPace: r.targetPace || null,
                 pace: r.pace || null,
+                notes: r.notes || null,
               }));
             return { ...base, runLog: runLog.length > 0 ? runLog : null };
           }
@@ -1785,22 +1833,35 @@ export default function ClientSession() {
             <div className="space-y-2">
               <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase px-1">What you ran</p>
               <div className="rounded-xl border border-border overflow-hidden">
-                {/* Header row */}
-                <div className="grid grid-cols-[2rem_1fr_1fr_2rem] gap-0 bg-muted/40 border-b border-border px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  <span>#</span>
-                  <span>Distance (km)</span>
-                  <span>Pace (min/km)</span>
+                {/* Header */}
+                <div className="grid grid-cols-[3.5rem_1fr_5rem_5rem_2rem] gap-0 bg-muted/40 border-b border-border px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="pl-1">Rep</span>
+                  <span>Distance</span>
+                  <span className="text-center">Target</span>
+                  <span className="text-center">Actual</span>
                   <span />
                 </div>
                 {runIntervals.map((interval, idx) => (
-                  <div key={idx} className="grid grid-cols-[2rem_1fr_1fr_2rem] gap-0 items-center px-3 py-1.5 border-b border-border last:border-b-0 bg-background">
-                    <span className="text-xs font-bold text-muted-foreground">{idx + 1}</span>
+                  <div key={idx} className="grid grid-cols-[3.5rem_1fr_5rem_5rem_2rem] gap-0 items-center px-2 py-1 border-b border-border last:border-b-0 bg-background">
+                    {/* Rep label — editable */}
                     <Input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.1"
-                      min="0"
-                      placeholder="e.g. 5.0"
+                      type="text"
+                      placeholder={String(idx + 1)}
+                      value={interval.label}
+                      onChange={e => {
+                        const updated = [...runIntervals];
+                        updated[idx] = { ...updated[idx], label: e.target.value };
+                        setRunIntervals(updated);
+                        setSaved(false);
+                        scheduleClientAutosave();
+                      }}
+                      className="h-8 text-xs font-semibold border-0 shadow-none bg-transparent focus:bg-muted/20 rounded text-muted-foreground pl-1"
+                    />
+                    {/* Distance (pre-filled from plan, editable) */}
+                    <Input
+                      type="text"
+                      inputMode="text"
+                      placeholder="e.g. 1 km"
                       value={interval.distance}
                       onChange={e => {
                         const updated = [...runIntervals];
@@ -1809,12 +1870,28 @@ export default function ClientSession() {
                         setSaved(false);
                         scheduleClientAutosave();
                       }}
-                      className="h-9 text-center text-sm font-bold border-0 shadow-none bg-transparent focus:bg-muted/30 rounded-lg"
+                      className="h-8 text-sm font-bold border-0 shadow-none bg-transparent focus:bg-muted/20 rounded"
                     />
+                    {/* Target pace (from plan, read-hint) */}
                     <Input
                       type="text"
                       inputMode="text"
-                      placeholder="e.g. 5:30"
+                      placeholder="—"
+                      value={interval.targetPace}
+                      onChange={e => {
+                        const updated = [...runIntervals];
+                        updated[idx] = { ...updated[idx], targetPace: e.target.value };
+                        setRunIntervals(updated);
+                        setSaved(false);
+                        scheduleClientAutosave();
+                      }}
+                      className="h-8 text-xs text-center text-muted-foreground border-0 shadow-none bg-transparent focus:bg-muted/20 rounded font-mono"
+                    />
+                    {/* Actual pace */}
+                    <Input
+                      type="text"
+                      inputMode="text"
+                      placeholder="5:30"
                       value={interval.pace}
                       onChange={e => {
                         const updated = [...runIntervals];
@@ -1823,7 +1900,7 @@ export default function ClientSession() {
                         setSaved(false);
                         scheduleClientAutosave();
                       }}
-                      className="h-9 text-center text-sm font-bold border-0 shadow-none bg-transparent focus:bg-muted/30 rounded-lg"
+                      className="h-8 text-sm text-center font-bold border-0 shadow-none bg-transparent focus:bg-muted/20 rounded font-mono text-emerald-700 dark:text-emerald-400"
                     />
                     <button
                       type="button"
@@ -1842,8 +1919,12 @@ export default function ClientSession() {
               </div>
               <button
                 type="button"
-                onClick={() => { setRunIntervals([...runIntervals, { distance: "", pace: "" }]); setSaved(false); scheduleClientAutosave(); }}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-emerald-400/60 text-emerald-700 hover:bg-emerald-50 text-xs font-medium transition-colors"
+                onClick={() => {
+                  setRunIntervals([...runIntervals, { label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+                  setSaved(false);
+                  scheduleClientAutosave();
+                }}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-emerald-400/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-xs font-medium transition-colors"
               >
                 <Plus className="w-3 h-3" /> Add interval
               </button>

@@ -1,0 +1,207 @@
+Fix run parsing, preview, and saved-session generation for interval workouts.
+
+Current problem:
+The parser is reading interval descriptions as repetitive text lines instead of a structured run session. The preview duplicates phrases like “1 x 2 km” and “interval”, and when the session is saved to calendar, the actual run output is effectively empty because no usable interval sets are being created for logging.
+
+Goal:
+Run sessions, especially intervals, should parse into clean, editable interval sets that become the actual rows used in the workout logging screen.
+
+Make these changes:
+
+1. Add a proper run session model
+A run session should support:
+- warm-up block
+- main set block
+- cool-down block
+- interval sets within a block
+- optional recovery/rest rows between intervals
+
+Each interval set should support:
+- label (optional, e.g. “Rep 1” or “Main Set”)
+- distance
+- target pace
+- effort / note (optional, e.g. easy, threshold, hard)
+- recovery/rest after the rep (optional)
+
+Do not treat interval sessions as flat text lines.
+
+2. Parse repeated interval syntax correctly
+Support natural run shorthand such as:
+- 1x2km
+- 2x1km
+- 3x500m
+- 6 x 800m
+- 5 x 3 min
+- 4 x 1 km @ 4:30/km
+- 3 x 1 mile, 90 sec rest
+- 10 min easy, then 5 x 1 km, then cool down
+
+Rules:
+- “2x1km” means 2 distinct interval rows of 1 km, not one row with duplicated text
+- “3x500m” means 3 distinct interval rows of 500 m
+- preserve order exactly as written
+
+Example:
+Input:
+1x2km
+2x1km
+3x500m
+1x1km
+1x2km
+
+Should become preview rows like:
+Main Set
+1 · 2 km
+2 · 1 km
+3 · 1 km
+4 · 500 m
+5 · 500 m
+6 · 500 m
+7 · 1 km
+8 · 2 km
+
+3. Stop text repetition in the preview
+Do not generate lines like:
+“Main Set · 1 x 2 km · 1 x 2 km interval · fast”
+
+Instead, each row should be concise and human-readable.
+
+Good format:
+1 · 2 km
+2 · 1 km
+3 · 1 km
+4 · 500 m
+5 · 500 m
+6 · 500 m
+7 · 1 km
+8 · 2 km
+
+If a pace is present:
+1 · 2 km @ 4:20/km
+
+If a rest is present:
+Rest · 90 sec walk/jog
+
+4. Let users edit interval rows inline
+Run preview must support the same editing philosophy as WOD:
+- entire row is editable inline
+- tap anywhere on the row to edit
+- no modal required for basic edits
+
+Users must be able to:
+- change distance
+- add or edit target pace
+- add or edit rep label
+- insert a rest/recovery row
+- reorder rows
+- delete rows
+- add rows below
+
+5. Support explicit rest/recovery rows
+This is important.
+
+A run interval session must allow rows like:
+- Rest · 90 sec
+- Recovery · 200m jog
+- 2 min easy jog
+
+Rest should be a first-class row type in run previews, not hidden metadata.
+
+Example desired preview:
+Warm-up
+10 min easy
+
+Main Set
+1 · 2 km @ 4:25/km
+Rest · 2 min jog
+2 · 1 km @ 4:15/km
+Rest · 90 sec
+3 · 1 km @ 4:15/km
+Rest · 90 sec
+4 · 500 m hard
+Rest · 60 sec
+5 · 500 m hard
+Rest · 60 sec
+6 · 500 m hard
+
+Cool-down
+10 min easy
+
+6. Saved run sessions must generate actual loggable sets
+When a run session is saved, the calendar/session detail screen must not be empty.
+
+The saved output should create one logging row per interval set, and optionally one row per rest/recovery line if needed for context.
+
+For example, if preview contains:
+1 · 2 km
+2 · 1 km
+3 · 1 km
+4 · 500 m
+5 · 500 m
+6 · 500 m
+7 · 1 km
+8 · 2 km
+
+Then the run logging screen should generate interval rows the user can fill in with actual pace/time for each rep.
+
+At minimum, each interval row in the logging UI should support:
+- interval number
+- distance
+- actual pace or actual time
+- optional notes
+
+7. Improve the run logging screen for interval sessions
+Current logging is too generic.
+
+When a saved run is an interval session:
+- pre-populate the rows from the preview structure
+- show one row per interval
+- allow adding/deleting rows if the session changed in practice
+- make it easy to record pace for each rep
+
+Good logging table columns:
+- Rep
+- Distance
+- Target Pace (optional)
+- Actual Pace
+- Notes (optional)
+
+Do not show only a blank generic distance/pace table if structured intervals already exist.
+
+8. Add block awareness for run sessions
+Runs need light block structure similar to WOD, but run-specific:
+- Warm-up
+- Main Set
+- Cool-down
+- Recovery
+- Strides
+- Hills
+
+These should be semantic labels, not heavy nested cards.
+
+Users should be able to type these naturally and have them render as lightweight block labels.
+
+9. Keep the preview simple and readable
+Do not over-explain or repeat metadata.
+Do not include duplicated phrases like:
+- “interval”
+- “fast”
+- “main set”
+on every row unless explicitly written by the user
+
+Default preview should feel like a coach’s notes, just cleaned up.
+
+10. Backfill missing session generation bug
+Investigate why run previews that look partially structured are not generating usable saved calendar/session data.
+Likely cause:
+- preview rows are being rendered from text but not persisted as structured interval sets
+- save pipeline is not mapping run preview rows into run session logging rows
+
+Fix so the saved session uses the structured preview data as the source of truth.
+
+Success criteria:
+- interval shorthand expands into real sets
+- no duplicate text in preview
+- users can edit intervals and add rest rows inline
+- saving the session creates a usable run log with one row per interval
+- run preview and run logging feel intentionally designed, not generic
