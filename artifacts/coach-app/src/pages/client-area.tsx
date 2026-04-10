@@ -2006,13 +2006,28 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   // Tracking mode (persisted per-client)
-  const [nutritionTrackingMode, setNutritionTrackingModeRaw] = useState<"calories" | "protein">(() => {
-    try { return (localStorage.getItem(`nutrition-mode-${clientId}`) as "calories" | "protein") ?? "calories"; }
+  const [nutritionTrackingMode, setNutritionTrackingModeRaw] = useState<"calories" | "protein_only">(() => {
+    try {
+      const v = localStorage.getItem(`nutrition-mode-${clientId}`);
+      if (v === "protein_only") return "protein_only";
+      return "calories";
+    }
     catch { return "calories"; }
   });
-  const setNutritionMode = (mode: "calories" | "protein") => {
-    setNutritionTrackingModeRaw(mode);
-    try { localStorage.setItem(`nutrition-mode-${clientId}`, mode); } catch {}
+  const [pendingModeSwitch, setPendingModeSwitch] = useState<"protein_only" | null>(null);
+  const requestNutritionMode = (mode: "calories" | "protein_only") => {
+    if (mode === "protein_only" && nutritionTrackingMode !== "protein_only") {
+      setPendingModeSwitch("protein_only");
+    } else {
+      setNutritionTrackingModeRaw(mode);
+      try { localStorage.setItem(`nutrition-mode-${clientId}`, mode); } catch {}
+    }
+  };
+  const confirmModeSwitch = () => {
+    if (!pendingModeSwitch) return;
+    setNutritionTrackingModeRaw(pendingModeSwitch);
+    try { localStorage.setItem(`nutrition-mode-${clientId}`, pendingModeSwitch); } catch {}
+    setPendingModeSwitch(null);
   };
 
   // Weekly nutrition logs (all entries, for the 7-day strip)
@@ -2438,6 +2453,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           isLoading={analyticsLoading}
           clientId={clientId}
           calorieTarget={client?.dailyCalorieGoal ?? null}
+          proteinTarget={client?.dailyProteinGoal ?? null}
+          nutritionMode={nutritionTrackingMode}
         />
       )}
 
@@ -2450,10 +2467,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           <div className="mb-4">
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Tracking mode</p>
             <div className="flex gap-1 bg-muted rounded-xl p-1">
-              {(["calories", "protein"] as const).map(m => (
+              {(["calories", "protein_only"] as const).map(m => (
                 <button
                   key={m}
-                  onClick={() => setNutritionMode(m)}
+                  onClick={() => requestNutritionMode(m)}
                   className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
                     nutritionTrackingMode === m
                       ? "bg-background shadow-sm text-foreground"
@@ -2483,9 +2500,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             const hasEntries = (entries?.length ?? 0) > 0;
             const isToday = selectedDate === format(new Date(), "yyyy-MM-dd");
 
-            if (!hasTarget) return (
+            // In protein_only mode, check protein target instead of calorie target
+            const isProteinOnly = nutritionTrackingMode === "protein_only";
+            const proTarget = client?.dailyProteinGoal ?? 0;
+            const effectiveTarget = isProteinOnly ? proTarget : (client?.dailyCalorieGoal ?? 0);
+
+            if (!effectiveTarget) return (
               <div className="rounded-xl border border-dashed border-muted-foreground/30 px-4 py-3 text-sm text-muted-foreground text-center mb-3">
-                Set a {nutritionTrackingMode === "protein" ? "protein" : "calorie"} target in Goals to see your daily status
+                Set a {isProteinOnly ? "protein" : "calorie"} target in Goals to see your daily status
               </div>
             );
 
@@ -2493,11 +2515,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             let statusColor = "text-muted-foreground";
             let statusBg = "bg-muted/40";
 
-            if (nutritionTrackingMode === "calories") {
+            if (!isProteinOnly) {
               const calTarget = client!.dailyCalorieGoal ?? 0;
               if (!hasEntries) {
                 statusText = isToday ? "Nothing logged yet" : "No entries for this day";
-                statusColor = "text-muted-foreground";
               } else {
                 const diff = Math.round(totals.calories) - calTarget;
                 if (Math.abs(diff) <= 100) {
@@ -2515,22 +2536,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 }
               }
             } else {
-              // Protein mode
-              const proTarget = client!.dailyProteinGoal ?? 0;
-              if (!proTarget) {
-                statusText = "Set a protein goal to see status";
-                statusColor = "text-muted-foreground";
-              } else if (!hasEntries) {
+              // Protein only mode
+              if (!hasEntries) {
                 statusText = isToday ? "Nothing logged yet" : "No entries for this day";
-                statusColor = "text-muted-foreground";
               } else {
-                const rem = proTarget - totals.protein;
+                const logged = totals.protein;
+                const rem = proTarget - logged;
                 if (rem <= 0) {
                   statusText = "Protein target hit";
                   statusColor = "text-emerald-600";
                   statusBg = "bg-emerald-50 dark:bg-emerald-950/30";
                 } else {
-                  statusText = `${rem.toFixed(0)}g protein to go`;
+                  statusText = `${rem.toFixed(0)}g to go`;
                   statusColor = "text-amber-600";
                   statusBg = "bg-amber-50 dark:bg-amber-950/30";
                 }
@@ -2540,9 +2557,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             return (
               <div className={`rounded-xl px-4 py-3 mb-3 flex items-center justify-between ${statusBg}`}>
                 <p className={`text-sm font-semibold ${statusColor}`}>{statusText}</p>
-                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
-                  {nutritionTrackingMode === "calories" ? "Calories" : "Protein"}
-                </p>
+                {hasEntries && isProteinOnly && totals.protein > 0 && (
+                  <p className="text-[11px] text-muted-foreground font-medium">{totals.protein.toFixed(0)}g logged</p>
+                )}
+                {!hasEntries && (
+                  <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                    {isProteinOnly ? "Protein" : "Calories"}
+                  </p>
+                )}
               </div>
             );
           })()}
@@ -2583,14 +2605,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
                   let dotColor = "bg-muted";
                   if (!isFuture && logged) {
-                    if (nutritionTrackingMode === "calories" && calTarget > 0) {
-                      const dayCals = dayEntries.reduce((s, e) => s + (e.calories ?? 0), 0);
-                      const diff = Math.abs(dayCals - calTarget);
-                      dotColor = diff <= 200 ? "bg-emerald-500" : diff <= 300 ? "bg-amber-400" : "bg-muted-foreground/40";
-                    } else if (nutritionTrackingMode === "protein" && proTarget > 0) {
+                    if (nutritionTrackingMode === "protein_only" && proTarget > 0) {
                       const dayPro = dayEntries.reduce((s, e) => s + parseFloat((e.protein as string) ?? "0"), 0);
                       const rem = proTarget - dayPro;
                       dotColor = rem <= 0 ? "bg-emerald-500" : rem <= 20 ? "bg-amber-400" : "bg-muted-foreground/40";
+                    } else if (nutritionTrackingMode === "calories" && calTarget > 0) {
+                      const dayCals = dayEntries.reduce((s, e) => s + (e.calories ?? 0), 0);
+                      const diff = Math.abs(dayCals - calTarget);
+                      dotColor = diff <= 200 ? "bg-emerald-500" : diff <= 300 ? "bg-amber-400" : "bg-muted-foreground/40";
                     } else {
                       dotColor = "bg-emerald-500"; // logged, no target — show green
                     }
@@ -2613,80 +2635,101 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             );
           })()}
 
-          {/* ── Daily totals ──────────────────────────────────────── */}
-          {((entries?.length ?? 0) > 0 || (client?.dailyCalorieGoal ?? 0) > 0) && (
+          {/* ── Daily totals / Protein-only card ─────────────────── */}
+          {nutritionTrackingMode === "protein_only" ? (
+            // ── Protein only mode: single focused protein card ──
             <div className="card totals-card">
-              {/* Consumed section — mode-aware order */}
-              {(entries?.length ?? 0) > 0 && (
-                <div className="totals-section">
-                  <p className="totals-heading">Daily Totals</p>
-                  <div className="totals-grid">
-                    {(nutritionTrackingMode === "protein"
-                      ? [
-                          { label: "Protein",  value: totals.protein.toFixed(1),   unit: "g",    color: "text-blue-500",   big: true  },
-                          { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500", big: false },
-                          { label: "Carbs",    value: totals.carbs.toFixed(1),     unit: "g",    color: "text-yellow-500", big: false },
-                          { label: "Fats",     value: totals.fats.toFixed(1),      unit: "g",    color: "text-pink-500",   big: false },
-                        ]
-                      : [
-                          { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500", big: true  },
-                          { label: "Protein",  value: totals.protein.toFixed(1),   unit: "g",    color: "text-blue-500",   big: false },
-                          { label: "Carbs",    value: totals.carbs.toFixed(1),     unit: "g",    color: "text-yellow-500", big: false },
-                          { label: "Fats",     value: totals.fats.toFixed(1),      unit: "g",    color: "text-pink-500",   big: false },
-                        ]
-                    ).map(({ label, value, unit, color, big }) => (
-                      <div key={label} className="total-metric">
-                        <p className={`${big ? "text-3xl" : "total-value"} ${color} font-black tabular-nums`}>{value}</p>
-                        <p className="total-unit">{unit}</p>
-                        <p className="total-label">{label}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Remaining section */}
-              {(client?.dailyCalorieGoal ?? 0) > 0 && (() => {
-                const remCal = (client!.dailyCalorieGoal ?? 0) - Math.round(totals.calories);
-                const remPro = (client!.dailyProteinGoal ?? 0) - totals.protein;
-                const remCarb = (client!.dailyCarbGoal ?? 0) - totals.carbs;
-                const remFat = (client!.dailyFatGoal ?? 0) - totals.fats;
-                const remainingItems = nutritionTrackingMode === "protein"
-                  ? [
-                      { label: "Protein",  value: Math.abs(remPro).toFixed(1),  unit: "g",    over: remPro < 0  },
-                      { label: "Calories", value: Math.abs(Math.round(remCal)), unit: "kcal", over: remCal < 0 },
-                      { label: "Carbs",    value: Math.abs(remCarb).toFixed(1), unit: "g",    over: remCarb < 0 },
-                      { label: "Fats",     value: Math.abs(remFat).toFixed(1),  unit: "g",    over: remFat < 0  },
-                    ]
-                  : [
-                      { label: "Calories", value: Math.abs(Math.round(remCal)), unit: "kcal", over: remCal < 0 },
-                      { label: "Protein",  value: Math.abs(remPro).toFixed(1),  unit: "g",    over: remPro < 0  },
-                      { label: "Carbs",    value: Math.abs(remCarb).toFixed(1), unit: "g",    over: remCarb < 0 },
-                      { label: "Fats",     value: Math.abs(remFat).toFixed(1),  unit: "g",    over: remFat < 0  },
-                    ];
-                return (
+              <div className="totals-section">
+                <p className="totals-heading">Protein</p>
+                {(() => {
+                  const proGoal = client?.dailyProteinGoal ?? 0;
+                  const logged = totals.protein;
+                  const hasEntries = (entries?.length ?? 0) > 0;
+                  if (!proGoal && !hasEntries) return (
+                    <p className="meal-help-text mt-2">Set a protein goal in Goals, then log meals to track progress</p>
+                  );
+                  if (proGoal > 0) {
+                    const rem = proGoal - logged;
+                    const pct = Math.min(logged / proGoal, 1);
+                    return (
+                      <>
+                        <div className="flex items-end gap-2 mt-1">
+                          <p className="text-4xl font-black tabular-nums text-blue-500">{Math.max(0, Math.round(rem))}<span className="text-xl font-bold">g</span></p>
+                          <p className="mb-1 text-sm text-muted-foreground">{rem <= 0 ? "over target" : "remaining"}</p>
+                        </div>
+                        <div className="mt-2 h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${pct >= 1 ? "bg-emerald-500" : pct >= 0.7 ? "bg-blue-500" : "bg-blue-300"}`}
+                            style={{ width: `${Math.min(pct * 100, 100)}%` }} />
+                        </div>
+                        <p className="mt-1.5 text-[11px] text-muted-foreground">
+                          {hasEntries ? `${logged.toFixed(0)}g logged of ${proGoal}g target` : "Nothing logged yet — full allowance remaining"}
+                        </p>
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <p className="text-4xl font-black tabular-nums text-blue-500 mt-1">{logged.toFixed(0)}<span className="text-xl font-bold">g</span></p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">logged today</p>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          ) : (
+            // ── Calories mode: existing full macro card ──
+            ((entries?.length ?? 0) > 0 || (client?.dailyCalorieGoal ?? 0) > 0) && (
+              <div className="card totals-card">
+                {(entries?.length ?? 0) > 0 && (
                   <div className="totals-section">
-                    <p className="totals-heading">
-                      {remainingItems.some(r => r.over) ? "Remaining / Over" : "Remaining"}
-                    </p>
+                    <p className="totals-heading">Daily Totals</p>
                     <div className="totals-grid">
-                      {remainingItems.map(({ label, value, unit, over }) => (
+                      {[
+                        { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500" },
+                        { label: "Protein",  value: totals.protein.toFixed(1),   unit: "g",    color: "text-blue-500"   },
+                        { label: "Carbs",    value: totals.carbs.toFixed(1),     unit: "g",    color: "text-yellow-500" },
+                        { label: "Fats",     value: totals.fats.toFixed(1),      unit: "g",    color: "text-pink-500"   },
+                      ].map(({ label, value, unit, color }) => (
                         <div key={label} className="total-metric">
-                          <p className={`total-value ${over ? "text-red-500" : "text-green-500"}`}>
-                            {over ? "-" : ""}{value}
-                          </p>
+                          <p className={`total-value ${color}`}>{value}</p>
                           <p className="total-unit">{unit}</p>
                           <p className="total-label">{label}</p>
                         </div>
                       ))}
                     </div>
-                    {(entries?.length ?? 0) === 0 && (
-                      <p className="meal-help-text text-center mt-3">Nothing logged yet — full allowance remaining</p>
-                    )}
                   </div>
-                );
-              })()}
-            </div>
+                )}
+                {(client?.dailyCalorieGoal ?? 0) > 0 && (() => {
+                  const remCal  = (client!.dailyCalorieGoal ?? 0) - Math.round(totals.calories);
+                  const remPro  = (client!.dailyProteinGoal ?? 0) - totals.protein;
+                  const remCarb = (client!.dailyCarbGoal ?? 0) - totals.carbs;
+                  const remFat  = (client!.dailyFatGoal ?? 0) - totals.fats;
+                  const remainingItems = [
+                    { label: "Calories", value: Math.abs(Math.round(remCal)), unit: "kcal", over: remCal < 0 },
+                    { label: "Protein",  value: Math.abs(remPro).toFixed(1),  unit: "g",    over: remPro < 0  },
+                    { label: "Carbs",    value: Math.abs(remCarb).toFixed(1), unit: "g",    over: remCarb < 0 },
+                    { label: "Fats",     value: Math.abs(remFat).toFixed(1),  unit: "g",    over: remFat < 0  },
+                  ];
+                  return (
+                    <div className="totals-section">
+                      <p className="totals-heading">{remainingItems.some(r => r.over) ? "Remaining / Over" : "Remaining"}</p>
+                      <div className="totals-grid">
+                        {remainingItems.map(({ label, value, unit, over }) => (
+                          <div key={label} className="total-metric">
+                            <p className={`total-value ${over ? "text-red-500" : "text-green-500"}`}>{over ? "-" : ""}{value}</p>
+                            <p className="total-unit">{unit}</p>
+                            <p className="total-label">{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {(entries?.length ?? 0) === 0 && (
+                        <p className="meal-help-text text-center mt-3">Nothing logged yet — full allowance remaining</p>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )
           )}
 
           {/* Add food input */}
@@ -2882,6 +2925,25 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               })}
             </div>
           )}
+
+          {/* ── Protein only confirmation modal ───────────────────── */}
+          <Dialog open={pendingModeSwitch === "protein_only"} onOpenChange={open => { if (!open) setPendingModeSwitch(null); }}>
+            <DialogContent className="max-w-sm rounded-2xl">
+              <DialogHeader>
+                <DialogTitle>Switch to Protein only?</DialogTitle>
+                <DialogDescription className="pt-1 space-y-2 text-sm text-muted-foreground leading-relaxed">
+                  <span className="block">This will simplify nutrition tracking to protein only.</span>
+                  <span className="block">Calories, carbs, and fats will no longer be shown as active targets on this screen.</span>
+                  <span className="block">Your nutrition score will be based on protein logging only.</span>
+                  <span className="block text-[11px] opacity-70">Your existing nutrition history is not deleted — only the active display and scoring changes.</span>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex flex-col gap-2 sm:flex-row pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setPendingModeSwitch(null)}>Cancel</Button>
+                <Button className="flex-1" onClick={confirmModeSwitch}>Switch to Protein only</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
 

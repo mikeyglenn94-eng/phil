@@ -496,12 +496,14 @@ function PrefRow({
 
 // ── Nutrition scoring ─────────────────────────────────────────────
 
-interface RawNutritionEntry { date: string; calories?: number | null }
+interface RawNutritionEntry { date: string; calories?: number | null; protein?: string | null }
 
 function computeNutritionStats(
   logs: RawNutritionEntry[],
   calorieTarget: number | null,
-): { nutritionPercent: number; loggedDays: number; closeDays: number } {
+  mode: "calories" | "protein_only" = "calories",
+  proteinTarget: number | null = null,
+): { nutritionPercent: number; loggedDays: number; closeDays: number; hitDays: number } {
   const today = new Date();
   const days: string[] = [];
   for (let i = 0; i < 7; i++) {
@@ -518,7 +520,8 @@ function computeNutritionStats(
 
   let totalScore = 0;
   let loggedDays = 0;
-  let closeDays = 0;
+  let closeDays = 0; // calories mode: days within ±200 kcal
+  let hitDays = 0;   // protein_only mode: days protein target met
 
   for (const day of days) {
     const dayEntries = byDate.get(day);
@@ -528,20 +531,36 @@ function computeNutritionStats(
     loggedDays++;
     let accuracyScore = 1.0;
 
-    if (calorieTarget) {
-      const totalCals = dayEntries!.reduce((sum, e) => sum + (e.calories ?? 0), 0);
-      const diff = Math.abs(totalCals - calorieTarget);
-      if      (diff <= 100) { accuracyScore = 1.0; closeDays++; }
-      else if (diff <= 200) { accuracyScore = 0.8; closeDays++; }
-      else if (diff <= 300) { accuracyScore = 0.6; }
-      else                  { accuracyScore = 0.3; }
+    if (mode === "protein_only") {
+      if (proteinTarget && proteinTarget > 0) {
+        const dayPro = dayEntries!.reduce((sum, e) => sum + parseFloat(e.protein ?? "0"), 0);
+        const rem = proteinTarget - dayPro;
+        if (rem <= 0) {
+          accuracyScore = 1.0; hitDays++;
+        } else if (rem <= 20) {
+          accuracyScore = 0.8;
+        } else {
+          accuracyScore = 0.4;
+        }
+      }
+      // No target → logging_score only (accuracyScore stays 1.0)
+    } else {
+      // Calories mode
+      if (calorieTarget) {
+        const totalCals = dayEntries!.reduce((sum, e) => sum + (e.calories ?? 0), 0);
+        const diff = Math.abs(totalCals - calorieTarget);
+        if      (diff <= 100) { accuracyScore = 1.0; closeDays++; }
+        else if (diff <= 200) { accuracyScore = 0.8; closeDays++; }
+        else if (diff <= 300) { accuracyScore = 0.6; }
+        else                  { accuracyScore = 0.3; }
+      }
     }
 
     totalScore += accuracyScore;
   }
 
   const weekly = totalScore / 7;
-  return { nutritionPercent: Math.round(weekly * 100), loggedDays, closeDays };
+  return { nutritionPercent: Math.round(weekly * 100), loggedDays, closeDays, hitDays };
 }
 
 // ── Main component ────────────────────────────────────────────────
@@ -551,6 +570,8 @@ interface Props {
   isLoading: boolean;
   clientId: number;
   calorieTarget?: number | null;
+  proteinTarget?: number | null;
+  nutritionMode?: "calories" | "protein_only";
 }
 
 // ── Share helpers ─────────────────────────────────────────────────
@@ -784,7 +805,7 @@ async function generateProgressCard(
 
 // ── Main component ────────────────────────────────────────────────
 
-export default function DashboardTab({ analytics, isLoading, clientId, calorieTarget }: Props) {
+export default function DashboardTab({ analytics, isLoading, clientId, calorieTarget, proteinTarget, nutritionMode = "calories" }: Props) {
   const [prefs, setPrefs] = useState<DashboardPrefs>(() => loadPrefs(clientId));
   const [editOpen, setEditOpen] = useState(false);
   const [nutritionLogs, setNutritionLogs] = useState<RawNutritionEntry[]>([]);
@@ -971,7 +992,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
   const lastMonthData = byMonth.find(m => m.month === lastMonthStr);
 
   // Nutrition scoring
-  const nutritionStats = computeNutritionStats(nutritionLogs, calorieTarget ?? null);
+  const nutritionStats = computeNutritionStats(nutritionLogs, calorieTarget ?? null, nutritionMode, proteinTarget ?? null);
   const hasNutritionData = nutritionLogs.length > 0;
 
   // Blended fitness score (70% training / 30% nutrition if opted in)
@@ -1157,9 +1178,14 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
               </div>
 
               <p className="mt-2 text-[11px] text-muted-foreground">{nutritionStats.loggedDays} / 7 days logged</p>
-              {nutritionStats.closeDays > 0 && (calorieTarget ?? 0) > 0 && (
-                <p className="text-[11px] text-muted-foreground">{nutritionStats.closeDays} days close to target</p>
-              )}
+              {nutritionMode === "protein_only"
+                ? nutritionStats.hitDays > 0 && (
+                    <p className="text-[11px] text-muted-foreground">{nutritionStats.hitDays} days hit protein target</p>
+                  )
+                : nutritionStats.closeDays > 0 && (calorieTarget ?? 0) > 0 && (
+                    <p className="text-[11px] text-muted-foreground">{nutritionStats.closeDays} days close to target</p>
+                  )
+              }
             </>
           )}
         </div>

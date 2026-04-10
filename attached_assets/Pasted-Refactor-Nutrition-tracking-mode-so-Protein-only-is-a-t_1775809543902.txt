@@ -1,0 +1,263 @@
+Refactor Nutrition tracking mode so "Protein only" is a true simplified tracking mode, not just a visual emphasis mode.
+
+GOAL
+
+When the user selects "Protein only", the app should behave as a protein-only nutrition tracker.
+
+That means:
+- only protein matters for daily logging, scoring, and dashboard nutrition score
+- calories, carbs, and fats should no longer be shown as active nutrition targets on this screen
+- the UI should simplify accordingly
+- switching into Protein only should require a confirmation step because it fundamentally changes how nutrition tracking works for the user
+
+This is not "protein focus".
+This is "track protein only".
+
+--------------------------------------------------
+1. TRACKING MODES
+--------------------------------------------------
+
+Support two mutually exclusive nutrition modes:
+
+- Calories
+- Protein only
+
+Store as:
+nutritionTrackingMode: 'calories' | 'protein_only'
+
+Calories mode:
+- existing nutrition model
+- calories and macros can be shown
+- dashboard nutrition score uses calorie adherence logic
+
+Protein only mode:
+- protein is the only nutrition target that matters
+- calories, carbs, and fats should not be shown as active targets on the nutrition screen
+- dashboard nutrition score uses protein-only adherence logic
+
+--------------------------------------------------
+2. CONFIRMATION WHEN SWITCHING TO PROTEIN ONLY
+--------------------------------------------------
+
+When the user taps "Protein only", do NOT switch immediately.
+
+Show a confirmation modal.
+
+Title:
+- Switch to Protein only?
+
+Body copy:
+- This will simplify nutrition tracking to protein only.
+- Calories, carbs, and fats will no longer be tracked as active targets on this screen.
+- Your nutrition score will be based on protein logging only.
+
+Buttons:
+- Cancel
+- Switch to Protein only
+
+Behaviour:
+- Cancel = stay in Calories mode
+- Confirm = switch to Protein only
+
+This is a settings confirmation, not a destructive delete flow.
+Do not imply historical data is deleted unless that is actually true.
+
+If historical calorie/macro data is still retained in the database, keep it retained.
+Just stop using it for active scoring and active display while Protein only is enabled.
+
+--------------------------------------------------
+3. NUTRITION SCREEN BEHAVIOUR IN CALORIES MODE
+--------------------------------------------------
+
+In Calories mode, keep the existing nutrition screen structure with any improvements already made.
+
+Show:
+- date selector
+- today status
+- weekly strip
+- remaining / target block with calories and macros
+- add food / meal input
+
+Calories mode can continue to show:
+- calories
+- protein
+- carbs
+- fats
+
+Use the existing calorie-based scoring model.
+
+--------------------------------------------------
+4. NUTRITION SCREEN BEHAVIOUR IN PROTEIN ONLY MODE
+--------------------------------------------------
+
+In Protein only mode, simplify the screen clearly.
+
+A. Top mode toggle
+- show "Calories" and "Protein only"
+- Protein only selected state should be visually obvious
+
+B. Today status
+Replace generic copy like "Nothing logged yet" with protein-specific status.
+
+Examples:
+- "Nothing logged yet"
+- "42g protein logged"
+- "18g to go"
+- "Protein target hit"
+
+C. Weekly strip
+Weekly indicators should be based only on protein logging / protein target adherence.
+
+Suggested logic:
+- green = protein target hit
+- amber = protein logged and within 20g of target
+- grey = not logged or far off
+
+D. Main nutrition summary card
+Do NOT show calories, carbs, or fats as active targets.
+
+Instead, replace the multi-metric remaining card with a protein-only card.
+
+Show only:
+- Remaining
+- {remainingProtein} g
+- Protein
+
+Optional supporting text:
+- "{loggedProtein}g logged today"
+or
+- "Nothing logged yet"
+
+Do not show:
+- calories remaining
+- carbs remaining
+- fats remaining
+
+E. Add food / meal input
+This can stay, but the parsed result should only matter for protein in this mode.
+
+If the user logs a meal while in Protein only mode:
+- still parse full nutrition if available internally
+- but only surface protein to the user on this screen
+- only protein should contribute to score
+
+--------------------------------------------------
+5. PROTEIN-ONLY SCORING LOGIC
+--------------------------------------------------
+
+When nutritionTrackingMode = 'protein_only', compute nutrition score from protein only.
+
+For each day in the last 7 days:
+
+logging_score:
+- 1 if protein intake was logged that day
+- 0 if not
+
+accuracy_score:
+- if protein >= target → 1.0
+- if protein is within 20g below target → 0.8
+- if protein is more than 20g below target → 0.4
+
+Rules:
+- do not penalise going over protein target
+- if no protein target exists, fall back to logging_score only
+- if not logged, accuracy_score = 0
+
+daily_score = logging_score * accuracy_score
+weekly_nutrition_score = average of daily_score over the last 7 days
+nutritionPercent = Math.round(weekly_nutrition_score * 100)
+
+Also calculate:
+- loggedDays = number of days with protein logged
+- hitDays = number of days protein target was met
+
+--------------------------------------------------
+6. DASHBOARD INTEGRATION
+--------------------------------------------------
+
+The dashboard nutrition card should keep the same placement and structure, but adapt to mode.
+
+If mode = calories:
+- primary stat: "{nutritionPercent}% on track"
+- subtext: "{loggedDays} / 7 days logged"
+- optional secondary line: "{closeDays} days close to target"
+
+If mode = protein_only:
+- primary stat: "{nutritionPercent}% on track"
+- subtext: "{loggedDays} / 7 days logged"
+- optional secondary line: "{hitDays} days hit protein target"
+
+Keep the card label as:
+- Nutrition
+
+Do not create a separate Protein dashboard card.
+
+--------------------------------------------------
+7. FITNESS SCORE INTEGRATION
+--------------------------------------------------
+
+If nutrition is included in Fitness Score, then:
+
+- in Calories mode, use calorie-based nutrition score
+- in Protein only mode, use protein-only nutrition score
+
+No change needed to the overall weighting structure, only the nutrition input changes.
+
+--------------------------------------------------
+8. CUSTOMISE DASHBOARD BEHAVIOUR
+--------------------------------------------------
+
+No extra dashboard controls needed for mode here.
+
+The existing Customise Dashboard screen should still control:
+- Show Nutrition on dashboard
+- Include Nutrition in fitness score
+
+Tracking mode itself should be controlled from the Nutrition product/settings area, not from dashboard customisation.
+
+--------------------------------------------------
+9. IMPORTANT UX RULES
+--------------------------------------------------
+
+- Protein only mode should feel intentionally simplified
+- Do not leave dead calories/macros UI on screen when Protein only is active
+- Do not show irrelevant targets once this mode is enabled
+- Do not redesign the entire page
+- Keep the same visual language, just simplify the content
+- Make the change feel like a cleaner mode, not a broken half-hidden state
+
+--------------------------------------------------
+10. DATA / STATE RULES
+--------------------------------------------------
+
+Add or confirm these fields:
+- nutritionTrackingMode: 'calories' | 'protein_only'
+- showNutritionCard: boolean
+- includeNutritionInScore: boolean
+
+Historical nutrition entries should not be deleted when switching modes unless explicit delete functionality exists elsewhere.
+This mode switch changes active display and active scoring only.
+
+--------------------------------------------------
+11. ACCEPTANCE CRITERIA
+--------------------------------------------------
+
+1. "Protein only" requires confirmation before enabling.
+2. Confirming switches the app into a true protein-only nutrition mode.
+3. In Protein only mode, calories/carbs/fats are no longer shown as active targets on the nutrition screen.
+4. Protein-only mode uses protein-only nutrition scoring.
+5. Dashboard nutrition card adapts its supporting text based on mode.
+6. Fitness Score uses the correct nutrition score for the active mode.
+7. Existing historical nutrition data is not deleted by the mode switch.
+8. The screen feels simpler, not just partially hidden.
+
+--------------------------------------------------
+12. AFTER IMPLEMENTATION
+--------------------------------------------------
+
+After making the change, show me:
+- the confirmation modal code
+- the updated nutrition screen in both modes
+- the protein-only scoring function
+- where the mode switch is stored
+- how the dashboard card text changes by mode
