@@ -1107,13 +1107,21 @@ CRITICAL EXPANSION RULE:
 - "5 × 3 min" → expand into 5 individual interval rows of 3 min each
 - NEVER use a "reps" count — always expand fully into individual rows
 
+CRITICAL DISTANCE vs DURATION RULE:
+- If the user specifies a DISTANCE (e.g. "10km", "5 miles", "800m"), you MUST set the "distance" field on the row (e.g. "10 km"). Do NOT replace it with a duration.
+- If the user specifies a DURATION (e.g. "45 min run"), set the "duration" field on the row instead.
+- If both are given (e.g. "10km in 50 min"), set BOTH fields. Distance must always reflect what the user said.
+- Example: "10km easy" → row: { "rowType": "run", "distance": "10 km", "duration": "50 min", "effort": "steady" }
+- Example: "45 min jog" → row: { "rowType": "run", "duration": "45 min", "effort": "easy" }
+- Example: "5km tempo" → row: { "rowType": "run", "distance": "5 km", "effort": "tempo" }
+
 Return ONLY valid JSON, no markdown fences.
 Never use "easy run" — use "steady", "recovery", or "easy jog" instead.
 
 Row types:
 - "interval": a work rep — has repNumber, distance (e.g. "1 km"), duration (e.g. "3 min"), pace (e.g. "4:30/km"), effort (e.g. "threshold")
 - "rest": recovery between reps — has description (e.g. "90 sec jog"), duration
-- "run": a continuous non-interval block — has description, distance, duration, effort, pace
+- "run": a continuous non-interval block — has description, distance (set this if user mentioned km/miles/metres), duration, effort, pace
 
 Block types: "warmup", "main", "cooldown", "recovery", "strides", "hills"
 

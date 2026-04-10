@@ -2075,7 +2075,7 @@ export default function ClientSession() {
                           {/* Actual pace */}
                           <Input
                             type="text"
-                            inputMode="numeric"
+                            inputMode="text"
                             placeholder="5:30"
                             value={interval.pace}
                             onChange={e => {
