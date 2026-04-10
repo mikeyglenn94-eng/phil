@@ -2415,6 +2415,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           analytics={analytics}
           isLoading={analyticsLoading}
           clientId={clientId}
+          calorieTarget={client?.dailyCalorieGoal ?? null}
         />
       )}
 

@@ -1,0 +1,178 @@
+Add Nutrition as a new optional dashboard card and add controls for it in the existing Customise Dashboard screen.
+
+GOAL
+
+Nutrition is not currently on the dashboard at all.
+Add it as a new card that focuses on:
+- consistency of logging
+- closeness to calorie target
+
+This should feel like a behaviour/adherence metric, not a perfection metric.
+
+Users must also be able to:
+- show or hide the Nutrition card from the dashboard
+- decide whether Nutrition affects Fitness Score
+
+If Nutrition is hidden, it must not affect Fitness Score.
+
+--------------------------------------------------
+1. ADD NEW NUTRITION DASHBOARD CARD
+--------------------------------------------------
+
+Add a new card to the main dashboard called:
+
+Nutrition
+
+Place it near Consistency, since both are adherence-style cards.
+
+The card should visually match the existing dashboard cards.
+
+Content for the Nutrition card:
+
+Title:
+- Nutrition
+
+Primary stat:
+- "{nutritionPercent}% on track"
+
+Progress bar:
+- based on weekly nutrition adherence score
+
+Subtext:
+- "{loggedDays} / 7 days logged"
+
+Optional secondary line:
+- "{closeDays} days close to target"
+
+Empty state if no nutrition data exists:
+- "Start logging meals to track consistency"
+
+Do not show raw calorie numbers on the dashboard card.
+Keep it about behaviour and adherence.
+
+--------------------------------------------------
+2. NUTRITION SCORING LOGIC
+--------------------------------------------------
+
+Create a weekly nutrition adherence score based on the last 7 days.
+
+For each day:
+
+logging_score:
+- 1 if the user logged nutrition that day
+- 0 if they did not
+
+accuracy_score:
+- if calories are within ±100 of target → 1.0
+- if within ±200 → 0.8
+- if within ±300 → 0.6
+- if more than ±300 away → 0.3
+
+Rules:
+- if the user did not log that day, accuracy_score = 0
+- if no calorie target exists, fall back to logging_score only
+- if only partial nutrition logging exists, still count as logged for MVP
+
+daily_score = logging_score * accuracy_score
+
+weekly_nutrition_score = average of daily_score over the last 7 days
+nutritionPercent = Math.round(weekly_nutrition_score * 100)
+
+Also calculate:
+- loggedDays = number of days logged in last 7
+- closeDays = number of days within ±200 calories of target
+
+If there are fewer than 7 days of available data, use available days for the calculation.
+
+--------------------------------------------------
+3. ADD CONTROLS TO CUSTOMISE DASHBOARD SCREEN
+--------------------------------------------------
+
+In the existing Customise Dashboard screen, add a new Nutrition section with two toggles:
+
+Nutrition
+- Show on dashboard
+- Include in fitness score
+
+These should behave like dashboard-level controls, not card-level controls.
+
+--------------------------------------------------
+4. TOGGLE LOGIC
+--------------------------------------------------
+
+Add these user preference fields:
+
+- showNutritionCard: boolean
+- includeNutritionInScore: boolean
+
+Rules:
+- if showNutritionCard = false:
+  - do not render the Nutrition card on the dashboard
+  - automatically set includeNutritionInScore = false
+  - disable or grey out the "Include in fitness score" toggle
+
+- if showNutritionCard = true:
+  - render the Nutrition card
+  - allow the user to choose whether it affects Fitness Score
+
+Do not allow this state:
+- hidden from dashboard
+- still affecting Fitness Score
+
+--------------------------------------------------
+5. FITNESS SCORE LOGIC
+--------------------------------------------------
+
+Nutrition is currently not involved in Fitness Score at all.
+Add optional support for it.
+
+If includeNutritionInScore = true:
+- update Fitness Score calculation to include nutrition_score
+- use:
+  - training_score = 70%
+  - nutrition_score = 30%
+
+If includeNutritionInScore = false:
+- Fitness Score should continue to work without Nutrition
+- no penalty for opting out
+
+Keep this implementation simple and readable.
+
+--------------------------------------------------
+6. UI BEHAVIOUR
+--------------------------------------------------
+
+Dashboard:
+- only show Nutrition card if enabled
+- keep layout clean
+- match spacing and style of existing cards
+
+Customise Dashboard:
+- add Nutrition controls in the same style as existing rows
+- do not redesign the screen
+- just extend the current pattern
+
+--------------------------------------------------
+7. ACCEPTANCE CRITERIA
+--------------------------------------------------
+
+1. Nutrition appears as a new optional dashboard card.
+2. The card shows:
+   - % on track
+   - days logged
+   - optionally days close to target
+3. Nutrition can be shown or hidden from Customise Dashboard.
+4. Nutrition can optionally affect Fitness Score.
+5. If hidden, it cannot affect Fitness Score.
+6. Dashboard remains visually consistent with existing cards.
+7. No regressions to current dashboard cards or customise behaviour.
+
+--------------------------------------------------
+8. AFTER IMPLEMENTATION
+--------------------------------------------------
+
+After making the change, show me:
+- the new Nutrition card component
+- any score calculation changes
+- any new preference fields or schema updates
+- where the Customise Dashboard toggles were added

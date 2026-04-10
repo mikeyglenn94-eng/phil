@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   BarChart3, Trophy, CheckSquare, TrendingUp, Footprints,
   Timer, Dumbbell, SlidersHorizontal, ChevronDown, Sparkles,
-  Share2, Download, Check, Loader2,
+  Share2, Download, Check, Loader2, UtensilsCrossed,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -53,27 +53,31 @@ export interface AnalyticsData {
 // ── Preferences ───────────────────────────────────────────────────
 
 interface DashboardPrefs {
-  showFitnessExplanation: boolean;
-  showWeeklyWin:          boolean;
-  showConsistency:        boolean;
-  showEstimated5K:        boolean;
-  showSquatE1RM:          boolean;
-  showBenchE1RM:          boolean;
-  showDeadliftE1RM:       boolean;
-  showDistanceRun:        boolean;
-  showVolumeLifted:       boolean;
+  showFitnessExplanation:   boolean;
+  showWeeklyWin:            boolean;
+  showConsistency:          boolean;
+  showNutritionCard:        boolean;
+  includeNutritionInScore:  boolean;
+  showEstimated5K:          boolean;
+  showSquatE1RM:            boolean;
+  showBenchE1RM:            boolean;
+  showDeadliftE1RM:         boolean;
+  showDistanceRun:          boolean;
+  showVolumeLifted:         boolean;
 }
 
 const DEFAULT_PREFS: DashboardPrefs = {
-  showFitnessExplanation: true,
-  showWeeklyWin:          true,
-  showConsistency:        true,
-  showEstimated5K:        true,
-  showSquatE1RM:          true,
-  showBenchE1RM:          true,
-  showDeadliftE1RM:       true,
-  showDistanceRun:        true,
-  showVolumeLifted:       true,
+  showFitnessExplanation:   true,
+  showWeeklyWin:            true,
+  showConsistency:          true,
+  showNutritionCard:        false,
+  includeNutritionInScore:  false,
+  showEstimated5K:          true,
+  showSquatE1RM:            true,
+  showBenchE1RM:            true,
+  showDeadliftE1RM:         true,
+  showDistanceRun:          true,
+  showVolumeLifted:         true,
 };
 
 function loadPrefs(clientId: number): DashboardPrefs {
@@ -480,14 +484,64 @@ function StatCard({
 // ── Pref row ─────────────────────────────────────────────────────
 
 function PrefRow({
-  label, checked, onToggle,
-}: { label: string; checked: boolean; onToggle: () => void }) {
+  label, checked, onToggle, disabled = false,
+}: { label: string; checked: boolean; onToggle: () => void; disabled?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-2.5 border-b last:border-0">
+    <div className={`flex items-center justify-between py-2.5 border-b last:border-0 ${disabled ? "opacity-40 pointer-events-none" : ""}`}>
       <span className="text-sm">{label}</span>
-      <Switch checked={checked} onCheckedChange={onToggle} />
+      <Switch checked={checked} onCheckedChange={onToggle} disabled={disabled} />
     </div>
   );
+}
+
+// ── Nutrition scoring ─────────────────────────────────────────────
+
+interface RawNutritionEntry { date: string; calories?: number | null }
+
+function computeNutritionStats(
+  logs: RawNutritionEntry[],
+  calorieTarget: number | null,
+): { nutritionPercent: number; loggedDays: number; closeDays: number } {
+  const today = new Date();
+  const days: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+
+  const byDate = new Map<string, RawNutritionEntry[]>();
+  for (const e of logs) {
+    if (!byDate.has(e.date)) byDate.set(e.date, []);
+    byDate.get(e.date)!.push(e);
+  }
+
+  let totalScore = 0;
+  let loggedDays = 0;
+  let closeDays = 0;
+
+  for (const day of days) {
+    const dayEntries = byDate.get(day);
+    const logged = dayEntries && dayEntries.length > 0;
+    if (!logged) continue;
+
+    loggedDays++;
+    let accuracyScore = 1.0;
+
+    if (calorieTarget) {
+      const totalCals = dayEntries!.reduce((sum, e) => sum + (e.calories ?? 0), 0);
+      const diff = Math.abs(totalCals - calorieTarget);
+      if      (diff <= 100) { accuracyScore = 1.0; closeDays++; }
+      else if (diff <= 200) { accuracyScore = 0.8; closeDays++; }
+      else if (diff <= 300) { accuracyScore = 0.6; }
+      else                  { accuracyScore = 0.3; }
+    }
+
+    totalScore += accuracyScore;
+  }
+
+  const weekly = totalScore / 7;
+  return { nutritionPercent: Math.round(weekly * 100), loggedDays, closeDays };
 }
 
 // ── Main component ────────────────────────────────────────────────
@@ -496,6 +550,7 @@ interface Props {
   analytics: AnalyticsData | undefined;
   isLoading: boolean;
   clientId: number;
+  calorieTarget?: number | null;
 }
 
 // ── Share helpers ─────────────────────────────────────────────────
@@ -729,9 +784,10 @@ async function generateProgressCard(
 
 // ── Main component ────────────────────────────────────────────────
 
-export default function DashboardTab({ analytics, isLoading, clientId }: Props) {
+export default function DashboardTab({ analytics, isLoading, clientId, calorieTarget }: Props) {
   const [prefs, setPrefs] = useState<DashboardPrefs>(() => loadPrefs(clientId));
   const [editOpen, setEditOpen] = useState(false);
+  const [nutritionLogs, setNutritionLogs] = useState<RawNutritionEntry[]>([]);
   const [drilldownOpen, setDrilldownOpen] = useState(false);
   const [coachingOpen, setCoachingOpen] = useState(false);
 
@@ -745,6 +801,17 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
   const [shareSaved, setShareSaved] = useState(false);
 
   useEffect(() => { savePrefs(clientId, prefs); }, [prefs, clientId]);
+
+  // Fetch nutrition logs for last 7 days when card is enabled
+  useEffect(() => {
+    if (!prefs.showNutritionCard) return;
+    let cancelled = false;
+    fetch(`/api/clients/${clientId}/nutrition`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: RawNutritionEntry[]) => { if (!cancelled) setNutritionLogs(data || []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [clientId, prefs.showNutritionCard]);
 
   // Live share preview — regenerate on stat toggle
   useEffect(() => {
@@ -785,7 +852,14 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
     return () => { cancelled = true; clearTimeout(timer); };
   }, [showShare, shareStats, analytics]);
 
-  const toggle = (k: keyof DashboardPrefs) => setPrefs(p => ({ ...p, [k]: !p[k] }));
+  const toggle = (k: keyof DashboardPrefs) => setPrefs(p => {
+    const next = { ...p, [k]: !p[k] };
+    // Hiding nutrition card must also disable it from the score
+    if (k === "showNutritionCard" && !next.showNutritionCard) {
+      next.includeNutritionInScore = false;
+    }
+    return next;
+  });
 
   // ── Share handlers ─────────────────────────────────────────────
   function openShareModal() {
@@ -896,6 +970,15 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
   const thisMonthData = byMonth.find(m => m.month === thisMonthStr);
   const lastMonthData = byMonth.find(m => m.month === lastMonthStr);
 
+  // Nutrition scoring
+  const nutritionStats = computeNutritionStats(nutritionLogs, calorieTarget ?? null);
+  const hasNutritionData = nutritionLogs.length > 0;
+
+  // Blended fitness score (70% training / 30% nutrition if opted in)
+  const displayedFitnessScore = (prefs.includeNutritionInScore && hasNutritionData)
+    ? Math.round(fitnessScore.current * 0.70 + nutritionStats.nutritionPercent * 0.30)
+    : fitnessScore.current;
+
   // Score change display
   const scoreChange = fitnessScore.change;
   const scorePositive = scoreChange !== null && scoreChange > 0;
@@ -924,7 +1007,7 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
         </div>
 
         <div className="flex items-end gap-3 mt-1">
-          <span className="text-5xl font-black tabular-nums leading-none">{fitnessScore.current}</span>
+          <span className="text-5xl font-black tabular-nums leading-none">{displayedFitnessScore}</span>
           <div className="mb-1 space-y-0.5">
             {scoreChange !== null && (
               <div className={`text-sm font-semibold ${scorePositive ? "text-emerald-600" : scoreNeutral ? "text-muted-foreground" : "text-red-500"}`}>
@@ -1041,6 +1124,43 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
             <p className="mt-1 text-[11px] font-semibold text-emerald-600">
               {adherence.streak}-week streak
             </p>
+          )}
+        </div>
+      )}
+
+      {/* ── 3b. Nutrition card ───────────────────────────────── */}
+      {prefs.showNutritionCard && (
+        <div className="bg-card border rounded-2xl px-5 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Nutrition</span>
+            <UtensilsCrossed className="w-4 h-4 text-muted-foreground/40" />
+          </div>
+
+          {!hasNutritionData ? (
+            <p className="text-sm text-muted-foreground">Start logging meals to track consistency</p>
+          ) : (
+            <>
+              <div className="flex items-end gap-2">
+                <span className="text-3xl font-black tabular-nums leading-none">{nutritionStats.nutritionPercent}%</span>
+                <span className="mb-0.5 text-sm text-muted-foreground">on track</span>
+              </div>
+
+              <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    nutritionStats.nutritionPercent >= 80 ? "bg-emerald-500"
+                    : nutritionStats.nutritionPercent >= 60 ? "bg-amber-400"
+                    : "bg-red-400"
+                  }`}
+                  style={{ width: `${nutritionStats.nutritionPercent}%` }}
+                />
+              </div>
+
+              <p className="mt-2 text-[11px] text-muted-foreground">{nutritionStats.loggedDays} / 7 days logged</p>
+              {nutritionStats.closeDays > 0 && (calorieTarget ?? 0) > 0 && (
+                <p className="text-[11px] text-muted-foreground">{nutritionStats.closeDays} days close to target</p>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1242,6 +1362,10 @@ export default function DashboardTab({ analytics, isLoading, clientId }: Props) 
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Cards</p>
             <PrefRow label="Weekly Win"     checked={prefs.showWeeklyWin}    onToggle={() => toggle("showWeeklyWin")}    />
             <PrefRow label="Consistency"    checked={prefs.showConsistency}  onToggle={() => toggle("showConsistency")}  />
+
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Nutrition</p>
+            <PrefRow label="Show on dashboard"       checked={prefs.showNutritionCard}       onToggle={() => toggle("showNutritionCard")}       />
+            <PrefRow label="Include in fitness score" checked={prefs.includeNutritionInScore} onToggle={() => toggle("includeNutritionInScore")} disabled={!prefs.showNutritionCard} />
 
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Performance</p>
             <PrefRow label="Estimated 5K"   checked={prefs.showEstimated5K}  onToggle={() => toggle("showEstimated5K")}  />
