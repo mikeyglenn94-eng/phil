@@ -1214,6 +1214,10 @@ export default function ClientSession() {
       });
       await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
       queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      // Also refresh dashboard analytics so it reflects the newly logged data
+      if (programme?.clientId) {
+        queryClient.invalidateQueries({ queryKey: ["client-analytics", programme.clientId] });
+      }
       setSaved(true);
       if (!silent) toast({ title: "Session saved!" });
     } catch {

@@ -121,7 +121,12 @@ function isLogged(s: any): boolean {
   );
   const hasRun = ((s.runLog ?? []) as any[]).length > 0;
   const hasComment = !!(s.clientComment);
-  return hasStrength || hasRun || hasComment;
+  // WOD sessions log results into wodResult (rounds, reps, time, score, completed)
+  const hasWodResult = s.wodResult != null &&
+    Object.values(s.wodResult as Record<string, unknown>).some(
+      v => v !== null && v !== undefined && v !== ""
+    );
+  return hasStrength || hasRun || hasComment || hasWodResult;
 }
 
 function computeStats(session: any): SessionStat {
