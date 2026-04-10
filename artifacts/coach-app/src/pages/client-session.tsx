@@ -434,6 +434,31 @@ export default function ClientSession() {
   const [saved, setSaved] = useState(false);
   const autosaveTimerRef_cs = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSaveRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
+  const savedRef = useRef(true);
+  // Keep savedRef in sync with saved state (used by beforeunload and unmount handlers)
+  useEffect(() => { savedRef.current = saved; }, [saved]);
+
+  // Flush pending autosave immediately when the component unmounts (e.g. user navigates away or logs out)
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef_cs.current) {
+        clearTimeout(autosaveTimerRef_cs.current);
+        autosaveTimerRef_cs.current = null;
+        handleSaveRef.current?.(true);
+      }
+    };
+  }, []);
+
+  // Warn the browser if the user tries to close the tab with unsaved changes
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!savedRef.current) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
 
   // Swap UI state
   const [swappingExId, setSwappingExId] = useState<string | null>(null);
@@ -1116,7 +1141,7 @@ export default function ClientSession() {
   // Keep ref always pointing to latest handleSave (so debounced timers have fresh state)
   const scheduleClientAutosave = () => {
     if (autosaveTimerRef_cs.current) clearTimeout(autosaveTimerRef_cs.current);
-    autosaveTimerRef_cs.current = setTimeout(() => { handleSaveRef.current?.(true); }, 1500);
+    autosaveTimerRef_cs.current = setTimeout(() => { handleSaveRef.current?.(true); }, 800);
   };
 
   const addSetToExercise = (exId: string, currentSets: number) => {
