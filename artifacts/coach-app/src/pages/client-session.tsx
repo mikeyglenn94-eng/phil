@@ -1133,14 +1133,21 @@ export default function ClientSession() {
           if (isRunSession) {
             const runLog = runIntervals
               .filter(r => r.distance !== "" || r.pace !== "" || r.label !== "")
-              .map(r => ({
-                label: r.label || null,
-                distance: r.distance !== "" ? r.distance : null,
-                targetPace: r.targetPace || null,
-                pace: r.pace || null,
-                notes: r.notes || null,
-                equivalentRoadPace: calcEquivalentPace(r.pace, runSurface, trailDifficulty),
-              }));
+              .map(r => {
+                // Parse distance string to number (km). "9.57" → 9.57, "10 km" → 10, "" → null.
+                const rawDist = r.distance.trim();
+                const distNum = rawDist !== ""
+                  ? (() => { const n = parseFloat(rawDist); return isNaN(n) ? null : n; })()
+                  : null;
+                return {
+                  label: r.label || null,
+                  distance: distNum,
+                  targetPace: r.targetPace || null,
+                  pace: r.pace || null,
+                  notes: r.notes || null,
+                  equivalentRoadPace: calcEquivalentPace(r.pace, runSurface, trailDifficulty),
+                };
+              });
             return {
               ...base,
               runLog: runLog.length > 0 ? runLog : null,
