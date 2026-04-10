@@ -124,6 +124,67 @@ const BW_TERMS = [
   "wall walk",
   "dip",
 ];
+// ── Previous performance display formatter ─────────────────────────────────
+function formatPrevSets(sets: SetLog[], isBw: boolean, unit = "kg"): string {
+  const valid = sets.filter(s => s.reps !== null || s.weight !== null);
+  if (valid.length === 0) return "";
+
+  // ── Bodyweight path ───────────────────────────────────────────────────────
+  if (isBw) {
+    const reps = valid.map(s => s.reps).filter((r): r is number => r !== null);
+    if (reps.length === 0) return "";
+    const allSameReps = reps.every(r => r === reps[0]);
+    if (allSameReps) return `${reps.length} × ${reps[0]}`;
+    return reps.join(", ");
+  }
+
+  // ── External load path ────────────────────────────────────────────────────
+  const weights = valid.map(s => s.weight);
+  const reps    = valid.map(s => s.reps);
+
+  const allHaveWeight = weights.every(w => w !== null);
+  const allHaveReps   = reps.every(r => r !== null);
+
+  // All same weight AND same reps → "3 × 10kg × 4"
+  if (allHaveWeight && allHaveReps) {
+    const uniqueWeights = new Set(weights);
+    const uniqueReps    = new Set(reps);
+    if (uniqueWeights.size === 1 && uniqueReps.size === 1) {
+      return `${valid.length} × ${weights[0]}${unit} × ${reps[0]}`;
+    }
+    // Same weight, varying reps → "10kg × 8, 8, 6"
+    if (uniqueWeights.size === 1) {
+      return `${weights[0]}${unit} × ${(reps as number[]).join(", ")}`;
+    }
+    // Varying load (with or without varying reps) → "10kg × 8, 12kg × 6, 14kg × 4"
+    return valid.map(s =>
+      `${s.weight}${unit} × ${s.reps}`
+    ).join(", ");
+  }
+
+  // Weight only (no reps recorded)
+  if (allHaveWeight && !allHaveReps) {
+    const uniqueWeights = new Set(weights);
+    if (uniqueWeights.size === 1) return `${valid.length} × ${weights[0]}${unit}`;
+    return weights.map(w => `${w}${unit}`).join(", ");
+  }
+
+  // Reps only (no weight recorded)
+  if (!allHaveWeight && allHaveReps) {
+    const uniqueReps = new Set(reps);
+    if (uniqueReps.size === 1) return `${valid.length} × ${reps[0]}`;
+    return (reps as number[]).join(", ");
+  }
+
+  // Mixed presence — show what we have per set
+  return valid.map(s => {
+    if (s.weight !== null && s.reps !== null) return `${s.weight}${unit} × ${s.reps}`;
+    if (s.weight !== null) return `${s.weight}${unit}`;
+    if (s.reps !== null) return `×${s.reps}`;
+    return null;
+  }).filter(Boolean).join(", ");
+}
+
 function detectLoadType(name: string): "bodyweight" | "external_load" {
   const lower = (name || "").toLowerCase();
   return BW_TERMS.some(t => lower.includes(t)) ? "bodyweight" : "external_load";
@@ -2203,16 +2264,7 @@ export default function ClientSession() {
                 const matchResult = findBestMatch(displayName, prevLogsCandidates);
                 const prev = matchResult ? prevLogsMap[matchResult.normalizedKey] : null;
                 if (!prev) return null;
-                const setsText = prev.sets
-                  .map(s => {
-                    if (isBw) return s.reps !== null ? `BW×${s.reps}` : null;
-                    if (s.weight !== null && s.reps !== null) return `${s.weight}×${s.reps}`;
-                    if (s.weight !== null) return `${s.weight}kg`;
-                    if (s.reps !== null) return `×${s.reps}`;
-                    return null;
-                  })
-                  .filter(Boolean)
-                  .join(" · ");
+                const setsText = formatPrevSets(prev.sets, isBw);
                 if (!setsText) return null;
                 const showMatchedFrom =
                   matchResult.tier > 1 &&
