@@ -1,0 +1,227 @@
+Improve exercise history lookup in session view so that each exercise shows the most relevant previous performance, even when naming varies.
+
+GOAL
+
+When a user is viewing an exercise inside a session, show what they did the last time they performed that exercise.
+
+This should not rely only on exact text matching.
+
+Examples:
+- "DB Shoulder Press" should match "Dumbbell Shoulder Press"
+- "Seated DB Shoulder Press" should still be able to show previous performance from "DB Shoulder Press"
+- minor wording differences, abbreviations, and prefixes should not break history lookup
+
+The user should see useful previous performance context without having to name exercises perfectly every time.
+
+--------------------------------------------------
+1. ADD "LAST TIME" PANEL IN SESSION VIEW
+--------------------------------------------------
+
+For each exercise shown in session view, add a small previous performance block near the exercise title or just above the logging inputs.
+
+Label:
+- Last time
+
+Show:
+- date of previous matched session
+- set x rep x load summary, or the logged sets in a compact format
+
+Examples:
+- Last time · 3 Apr
+  3 x 8 @ 22.5kg
+or
+- Last time · 3 Apr
+  10, 8, 8 @ 20kg
+
+If multiple loads were used, show the actual logged set breakdown as clearly as possible.
+
+If no previous match exists:
+- show nothing
+or
+- show subtle empty state:
+  "No previous history"
+
+Do not make this visually noisy.
+
+--------------------------------------------------
+2. MATCHING LOGIC: DO NOT USE EXACT STRING MATCH ONLY
+--------------------------------------------------
+
+Implement a normalized matching layer for exercise names.
+
+Create a function that normalizes exercise names before comparing them.
+
+Normalization should:
+- lowercase everything
+- trim whitespace
+- remove punctuation
+- collapse multiple spaces
+- expand or standardize common abbreviations
+- remove low-value modifiers for broader matching
+
+Examples of abbreviation normalization:
+- db -> dumbbell
+- bb -> barbell
+- ohp -> overhead press
+- rdls -> romanian deadlift
+- rdl -> romanian deadlift
+
+Examples of wording normalization:
+- shoulder press == overhead press only if that mapping already makes sense in your exercise library
+- seated db shoulder press should still contain the core movement identity of dumbbell shoulder press
+
+Core idea:
+Try to identify the base movement, not just the exact entered label.
+
+--------------------------------------------------
+3. MATCHING STRATEGY
+--------------------------------------------------
+
+Use a tiered matching strategy.
+
+Tier 1: exact normalized match
+Example:
+- "db shoulder press" == "dumbbell shoulder press"
+
+Tier 2: base movement / alias match
+Example:
+- "seated db shoulder press" can match "db shoulder press"
+- "incline db bench" can match "dumbbell incline bench press" if normalization supports it
+
+Tier 3: fuzzy similarity fallback
+If no exact or alias/base match is found, use a conservative similarity match on normalized names.
+
+Important:
+- prefer precision over aggressive matching
+- do not match obviously different movements
+- "shoulder press" should not match "bench press"
+- "dumbbell row" should not match "barbell row" unless you explicitly decide cross-implement history is acceptable
+
+--------------------------------------------------
+4. PREFERRED MATCH SELECTION
+--------------------------------------------------
+
+When multiple historical matches exist:
+
+1. Prefer the most recent relevant match
+2. Prefer exact normalized match over broader inferred match
+3. If only broader inferred matches exist, show the most recent one
+4. If match confidence is low, do not show misleading history
+
+This should feel useful, not random.
+
+--------------------------------------------------
+5. SUGGESTED IMPLEMENTATION MODEL
+--------------------------------------------------
+
+For each exercise, generate:
+
+- rawName
+- normalizedName
+- baseMovementKey
+- optional aliases
+
+Example:
+rawName:
+- "Seated DB Shoulder Press"
+
+normalizedName:
+- "seated dumbbell shoulder press"
+
+baseMovementKey:
+- "dumbbell shoulder press"
+
+Use baseMovementKey for broader history matching.
+
+If you already have an exercise library or canonical exercise definitions, use that as the source of truth.
+If not, create a lightweight normalization utility and inferred base movement key system.
+
+--------------------------------------------------
+6. UI COPY
+--------------------------------------------------
+
+Use compact copy like:
+
+- Last time · 3 Apr
+- Previous · 3 Apr
+
+If the match came from a broader inferred name rather than exact same label, optionally show:
+- Matched from DB Shoulder Press
+
+Only show this if helpful and not cluttered.
+
+Example:
+Last time · 3 Apr
+Matched from DB Shoulder Press
+3 x 8 @ 22.5kg
+
+This is especially useful for cases like:
+- current = Seated DB Shoulder Press
+- previous = DB Shoulder Press
+
+--------------------------------------------------
+7. DATA TO DISPLAY
+--------------------------------------------------
+
+In the previous performance block, show whichever is available and most useful:
+
+Priority:
+1. sets x reps x load summary
+2. individual set breakdown
+3. top set only if that is all that exists
+
+If bodyweight movement:
+- show reps from previous session
+Example:
+Last time · 3 Apr
+3 x 12
+
+If timed movement:
+- show time / distance as relevant
+
+Make this reusable across exercise types.
+
+--------------------------------------------------
+8. PERFORMANCE / QUERY LOGIC
+--------------------------------------------------
+
+Do not scan the entire history in an expensive way on every render if avoidable.
+
+Recommended approach:
+- precompute normalized exercise keys when workouts are saved
+- or memoize lookup results per exercise name
+- or query recent exercise history using normalized/base keys
+
+Keep this lightweight enough for session view.
+
+--------------------------------------------------
+9. EDGE CASES
+--------------------------------------------------
+
+- If exact same exercise exists multiple times in a session, still show last historical session before the current one
+- Exclude the current in-progress session from history lookup
+- If there is no confident match, show no history rather than bad history
+- If both exact and inferred matches exist, exact wins
+- If the user renamed an exercise slightly, history should still work
+
+--------------------------------------------------
+10. ACCEPTANCE CRITERIA
+--------------------------------------------------
+
+1. Session view shows previous performance for an exercise.
+2. Exact name match is not required.
+3. "DB Shoulder Press" matches "Dumbbell Shoulder Press".
+4. "Seated DB Shoulder Press" can still surface useful previous data from "DB Shoulder Press".
+5. Matching is conservative enough to avoid obviously wrong movement history.
+6. Previous performance excludes the current in-progress workout.
+7. UI remains compact and useful.
+
+--------------------------------------------------
+11. AFTER IMPLEMENTATION
+--------------------------------------------------
+
+After making the change, show me:
+- the normalization function
+- the matching logic / confidence tiers
+- where previous performance is fetched in session view
+- the UI component for the "Last time" block

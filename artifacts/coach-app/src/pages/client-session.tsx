@@ -37,6 +37,10 @@ import type { Exercise, Session } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
+import {
+  normalizeExerciseName,
+  findBestMatch,
+} from "@/lib/exercise-matching";
 
 interface SetLog { weight: number | null; reps: number | null; }
 type LogState = Record<string, SetLog[]>;
@@ -270,22 +274,23 @@ export default function ClientSession() {
     if (!candidate) return null;
     const exerciseComments: Record<string, string> = {};
     for (const ex of (candidate.exercises || [])) {
-      if (ex.clientComment) exerciseComments[ex.name.toLowerCase().trim()] = ex.clientComment;
+      if (ex.clientComment) exerciseComments[normalizeExerciseName(ex.name)] = ex.clientComment;
     }
     return { date: candidate.date, comment: (candidate as any).clientComment ?? null, exerciseComments };
   }, [programme, sessionId, session]);
 
-  // Previous logged results for each exercise name — used to show "last time" reminder
-  const prevLogs = useMemo<Record<string, { date: string; sets: SetLog[] }>>(() => {
+  // Previous logged results indexed by normalizedName — supports fuzzy matching
+  const prevLogsMap = useMemo<Record<string, { date: string; sets: SetLog[]; originalName: string }>>(() => {
     if (!programme?.sessions || !session) return {};
-    const map: Record<string, { date: string; sets: SetLog[] }> = {};
+    const map: Record<string, { date: string; sets: SetLog[]; originalName: string }> = {};
     const pastSessions = (programme.sessions as Session[])
       .filter(s => s.id !== sessionId && s.date <= session.date)
       .sort((a, b) => b.date.localeCompare(a.date)); // most recent first
     for (const s of pastSessions) {
       for (const ex of (s.exercises || [])) {
-        const key = ex.name.toLowerCase().trim();
-        if (map[key]) continue; // already captured the most recent
+        // Prefer stored canonicalExerciseKey as index; fall back to normalized name
+        const key = (ex as any).canonicalExerciseKey ?? normalizeExerciseName(ex.name);
+        if (map[key]) continue; // already captured the most recent for this key
         const hasWeight = ex.setWeights?.some(w => w !== null) ?? false;
         const hasReps = ex.setReps?.some(r => r !== null) ?? false;
         if (!hasWeight && !hasReps) continue;
@@ -294,11 +299,20 @@ export default function ClientSession() {
           weight: ex.setWeights?.[i] ?? null,
           reps: ex.setReps?.[i] ?? null,
         }));
-        if (sets.length > 0) map[key] = { date: s.date, sets };
+        if (sets.length > 0) map[key] = { date: s.date, sets, originalName: ex.name };
       }
     }
     return map;
   }, [programme, sessionId, session]);
+
+  // Flat index of normalizedKey → originalName for findBestMatch
+  const prevLogsCandidates = useMemo<Record<string, string>>(() => {
+    const idx: Record<string, string> = {};
+    for (const [key, val] of Object.entries(prevLogsMap)) {
+      idx[key] = val.originalName;
+    }
+    return idx;
+  }, [prevLogsMap]);
 
   // ── Edit-mode state (edit published workout inline) ────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
@@ -2183,9 +2197,11 @@ export default function ClientSession() {
               </div>
               {ex.notes && <p className="text-xs text-muted-foreground mb-2 ml-8 italic">{ex.notes}</p>}
 
-              {/* Last time reminder — weights/reps */}
+              {/* Last time reminder — weights/reps (uses fuzzy exercise matching) */}
               {(() => {
-                const prev = prevLogs[ex.name.toLowerCase().trim()];
+                const displayName = (ex as any).swappedName ?? ex.name;
+                const matchResult = findBestMatch(displayName, prevLogsCandidates);
+                const prev = matchResult ? prevLogsMap[matchResult.normalizedKey] : null;
                 if (!prev) return null;
                 const setsText = prev.sets
                   .map(s => {
@@ -2198,18 +2214,40 @@ export default function ClientSession() {
                   .filter(Boolean)
                   .join(" · ");
                 if (!setsText) return null;
+                const showMatchedFrom =
+                  matchResult.tier > 1 &&
+                  matchResult.matchedFrom !== undefined &&
+                  normalizeExerciseName(matchResult.matchedFrom) !== normalizeExerciseName(displayName);
                 return (
-                  <div className="flex items-center gap-1.5 mb-1 ml-8">
-                    <Clock className="w-3 h-3 text-blue-400 shrink-0" />
-                    <p className="text-[11px] text-muted-foreground">
-                      <span className="font-semibold text-blue-500">{format(parseISO(prev.date), "d MMM")}:</span>{" "}
-                      {setsText}
-                    </p>
+                  <div className="flex flex-col gap-0.5 mb-1 ml-8">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3 h-3 text-blue-400 shrink-0" />
+                      <p className="text-[11px] text-muted-foreground">
+                        <span className="font-semibold text-blue-500">Last time · {format(parseISO(prev.date), "d MMM")}:</span>{" "}
+                        {setsText}
+                      </p>
+                    </div>
+                    {showMatchedFrom && (
+                      <p className="text-[10px] text-muted-foreground/55 ml-[18px] italic leading-tight">
+                        Matched from {matchResult.matchedFrom}
+                      </p>
+                    )}
                   </div>
                 );
               })()}
               {(() => {
-                const prevComment = prevSession?.exerciseComments[ex.name.toLowerCase().trim()];
+                const displayName = (ex as any).swappedName ?? ex.name;
+                const normKey = normalizeExerciseName(displayName);
+                // Try direct lookup first, then fuzzy fallback for comment matching
+                const prevComment =
+                  prevSession?.exerciseComments[normKey] ??
+                  (() => {
+                    if (!prevSession?.exerciseComments) return undefined;
+                    const m = findBestMatch(displayName, Object.fromEntries(
+                      Object.keys(prevSession.exerciseComments).map(k => [k, k])
+                    ));
+                    return m ? prevSession.exerciseComments[m.normalizedKey] : undefined;
+                  })();
                 if (!prevComment) return null;
                 return (
                   <div className="flex items-start gap-1.5 mb-1 ml-8">

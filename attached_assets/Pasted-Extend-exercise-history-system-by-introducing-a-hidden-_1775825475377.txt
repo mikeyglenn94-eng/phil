@@ -1,0 +1,156 @@
+Extend exercise history system by introducing a hidden canonical exercise key to improve matching reliability over time.
+
+IMPORTANT
+- Do NOT remove or replace the existing normalization and fuzzy matching logic
+- This is an additive improvement
+- Existing workouts and history must continue to work
+
+--------------------------------------------------
+1. ADD CANONICAL EXERCISE KEY
+--------------------------------------------------
+
+Introduce a new internal field:
+
+canonicalExerciseKey: string
+
+This represents the base movement identity of an exercise.
+
+Examples:
+- "DB Shoulder Press" → "dumbbell_shoulder_press"
+- "Dumbbell Shoulder Press" → "dumbbell_shoulder_press"
+- "Seated DB Shoulder Press" → "dumbbell_shoulder_press"
+- "Barbell Back Squat" → "barbell_back_squat"
+
+This key should be:
+- lowercase
+- snake_case
+- stable across naming variations
+
+--------------------------------------------------
+2. ASSIGN KEY WHEN EXERCISE IS CREATED OR SELECTED
+--------------------------------------------------
+
+Whenever a user:
+- creates a new exercise
+- selects an exercise from suggestions
+- logs an exercise in a session
+
+Generate and store a canonicalExerciseKey.
+
+Priority:
+
+1. If the exercise comes from a predefined library:
+   - use the library’s canonical key directly
+
+2. If it is free text:
+   - generate a best-guess canonical key using normalization rules
+
+Example approach:
+- normalize text (lowercase, remove punctuation)
+- expand abbreviations (db → dumbbell, bb → barbell)
+- remove modifiers (seated, incline, tempo, paused)
+- extract core movement phrase
+- convert to snake_case
+
+--------------------------------------------------
+3. STORE KEY WITH WORKOUT DATA
+--------------------------------------------------
+
+For each logged exercise entry, store:
+
+- exerciseName (original user-facing string)
+- canonicalExerciseKey (internal key)
+
+Do NOT remove or overwrite the original name.
+
+--------------------------------------------------
+4. UPDATE HISTORY MATCHING TO USE KEY FIRST
+--------------------------------------------------
+
+When looking up previous performance:
+
+1. Try exact canonicalExerciseKey match
+2. If no match found:
+   - fall back to existing normalized / fuzzy matching logic
+
+This ensures:
+- new data is highly reliable
+- old data still works
+
+--------------------------------------------------
+5. BACKFILL FOR EXISTING DATA (LIGHTWEIGHT)
+--------------------------------------------------
+
+For historical exercises without a canonical key:
+
+Option A (preferred MVP):
+- generate canonicalExerciseKey on read using the same normalization logic
+- do not require a full migration
+
+Option B (later improvement):
+- run a background job to assign canonical keys to all historical entries
+
+--------------------------------------------------
+6. HANDLE MODIFIERS WITHOUT BREAKING MATCHING
+--------------------------------------------------
+
+Ensure modifiers do NOT create different canonical keys.
+
+Modifiers include:
+- seated
+- incline
+- decline
+- paused
+- tempo
+- single-arm
+
+Example:
+- "Seated DB Shoulder Press"
+- "DB Shoulder Press"
+→ both map to:
+"dumbbell_shoulder_press"
+
+Do not over-normalize to the point of merging different movements:
+- "bench press" ≠ "shoulder press"
+- "row" ≠ "pulldown"
+
+--------------------------------------------------
+7. OPTIONAL: STORE DISPLAY VARIANT
+--------------------------------------------------
+
+Optionally track:
+
+displayName: string
+
+This is what the user sees (their original label).
+
+canonicalExerciseKey is never shown to the user.
+
+--------------------------------------------------
+8. PERFORMANCE BENEFIT
+--------------------------------------------------
+
+Ensure queries for previous performance:
+- use canonicalExerciseKey index where possible
+- avoid expensive fuzzy matching as primary lookup
+
+--------------------------------------------------
+9. ACCEPTANCE CRITERIA
+--------------------------------------------------
+
+1. New exercises are stored with a canonicalExerciseKey.
+2. Existing history continues to work without migration.
+3. History lookup prefers canonicalExerciseKey over string matching.
+4. Variations like "DB Shoulder Press" and "Seated DB Shoulder Press" resolve to the same history.
+5. Original exercise names remain unchanged in UI.
+6. No existing functionality is removed.
+
+--------------------------------------------------
+10. AFTER IMPLEMENTATION
+--------------------------------------------------
+
+Show:
+- canonical key generation function
+- where the key is assigned
+- updated history lookup logic
+- confirmation fallback to old matching still exists

@@ -26,6 +26,7 @@ export const exerciseSchema = z.object({
   perSetRpe: z.array(z.string().nullable()).optional(), // coach-prescribed RPE per set
   setWeights: z.array(z.number().nullable()).optional(), // kg per set, logged by client
   setReps: z.array(z.number().nullable()).optional(), // actual reps achieved per set, logged by client
+  canonicalExerciseKey: z.string().optional(), // internal snake_case movement identity key, never shown to user
 });
 
 export const runIntervalSchema = z.object({
