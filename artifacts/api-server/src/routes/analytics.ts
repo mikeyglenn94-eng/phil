@@ -149,9 +149,15 @@ function computeStats(session: any): SessionStat {
   let totalDistance = 0, weightedPaceSeconds = 0, intervalCount = 0;
   if (isRun) {
     for (const iv of (session.runLog ?? []) as any[]) {
-      const dist: number | null = iv.distance ?? null;
+      // distance may be stored as a number or as a string ("9.57" / "10 km") — parse defensively
+      const rawDist = iv.distance;
+      const dist: number | null = rawDist == null
+        ? null
+        : typeof rawDist === "number"
+          ? rawDist
+          : (() => { const n = parseFloat(String(rawDist)); return isNaN(n) ? null : n; })();
       const ps = iv.pace ? paceToSeconds(iv.pace) : null;
-      if (dist && dist > 0) {
+      if (dist != null && dist > 0) {
         totalDistance += dist;
         intervalCount++;
         if (ps !== null) weightedPaceSeconds += ps * dist;
