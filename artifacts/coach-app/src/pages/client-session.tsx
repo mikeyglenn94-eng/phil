@@ -41,11 +41,44 @@ import { format, parseISO } from "date-fns";
 interface SetLog { weight: number | null; reps: number | null; }
 type LogState = Record<string, SetLog[]>;
 interface RunInterval {
-  label: string;        // "Rep 1", "Warm-up", or empty
-  distance: string;     // planned distance/duration from session, e.g. "2 km"
-  targetPace: string;   // planned target pace, e.g. "4:30/km"
-  pace: string;         // actual pace logged by user
+  label: string;           // "Rep 1", "Warm-up", or empty
+  distance: string;        // planned distance/duration from session, e.g. "2 km"
+  targetPace: string;      // planned target pace, e.g. "4:30/km"
+  pace: string;            // actual pace logged by user
   notes: string;
+  equivalentRoadPace?: string | null;
+}
+
+type RunSurface = "road" | "trail";
+type TrailDifficulty = "moderate" | "hilly" | "technical";
+
+const TRAIL_FACTORS: Record<TrailDifficulty, number> = {
+  moderate: 0.92,
+  hilly: 0.86,
+  technical: 0.80,
+};
+
+function paceToSeconds(pace: string): number | null {
+  const match = /^(\d+):([0-5]\d)$/.exec(pace.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function secondsToPace(s: number): string {
+  const r = Math.round(s);
+  return `${Math.floor(r / 60)}:${(r % 60).toString().padStart(2, "0")}`;
+}
+
+function calcEquivalentPace(
+  pace: string,
+  surface: RunSurface,
+  difficulty: TrailDifficulty | null
+): string | null {
+  const sec = paceToSeconds(pace);
+  if (sec == null) return null;
+  if (surface === "road") return null;
+  if (!difficulty) return null;
+  return secondsToPace(sec * TRAIL_FACTORS[difficulty]);
 }
 
 // Extract a clean exercise name from spoken swap commands
@@ -404,6 +437,8 @@ export default function ClientSession() {
 
   // Run interval logging state
   const [runIntervals, setRunIntervals] = useState<RunInterval[]>([{ label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+  const [runSurface, setRunSurface] = useState<RunSurface>("road");
+  const [trailDifficulty, setTrailDifficulty] = useState<TrailDifficulty | null>(null);
 
   // Init logs from saved data
   useEffect(() => {
@@ -431,6 +466,12 @@ export default function ClientSession() {
     const savedRunLog = (session as any).runLog as Array<{
       label?: string | null; distance?: number | string | null; targetPace?: string | null; pace?: string | null; notes?: string | null;
     }> | undefined;
+    // Restore surface/difficulty at session level
+    const savedSurface = (session as any).runSurface as RunSurface | undefined;
+    const savedDifficulty = (session as any).trailDifficulty as TrailDifficulty | undefined;
+    if (savedSurface) setRunSurface(savedSurface);
+    if (savedDifficulty) setTrailDifficulty(savedDifficulty);
+
     if (savedRunLog && savedRunLog.length > 0) {
       setRunIntervals(savedRunLog.map(r => ({
         label: r.label ?? "",
@@ -438,6 +479,7 @@ export default function ClientSession() {
         targetPace: r.targetPace ?? "",
         pace: r.pace ?? "",
         notes: r.notes ?? "",
+        equivalentRoadPace: (r as any).equivalentRoadPace ?? null,
       })));
     } else {
       // Pre-populate from structured runBlocks or exercises (plan data)
@@ -1022,8 +1064,14 @@ export default function ClientSession() {
                 targetPace: r.targetPace || null,
                 pace: r.pace || null,
                 notes: r.notes || null,
+                equivalentRoadPace: calcEquivalentPace(r.pace, runSurface, trailDifficulty),
               }));
-            return { ...base, runLog: runLog.length > 0 ? runLog : null };
+            return {
+              ...base,
+              runLog: runLog.length > 0 ? runLog : null,
+              runSurface,
+              trailDifficulty: runSurface === "trail" ? trailDifficulty : null,
+            };
           }
           // WOD — persist structured result
           const hasResult = Object.values(wodResult).some(v => v !== undefined && v !== "" && v !== null);
@@ -1830,104 +1878,175 @@ export default function ClientSession() {
 
           {/* Run interval logging */}
           {(src === "run_brain" || src === "endurance_cycle") && (
-            <div className="space-y-2">
-              <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase px-1">What you ran</p>
-              <div className="rounded-xl border border-border overflow-hidden">
-                {/* Header */}
-                <div className="grid grid-cols-[3.5rem_1fr_5rem_5rem_2rem] gap-0 bg-muted/40 border-b border-border px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  <span className="pl-1">Rep</span>
-                  <span>Distance</span>
-                  <span className="text-center">Target</span>
-                  <span className="text-center">Actual</span>
-                  <span />
-                </div>
-                {runIntervals.map((interval, idx) => (
-                  <div key={idx} className="grid grid-cols-[3.5rem_1fr_5rem_5rem_2rem] gap-0 items-center px-2 py-1 border-b border-border last:border-b-0 bg-background">
-                    {/* Rep label — editable */}
-                    <Input
-                      type="text"
-                      placeholder={String(idx + 1)}
-                      value={interval.label}
-                      onChange={e => {
-                        const updated = [...runIntervals];
-                        updated[idx] = { ...updated[idx], label: e.target.value };
-                        setRunIntervals(updated);
-                        setSaved(false);
-                        scheduleClientAutosave();
-                      }}
-                      className="h-8 text-xs font-semibold border-0 shadow-none bg-transparent focus:bg-muted/20 rounded text-muted-foreground pl-1"
-                    />
-                    {/* Distance (pre-filled from plan, editable) */}
-                    <Input
-                      type="text"
-                      inputMode="text"
-                      placeholder="e.g. 1 km"
-                      value={interval.distance}
-                      onChange={e => {
-                        const updated = [...runIntervals];
-                        updated[idx] = { ...updated[idx], distance: e.target.value };
-                        setRunIntervals(updated);
-                        setSaved(false);
-                        scheduleClientAutosave();
-                      }}
-                      className="h-8 text-sm font-bold border-0 shadow-none bg-transparent focus:bg-muted/20 rounded"
-                    />
-                    {/* Target pace (from plan, read-hint) */}
-                    <Input
-                      type="text"
-                      inputMode="text"
-                      placeholder="—"
-                      value={interval.targetPace}
-                      onChange={e => {
-                        const updated = [...runIntervals];
-                        updated[idx] = { ...updated[idx], targetPace: e.target.value };
-                        setRunIntervals(updated);
-                        setSaved(false);
-                        scheduleClientAutosave();
-                      }}
-                      className="h-8 text-xs text-center text-muted-foreground border-0 shadow-none bg-transparent focus:bg-muted/20 rounded font-mono"
-                    />
-                    {/* Actual pace */}
-                    <Input
-                      type="text"
-                      inputMode="text"
-                      placeholder="5:30"
-                      value={interval.pace}
-                      onChange={e => {
-                        const updated = [...runIntervals];
-                        updated[idx] = { ...updated[idx], pace: e.target.value };
-                        setRunIntervals(updated);
-                        setSaved(false);
-                        scheduleClientAutosave();
-                      }}
-                      className="h-8 text-sm text-center font-bold border-0 shadow-none bg-transparent focus:bg-muted/20 rounded font-mono text-emerald-700 dark:text-emerald-400"
-                    />
+            <div className="space-y-3">
+
+              {/* ── RUN TYPE ── */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase px-1">Run Type</p>
+                <div className="flex gap-2">
+                  {(["road", "trail"] as RunSurface[]).map(s => (
                     <button
+                      key={s}
                       type="button"
-                      disabled={runIntervals.length === 1}
-                      onClick={() => {
-                        setRunIntervals(runIntervals.filter((_, i) => i !== idx));
-                        setSaved(false);
-                        scheduleClientAutosave();
-                      }}
-                      className="text-muted-foreground hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed p-1 rounded transition-colors flex items-center justify-center"
+                      onClick={() => { setRunSurface(s); if (s === "road") setTrailDifficulty(null); setSaved(false); scheduleClientAutosave(); }}
+                      className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                        runSurface === s
+                          ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                          : "bg-background border-border text-muted-foreground hover:border-emerald-400/60"
+                      }`}
                     >
-                      <X className="w-3 h-3" />
+                      {s === "road" ? "🛣 Road" : "🏔 Trail"}
                     </button>
+                  ))}
+                </div>
+
+                {/* Trail difficulty — animates open */}
+                {runSurface === "trail" && (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs font-medium text-muted-foreground px-0.5">Trail difficulty</p>
+                    <div className="flex gap-2">
+                      {(["moderate", "hilly", "technical"] as TrailDifficulty[]).map(d => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => { setTrailDifficulty(d); setSaved(false); scheduleClientAutosave(); }}
+                          className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                            trailDifficulty === d
+                              ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                              : "bg-background border-border text-muted-foreground hover:border-amber-400/60"
+                          }`}
+                        >
+                          {d.charAt(0).toUpperCase() + d.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 px-0.5">
+                      {[
+                        { d: "moderate", hint: "Mostly flat, decent footing" },
+                        { d: "hilly", hint: "Climbs and descents affect pace" },
+                        { d: "technical", hint: "Uneven ground, footing slows you" },
+                      ].map(({ d, hint }) => (
+                        <p key={d} className="text-[10px] text-muted-foreground/70 leading-tight text-center">{hint}</p>
+                      ))}
+                    </div>
+                    {trailDifficulty === null && (
+                      <p className="text-xs text-amber-600 font-medium px-0.5">Select trail difficulty</p>
+                    )}
                   </div>
-                ))}
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setRunIntervals([...runIntervals, { label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
-                  setSaved(false);
-                  scheduleClientAutosave();
-                }}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-emerald-400/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-xs font-medium transition-colors"
-              >
-                <Plus className="w-3 h-3" /> Add interval
-              </button>
+
+              {/* ── WHAT YOU RAN ── */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase px-1">What you ran</p>
+                <div className="rounded-xl border border-border overflow-hidden">
+                  {/* Header */}
+                  <div className="grid grid-cols-[3rem_1fr_4.5rem_4.5rem_2rem] gap-0 bg-muted/40 border-b border-border px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <span className="pl-1">Rep</span>
+                    <span>Distance</span>
+                    <span className="text-center">Target</span>
+                    <span className="text-center">Actual</span>
+                    <span />
+                  </div>
+                  {runIntervals.map((interval, idx) => {
+                    const eqPace = calcEquivalentPace(interval.pace, runSurface, trailDifficulty);
+                    return (
+                      <div key={idx} className="border-b border-border last:border-b-0">
+                        <div className="grid grid-cols-[3rem_1fr_4.5rem_4.5rem_2rem] gap-0 items-center px-2 py-1.5 bg-background">
+                          {/* Rep label */}
+                          <Input
+                            type="text"
+                            placeholder={String(idx + 1)}
+                            value={interval.label}
+                            onChange={e => {
+                              const updated = [...runIntervals];
+                              updated[idx] = { ...updated[idx], label: e.target.value };
+                              setRunIntervals(updated);
+                              setSaved(false);
+                              scheduleClientAutosave();
+                            }}
+                            className="h-7 text-xs font-semibold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg text-muted-foreground pl-1.5 transition-colors"
+                          />
+                          {/* Distance */}
+                          <Input
+                            type="text"
+                            inputMode="text"
+                            placeholder="e.g. 1 km"
+                            value={interval.distance}
+                            onChange={e => {
+                              const updated = [...runIntervals];
+                              updated[idx] = { ...updated[idx], distance: e.target.value };
+                              setRunIntervals(updated);
+                              setSaved(false);
+                              scheduleClientAutosave();
+                            }}
+                            className="h-7 text-sm font-bold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg mx-1 transition-colors"
+                          />
+                          {/* Target pace */}
+                          <Input
+                            type="text"
+                            inputMode="text"
+                            placeholder="—"
+                            value={interval.targetPace}
+                            onChange={e => {
+                              const updated = [...runIntervals];
+                              updated[idx] = { ...updated[idx], targetPace: e.target.value };
+                              setRunIntervals(updated);
+                              setSaved(false);
+                              scheduleClientAutosave();
+                            }}
+                            className="h-7 text-xs text-center text-muted-foreground border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg font-mono transition-colors"
+                          />
+                          {/* Actual pace */}
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="5:30"
+                            value={interval.pace}
+                            onChange={e => {
+                              const updated = [...runIntervals];
+                              updated[idx] = { ...updated[idx], pace: e.target.value };
+                              setRunIntervals(updated);
+                              setSaved(false);
+                              scheduleClientAutosave();
+                            }}
+                            className="h-7 text-sm text-center font-bold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg font-mono text-emerald-700 dark:text-emerald-400 ml-1 transition-colors"
+                          />
+                          <button
+                            type="button"
+                            disabled={runIntervals.length === 1}
+                            onClick={() => {
+                              setRunIntervals(runIntervals.filter((_, i) => i !== idx));
+                              setSaved(false);
+                              scheduleClientAutosave();
+                            }}
+                            className="text-muted-foreground/60 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {/* Trail equivalent pace */}
+                        {eqPace && (
+                          <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium px-3 pb-1.5 -mt-0.5">
+                            ≈ {eqPace}/km road equivalent
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRunIntervals([...runIntervals, { label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+                    setSaved(false);
+                    scheduleClientAutosave();
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-emerald-400/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-xs font-medium transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Add interval
+                </button>
+              </div>
             </div>
           )}
 

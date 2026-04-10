@@ -1,0 +1,174 @@
+Update the run log screen to support trail run tagging and road-equivalent pace, while keeping the flow extremely simple for manual entry.
+
+Goal:
+Users can manually log a run, mark it as road or trail, and if trail is selected choose a trail difficulty. The app should then calculate and display an approximate road-equivalent pace. This is an MVP heuristic, not a full grade-adjusted pace model. It is inspired by the same basic idea used in grade-adjusted pace systems, where harder terrain should not be treated the same as flat road running. Strava describes GAP as an estimate of equivalent flat pace based on gradient. 
+
+What to add:
+1. Add a new section above “WHAT YOU RAN” called “RUN TYPE”.
+2. In that section add a segmented control or pill selector with:
+   - Road
+   - Trail
+3. Default to Road.
+4. If Trail is selected, reveal a second selector directly underneath:
+   - Moderate
+   - Hilly
+   - Technical
+5. Add helper text under the trail difficulty options:
+   - Moderate: mostly flat, decent footing
+   - Hilly: climbs and descents affect pace
+   - Technical: uneven ground, footing slows you down
+
+Calculation rules:
+Use these trail factors for estimated road-equivalent pace:
+- moderate = 0.92
+- hilly = 0.86
+- technical = 0.80
+
+Formula:
+equivalentRoadPaceSeconds = actualPaceSeconds * factor
+
+If Road is selected:
+- no adjustment
+- equivalent pace is the same as entered pace
+
+If Trail is selected:
+- calculate equivalent road pace from the entered pace for each interval row
+- also calculate an overall equivalent pace for the full run if total distance and average pace are available
+
+Formatting:
+- pace input remains min/km in mm:ss format
+- show entered pace as normal
+- when Trail is selected, show a secondary line under the pace input or under each completed row:
+  “≈ 5:10/km road equivalent”
+- use the approx symbol because this is an estimate
+- do not show road-equivalent pace if pace input is empty or invalid
+
+Important UX behaviour:
+1. Keep manual logging fast
+   - no extra modal
+   - trail options should expand inline
+2. Do not clutter Road runs with unnecessary UI
+   - trail difficulty only appears when Trail is selected
+3. Do not force users to understand calculations
+   - show the output, not the maths
+4. Make sure this works for multiple intervals
+   - each row can use the same run type and difficulty for now
+   - do not support mixed surface within one run yet
+5. Preserve current “Add interval” behaviour
+6. Preserve notes and voice input
+7. Preserve Save and Share workout buttons
+
+Validation:
+1. Distance must remain numeric in km
+2. Pace must accept mm:ss only
+3. If pace is malformed, do not calculate equivalent pace
+4. If Trail is selected but difficulty is not selected, disable Save or show inline validation:
+   “Select trail difficulty”
+
+UI changes to the current screen:
+1. Add the RUN TYPE section between the page title and WHAT YOU RAN
+2. Style it consistently with the rest of the app
+3. Use pill buttons or segmented controls that feel tappable and mobile-friendly
+4. The selected option should be visually obvious
+5. The trail difficulty row should animate open/closed smoothly
+6. Under the pace field, when Trail is selected and valid pace is entered, show a muted secondary label with the road-equivalent pace
+7. Keep spacing clean and avoid making the screen feel crowded
+
+Data model changes:
+Add these fields to the saved run log object:
+- surface: 'road' | 'trail'
+- trailDifficulty: 'moderate' | 'hilly' | 'technical' | null
+- equivalentRoadPace: string | null
+
+If intervals are stored as objects, each interval can keep its own equivalentRoadPace value for display, but surface and trailDifficulty should be stored at workout level for this MVP.
+
+Implementation details:
+Create a utility for pace conversion and adjustment.
+
+Example TypeScript:
+
+const TRAIL_FACTORS = {
+  moderate: 0.92,
+  hilly: 0.86,
+  technical: 0.80,
+};
+
+function toSeconds(pace: string): number | null {
+  const match = /^(\d+):([0-5]\d)$/.exec(pace.trim());
+  if (!match) return null;
+  const min = Number(match[1]);
+  const sec = Number(match[2]);
+  return min * 60 + sec;
+}
+
+function toPaceString(totalSeconds: number): string {
+  const rounded = Math.round(totalSeconds);
+  const min = Math.floor(rounded / 60);
+  const sec = rounded % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
+function getEquivalentRoadPace(
+  pace: string,
+  surface: 'road' | 'trail',
+  difficulty?: 'moderate' | 'hilly' | 'technical' | null
+): string | null {
+  const paceSec = toSeconds(pace);
+  if (paceSec == null) return null;
+  if (surface === 'road') return toPaceString(paceSec);
+  if (!difficulty) return null;
+
+  const factor = TRAIL_FACTORS[difficulty];
+  return toPaceString(paceSec * factor);
+}
+
+Component behaviour:
+- recompute equivalent pace live as user types pace
+- recompute when switching Road/Trail
+- recompute when changing difficulty
+- if switching from Trail back to Road, hide trail difficulty and remove the secondary equivalent label because it matches the entered pace
+- if switching from Trail to Road, keep the original pace input unchanged
+
+Copy to use:
+Section title:
+- RUN TYPE
+
+Options:
+- Road
+- Trail
+
+Trail difficulty label:
+- Trail difficulty
+
+Helper text:
+- Moderate: mostly flat, decent footing
+- Hilly: climbs and descents affect pace
+- Technical: uneven ground, footing slows you down
+
+Secondary output:
+- ≈ {pace}/km road equivalent
+
+Validation text:
+- Select trail difficulty
+- Enter pace as mm:ss
+
+Acceptance criteria:
+1. User can select Road or Trail.
+2. Trail reveals Moderate, Hilly, Technical.
+3. Entering a pace on a Trail run shows estimated road-equivalent pace.
+4. Road runs behave exactly like before apart from the new Run Type section.
+5. Existing interval logging still works.
+6. Save persists the new fields.
+7. No regressions to notes, voice input, share workout, or interval adding.
+
+Also clean up this screen while making the change:
+1. Make the row inputs feel more like actual editable fields and less like placeholders floating in space.
+2. Tighten the vertical spacing slightly so the new Run Type section fits without pushing everything too far down.
+3. Keep the Save button pinned and obvious on mobile.
+4. Make the remove-row X less faint and easier to tap.
+5. Do not redesign the whole page. Just improve clarity and usability while adding trail support.
+
+After implementation:
+- show me the updated component code
+- show me any schema or type changes
+- explain where equivalent pace is calculated and rendered
