@@ -520,7 +520,14 @@ export default function ClientSession() {
     if (!session) return;
     const initial: LogState = {};
     for (const ex of session.exercises || []) {
-      initial[ex.id] = Array.from({ length: ex.sets || 0 }, (_, i) => ({
+      // Use the greater of: planned sets, logged weights count, logged reps count
+      // This ensures we never silently drop logged data if ex.sets doesn't match
+      const count = Math.max(
+        ex.sets || 0,
+        ex.setWeights?.length || 0,
+        ex.setReps?.length || 0,
+      );
+      initial[ex.id] = Array.from({ length: count }, (_, i) => ({
         weight: ex.setWeights?.[i] ?? null,
         reps: ex.setReps?.[i] ?? null,
       }));

@@ -132,8 +132,16 @@ function computeStats(session: any): SessionStat {
   const exerciseBreakdown: ExData[] = [];
 
   for (const ex of session.exercises ?? []) {
-    const setWeights: (number | null)[] = ex.setWeights ?? [];
-    const setReps: (number | null)[]    = ex.setReps    ?? [];
+    const rawWeights: unknown[] = ex.setWeights ?? [];
+    const rawReps:    unknown[] = ex.setReps    ?? [];
+    // Parse defensively — JSONB can return numbers or numeric strings
+    const parseNum = (v: unknown): number | null => {
+      if (v === null || v === undefined) return null;
+      const n = typeof v === "number" ? v : parseFloat(String(v));
+      return isNaN(n) ? null : n;
+    };
+    const setWeights: (number | null)[] = rawWeights.map(parseNum);
+    const setReps:    (number | null)[] = rawReps.map(parseNum);
     const count = Math.max(setWeights.length, setReps.length);
     const sets: ExSet[] = [];
     for (let i = 0; i < count; i++) {
