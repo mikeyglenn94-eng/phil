@@ -68,20 +68,23 @@ function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
   const { user, token } = useAuth();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-  // If auth user has a clientId and no client selected yet, auto-fetch and select
+  // When the authenticated user has a linked clientId, ALWAYS force-select their own
+  // account — this prevents a stale localStorage entry (from a coach or previous session)
+  // from showing the wrong client's data to the logged-in athlete.
+  const needsForceSelect = user?.clientId && token && client?.id !== user.clientId;
   useEffect(() => {
-    if (!client && user?.clientId && token) {
-      fetch(`${BASE}/api/clients/${user.clientId}`, {
+    if (needsForceSelect) {
+      fetch(`${BASE}/api/clients/${user!.clientId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.ok ? r.json() : null)
         .then(c => { if (c) selectClient(c); })
         .catch(() => {});
     }
-  }, [user?.clientId, client, token]);
+  }, [user?.clientId, token]);
 
-  // Loading state while auto-selecting
-  if (!client && user?.clientId) {
+  // Loading state while fetching the linked client
+  if (needsForceSelect) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white animate-spin" />
