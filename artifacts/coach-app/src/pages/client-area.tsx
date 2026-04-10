@@ -2005,6 +2005,26 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
+  // Tracking mode (persisted per-client)
+  const [nutritionTrackingMode, setNutritionTrackingModeRaw] = useState<"calories" | "protein">(() => {
+    try { return (localStorage.getItem(`nutrition-mode-${clientId}`) as "calories" | "protein") ?? "calories"; }
+    catch { return "calories"; }
+  });
+  const setNutritionMode = (mode: "calories" | "protein") => {
+    setNutritionTrackingModeRaw(mode);
+    try { localStorage.setItem(`nutrition-mode-${clientId}`, mode); } catch {}
+  };
+
+  // Weekly nutrition logs (all entries, for the 7-day strip)
+  const [weeklyNutritionLogs, setWeeklyNutritionLogs] = useState<Array<{ date: string; calories?: number | null; protein?: string | null }>>([]);
+  const refetchWeeklyLogs = () => {
+    fetch(`/api/clients/${clientId}/nutrition`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setWeeklyNutritionLogs)
+      .catch(() => {});
+  };
+  useEffect(() => { refetchWeeklyLogs(); }, [clientId]);
+
   const { data: entries, isLoading: entriesLoading } = useListNutritionEntries(clientId, { date: selectedDate });
   const addMutation = useAddNutritionEntry();
   const deleteMutation = useDeleteNutritionEntry();
@@ -2247,6 +2267,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
         await addMutation.mutateAsync({ clientId, data: { description: text, date: selectedDate } });
       }
       queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(clientId, { date: selectedDate }) });
+      refetchWeeklyLogs();
       setFoodInput("");
       toast({ title: "Entry added" });
     } catch {
@@ -2258,6 +2279,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     try {
       await deleteMutation.mutateAsync({ clientId, entryId });
       queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(clientId, { date: selectedDate }) });
+      refetchWeeklyLogs();
     } catch {
       toast({ title: "Error deleting entry", variant: "destructive" });
     }
@@ -2423,7 +2445,28 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       {/* Nutrition Tab */}
       {activeTab === "nutrition" && (
         <div className="nutrition-screen px-6 py-6 max-w-2xl mx-auto">
-          {/* Date selector */}
+
+          {/* ── Tracking Mode ─────────────────────────────────────── */}
+          <div className="mb-4">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Tracking mode</p>
+            <div className="flex gap-1 bg-muted rounded-xl p-1">
+              {(["calories", "protein"] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setNutritionMode(m)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    nutritionTrackingMode === m
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {m === "calories" ? "Calories" : "Protein focus"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Date selector ─────────────────────────────────────── */}
           <div className="nutrition-date">
             <CalendarDays className="w-5 h-5 text-muted-foreground" />
             <input
@@ -2434,22 +2477,166 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             />
           </div>
 
-          {/* Daily totals */}
+          {/* ── Today status ──────────────────────────────────────── */}
+          {(() => {
+            const hasTarget = (client?.dailyCalorieGoal ?? 0) > 0;
+            const hasEntries = (entries?.length ?? 0) > 0;
+            const isToday = selectedDate === format(new Date(), "yyyy-MM-dd");
+
+            if (!hasTarget) return (
+              <div className="rounded-xl border border-dashed border-muted-foreground/30 px-4 py-3 text-sm text-muted-foreground text-center mb-3">
+                Set a {nutritionTrackingMode === "protein" ? "protein" : "calorie"} target in Goals to see your daily status
+              </div>
+            );
+
+            let statusText = "";
+            let statusColor = "text-muted-foreground";
+            let statusBg = "bg-muted/40";
+
+            if (nutritionTrackingMode === "calories") {
+              const calTarget = client!.dailyCalorieGoal ?? 0;
+              if (!hasEntries) {
+                statusText = isToday ? "Nothing logged yet" : "No entries for this day";
+                statusColor = "text-muted-foreground";
+              } else {
+                const diff = Math.round(totals.calories) - calTarget;
+                if (Math.abs(diff) <= 100) {
+                  statusText = "On track";
+                  statusColor = "text-emerald-600";
+                  statusBg = "bg-emerald-50 dark:bg-emerald-950/30";
+                } else if (diff > 0) {
+                  statusText = `+${diff} kcal over target`;
+                  statusColor = "text-red-600";
+                  statusBg = "bg-red-50 dark:bg-red-950/30";
+                } else {
+                  statusText = `${Math.abs(diff)} kcal to go`;
+                  statusColor = "text-amber-600";
+                  statusBg = "bg-amber-50 dark:bg-amber-950/30";
+                }
+              }
+            } else {
+              // Protein mode
+              const proTarget = client!.dailyProteinGoal ?? 0;
+              if (!proTarget) {
+                statusText = "Set a protein goal to see status";
+                statusColor = "text-muted-foreground";
+              } else if (!hasEntries) {
+                statusText = isToday ? "Nothing logged yet" : "No entries for this day";
+                statusColor = "text-muted-foreground";
+              } else {
+                const rem = proTarget - totals.protein;
+                if (rem <= 0) {
+                  statusText = "Protein target hit";
+                  statusColor = "text-emerald-600";
+                  statusBg = "bg-emerald-50 dark:bg-emerald-950/30";
+                } else {
+                  statusText = `${rem.toFixed(0)}g protein to go`;
+                  statusColor = "text-amber-600";
+                  statusBg = "bg-amber-50 dark:bg-amber-950/30";
+                }
+              }
+            }
+
+            return (
+              <div className={`rounded-xl px-4 py-3 mb-3 flex items-center justify-between ${statusBg}`}>
+                <p className={`text-sm font-semibold ${statusColor}`}>{statusText}</p>
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                  {nutritionTrackingMode === "calories" ? "Calories" : "Protein"}
+                </p>
+              </div>
+            );
+          })()}
+
+          {/* ── 7-day weekly strip ────────────────────────────────── */}
+          {(() => {
+            // Compute the current ISO week Mon–Sun
+            const today = new Date();
+            const dow = today.getDay(); // 0=Sun
+            const diffToMon = dow === 0 ? -6 : 1 - dow;
+            const weekDays: Array<{ label: string; dateStr: string }> = Array.from({ length: 7 }, (_, i) => {
+              const d = new Date(today);
+              d.setDate(today.getDate() + diffToMon + i);
+              return {
+                label: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][i],
+                dateStr: d.toISOString().slice(0, 10),
+              };
+            });
+
+            // Group logs by date
+            const byDate = new Map<string, typeof weeklyNutritionLogs>();
+            for (const e of weeklyNutritionLogs) {
+              if (!byDate.has(e.date)) byDate.set(e.date, []);
+              byDate.get(e.date)!.push(e);
+            }
+
+            const calTarget = client?.dailyCalorieGoal ?? 0;
+            const proTarget = client?.dailyProteinGoal ?? 0;
+            const todayStr = today.toISOString().slice(0, 10);
+
+            return (
+              <div className="flex gap-1.5 mb-4">
+                {weekDays.map(({ label, dateStr }) => {
+                  const dayEntries = byDate.get(dateStr) ?? [];
+                  const logged = dayEntries.length > 0;
+                  const isFuture = dateStr > todayStr;
+                  const isSelected = dateStr === selectedDate;
+
+                  let dotColor = "bg-muted";
+                  if (!isFuture && logged) {
+                    if (nutritionTrackingMode === "calories" && calTarget > 0) {
+                      const dayCals = dayEntries.reduce((s, e) => s + (e.calories ?? 0), 0);
+                      const diff = Math.abs(dayCals - calTarget);
+                      dotColor = diff <= 200 ? "bg-emerald-500" : diff <= 300 ? "bg-amber-400" : "bg-muted-foreground/40";
+                    } else if (nutritionTrackingMode === "protein" && proTarget > 0) {
+                      const dayPro = dayEntries.reduce((s, e) => s + parseFloat((e.protein as string) ?? "0"), 0);
+                      const rem = proTarget - dayPro;
+                      dotColor = rem <= 0 ? "bg-emerald-500" : rem <= 20 ? "bg-amber-400" : "bg-muted-foreground/40";
+                    } else {
+                      dotColor = "bg-emerald-500"; // logged, no target — show green
+                    }
+                  }
+
+                  return (
+                    <button
+                      key={dateStr}
+                      onClick={() => setSelectedDate(dateStr)}
+                      className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-xl transition-all ${
+                        isSelected ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-muted/60"
+                      } ${isFuture ? "opacity-30" : ""}`}
+                    >
+                      <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide">{label}</span>
+                      <div className={`w-2 h-2 rounded-full ${isFuture ? "bg-muted" : dotColor}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* ── Daily totals ──────────────────────────────────────── */}
           {((entries?.length ?? 0) > 0 || (client?.dailyCalorieGoal ?? 0) > 0) && (
             <div className="card totals-card">
-              {/* Consumed section */}
+              {/* Consumed section — mode-aware order */}
               {(entries?.length ?? 0) > 0 && (
                 <div className="totals-section">
                   <p className="totals-heading">Daily Totals</p>
                   <div className="totals-grid">
-                    {[
-                      { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500" },
-                      { label: "Protein",  value: totals.protein.toFixed(1),   unit: "g",    color: "text-blue-500"   },
-                      { label: "Carbs",    value: totals.carbs.toFixed(1),     unit: "g",    color: "text-yellow-500" },
-                      { label: "Fats",     value: totals.fats.toFixed(1),      unit: "g",    color: "text-pink-500"   },
-                    ].map(({ label, value, unit, color }) => (
+                    {(nutritionTrackingMode === "protein"
+                      ? [
+                          { label: "Protein",  value: totals.protein.toFixed(1),   unit: "g",    color: "text-blue-500",   big: true  },
+                          { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500", big: false },
+                          { label: "Carbs",    value: totals.carbs.toFixed(1),     unit: "g",    color: "text-yellow-500", big: false },
+                          { label: "Fats",     value: totals.fats.toFixed(1),      unit: "g",    color: "text-pink-500",   big: false },
+                        ]
+                      : [
+                          { label: "Calories", value: Math.round(totals.calories), unit: "kcal", color: "text-orange-500", big: true  },
+                          { label: "Protein",  value: totals.protein.toFixed(1),   unit: "g",    color: "text-blue-500",   big: false },
+                          { label: "Carbs",    value: totals.carbs.toFixed(1),     unit: "g",    color: "text-yellow-500", big: false },
+                          { label: "Fats",     value: totals.fats.toFixed(1),      unit: "g",    color: "text-pink-500",   big: false },
+                        ]
+                    ).map(({ label, value, unit, color, big }) => (
                       <div key={label} className="total-metric">
-                        <p className={`total-value ${color}`}>{value}</p>
+                        <p className={`${big ? "text-3xl" : "total-value"} ${color} font-black tabular-nums`}>{value}</p>
                         <p className="total-unit">{unit}</p>
                         <p className="total-label">{label}</p>
                       </div>
@@ -2464,12 +2651,19 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                 const remPro = (client!.dailyProteinGoal ?? 0) - totals.protein;
                 const remCarb = (client!.dailyCarbGoal ?? 0) - totals.carbs;
                 const remFat = (client!.dailyFatGoal ?? 0) - totals.fats;
-                const remainingItems = [
-                  { label: "Calories", value: Math.abs(Math.round(remCal)), unit: "kcal", over: remCal < 0 },
-                  { label: "Protein",  value: Math.abs(remPro).toFixed(1),  unit: "g",    over: remPro < 0  },
-                  { label: "Carbs",    value: Math.abs(remCarb).toFixed(1), unit: "g",    over: remCarb < 0 },
-                  { label: "Fats",     value: Math.abs(remFat).toFixed(1),  unit: "g",    over: remFat < 0  },
-                ];
+                const remainingItems = nutritionTrackingMode === "protein"
+                  ? [
+                      { label: "Protein",  value: Math.abs(remPro).toFixed(1),  unit: "g",    over: remPro < 0  },
+                      { label: "Calories", value: Math.abs(Math.round(remCal)), unit: "kcal", over: remCal < 0 },
+                      { label: "Carbs",    value: Math.abs(remCarb).toFixed(1), unit: "g",    over: remCarb < 0 },
+                      { label: "Fats",     value: Math.abs(remFat).toFixed(1),  unit: "g",    over: remFat < 0  },
+                    ]
+                  : [
+                      { label: "Calories", value: Math.abs(Math.round(remCal)), unit: "kcal", over: remCal < 0 },
+                      { label: "Protein",  value: Math.abs(remPro).toFixed(1),  unit: "g",    over: remPro < 0  },
+                      { label: "Carbs",    value: Math.abs(remCarb).toFixed(1), unit: "g",    over: remCarb < 0 },
+                      { label: "Fats",     value: Math.abs(remFat).toFixed(1),  unit: "g",    over: remFat < 0  },
+                    ];
                 return (
                   <div className="totals-section">
                     <p className="totals-heading">

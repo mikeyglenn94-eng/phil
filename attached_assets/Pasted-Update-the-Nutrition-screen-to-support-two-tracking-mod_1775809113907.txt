@@ -1,0 +1,121 @@
+Update the Nutrition screen to support two tracking modes (Calories and Protein focus) and improve clarity and behaviour feedback without adding complexity.
+
+--------------------------------------------------
+1. ADD TRACKING MODE TO TOP OF SCREEN
+--------------------------------------------------
+
+At the top of the Nutrition screen, add a segmented control:
+
+"Tracking mode"
+- Calories
+- Protein focus
+
+Default:
+- Calories
+
+Store as:
+nutritionTrackingMode: 'calories' | 'protein'
+
+This should be visually consistent with other segmented controls in the app.
+
+---
+
+2. ADJUST INPUT HIERARCHY BASED ON MODE
+--------------------------------------------------
+
+If mode = 'calories':
+- Calories remains the primary input
+- Protein remains visible but secondary
+
+If mode = 'protein':
+- Protein becomes the primary input
+- Calories becomes secondary or visually de-emphasised
+
+Do not remove fields, only change emphasis.
+
+---
+
+3. ADD "TODAY STATUS" BLOCK
+--------------------------------------------------
+
+Add a simple status card at the top of the screen.
+
+If calories mode:
+- show one of:
+  - "On track"
+  - "+{X} kcal over target"
+  - "-{X} kcal under target"
+
+If protein mode:
+- show one of:
+  - "Protein target hit"
+  - "{X}g to go"
+
+This should update live as the user logs.
+
+---
+
+4. ADD WEEKLY VISUAL STRIP
+--------------------------------------------------
+
+Under the status block, add a 7-day strip:
+
+- Mon Tue Wed Thu Fri Sat Sun
+
+Each day has a small indicator:
+
+For calories mode:
+- green = within ±200 kcal
+- amber = within ±300 kcal
+- grey = not logged or far off
+
+For protein mode:
+- green = hit protein target
+- amber = within -20g
+- grey = not logged or far off
+
+This strip is visual only and should be very lightweight.
+
+---
+
+5. CONNECT TO DASHBOARD SCORING
+--------------------------------------------------
+
+Ensure this screen feeds the existing nutrition scoring system:
+
+- daily logging status
+- closeness to target
+
+No changes needed to dashboard logic, just ensure data flows correctly.
+
+---
+
+6. KEEP UX SIMPLE
+--------------------------------------------------
+
+Do NOT add:
+- meal-level tracking UI
+- macro breakdown charts
+- complex graphs
+
+Focus on:
+- fast logging
+- clear feedback
+- consistency
+
+---
+
+7. EDGE CASES
+--------------------------------------------------
+
+- if no target set, show prompt to set target
+- if partial logging, still count as logged
+- switching modes does not delete data
+- recalculate scoring based on selected mode
+
+---
+
+After implementation:
+- show updated Nutrition screen component
+- show how mode affects inputs and status block
+- confirm scoring still feeds dashboard correctly
