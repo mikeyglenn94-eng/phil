@@ -2460,7 +2460,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {m === "calories" ? "Calories" : "Protein focus"}
+                  {m === "calories" ? "Calories" : "Protein only"}
                 </button>
               ))}
             </div>
