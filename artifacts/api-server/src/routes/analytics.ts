@@ -38,9 +38,17 @@ function todayStr(): string {
 // ═══════════════════════════════════════════════════════════════════
 
 function paceToSeconds(pace: string): number | null {
-  const m = pace.trim().match(/^(\d+):(\d{2})$/);
-  if (!m) return null;
-  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  const s = pace.trim();
+  // MM:SS  e.g. "4:30"
+  const mmss = s.match(/^(\d+):(\d{2})$/);
+  if (mmss) return parseInt(mmss[1], 10) * 60 + parseInt(mmss[2], 10);
+  // Bare whole minutes e.g. "4"
+  const wholeMin = s.match(/^(\d+)$/);
+  if (wholeMin) return parseInt(wholeMin[1], 10) * 60;
+  // Decimal minutes e.g. "4.5"
+  const decMin = s.match(/^(\d+\.\d+)$/);
+  if (decMin) return Math.round(parseFloat(decMin[1]) * 60);
+  return null;
 }
 
 function secondsToPace(secs: number): string {
@@ -119,14 +127,18 @@ function isLogged(s: any): boolean {
     (ex.setReps ?? []).some((r: any) => r !== null) ||
     (ex.setWeights ?? []).some((w: any) => w !== null)
   );
+  // runLog with at least one entry = detailed run logged
   const hasRun = ((s.runLog ?? []) as any[]).length > 0;
+  // runSurface is only persisted when the client opens and saves a run session,
+  // so its presence (any value) proves the session was completed and saved
+  const hasRunSurface = s.runSurface != null;
   const hasComment = !!(s.clientComment);
   // WOD sessions log results into wodResult (rounds, reps, time, score, completed)
   const hasWodResult = s.wodResult != null &&
     Object.values(s.wodResult as Record<string, unknown>).some(
       v => v !== null && v !== undefined && v !== ""
     );
-  return hasStrength || hasRun || hasComment || hasWodResult;
+  return hasStrength || hasRun || hasRunSurface || hasComment || hasWodResult;
 }
 
 function computeStats(session: any): SessionStat {
@@ -441,7 +453,8 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
     b.totalVolume   += s.totalVolume;
     b.totalDistance += s.totalDistance;
     if (s.totalVolume > 0 || s.totalReps > 0) b.hasLift = true;
-    if (s.totalDistance > 0) b.hasRun = true;
+    // Count as a run week if distance logged OR it's a run-type session (even if intervals weren't detailed)
+    if (s.totalDistance > 0 || s.source === "run_brain" || s.source === "endurance_cycle") b.hasRun = true;
   }
 
   // ── byWeek ──────────────────────────────────────────────────────
