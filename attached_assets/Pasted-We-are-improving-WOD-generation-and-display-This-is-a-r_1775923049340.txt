@@ -1,0 +1,159 @@
+We are improving WOD generation and display.
+This is a refinement, NOT a rebuild.
+
+CRITICAL RULE:
+	•	Do NOT remove, replace, or degrade any existing working features
+	•	If unsure, extend rather than overwrite
+	•	Preserve all current functionality including:
+	•	editable preview
+	•	calendar saving
+	•	structured workout storage
+	•	exercise history
+
+⸻
+
+1. FIX WORKOUT DISPLAY STRUCTURE
+
+Problem:
+	•	Buy-in, rounds, and cash-out are not clearly visible in the main workout view
+	•	Users only understand structure when entering edit mode
+
+Solution:
+
+Update workout display UI to ALWAYS show:
+
+Sectioned layout
+
+BUY-IN
+	•	item(s)
+
+ROUNDS (xN)
+	•	item(s)
+
+CASH-OUT
+	•	item(s)
+
+Rules:
+	•	Each section must have a clear label (BUY-IN / ROUNDS / CASH-OUT)
+	•	Rounds must explicitly show “x6” (or relevant number)
+	•	Do NOT flatten the workout into a single list
+	•	Maintain clean spacing between sections
+	•	Keep visual hierarchy strong (headers > movements)
+
+⸻
+
+2. FIX WOD GENERATION LOGIC (TIME ACCURACY)
+
+Problem:
+	•	User asked for 40 min workout
+	•	System generated ~12–18 min workout
+
+Solution:
+
+Introduce time estimation before finalising workout
+
+For generated WODs:
+	•	Estimate time per movement:
+	•	Bike Erg: ~10–15 cal/min depending on assumed moderate pace
+	•	Bodyweight reps: ~20–40 sec per 10–15 reps
+	•	Estimate time per round
+	•	Multiply by rounds
+	•	Add buy-in + cash-out
+
+Then:
+
+IF total time is outside ±20% of requested duration:
+→ auto-adjust before showing preview
+
+Adjustment hierarchy:
+	1.	Increase/decrease bike calories
+	2.	Adjust rounds (primary lever)
+	3.	Adjust buy-in / cash-out
+	4.	Adjust reps (only if needed)
+
+Goal:
+	•	40 min request → actual 30–45 min realistic finish window
+
+⸻
+
+3. REMOVE IRRELEVANT PROGRAMMING LANGUAGE
+
+Problem:
+	•	Output includes:
+	•	“compound-first approach”
+	•	“gradual intensity increase”
+	•	This is not relevant to WOD construction and confuses users
+
+Solution:
+
+Remove all generic fitness/programming language unless explicitly useful
+
+Replace with:
+
+“Here’s your workout:”
+	•	structure only
+	•	no theory
+	•	no fluff
+
+Allowed:
+	•	short optional coaching note (1–2 lines max)
+
+⸻
+
+4. MAKE STRUCTURE EXPLICIT IN PREVIEW
+
+Preview must clearly show:
+
+Buy-in → Rounds → Cash-out flow
+
+Example format:
+
+BUY-IN
+100 cal Bike Erg
+
+6 ROUNDS
+20 cal Bike Erg
+12 Deficit Press-Ups
+15 GHD Sit-Ups
+
+CASH-OUT
+50 cal Bike Erg
+
+⸻
+
+5. PRESERVE EDITABILITY (CRITICAL)
+	•	All generated workouts must remain fully editable before saving
+	•	User must be able to:
+	•	change reps
+	•	change rounds
+	•	change order
+	•	add/remove movements
+	•	Do NOT lock structure
+
+⸻
+
+6. DO NOT REMOVE EXISTING FEATURES
+
+Explicitly protect:
+	•	workout preview editing
+	•	calendar integration
+	•	saving workouts
+	•	ability to revisit and edit saved workouts
+	•	exercise history system
+
+If any change risks breaking these:
+→ abort change and log warning instead
+
+⸻
+
+7. OPTIONAL (IF EASY): ADD TIME ESTIMATE DISPLAY
+
+After generation, show:
+
+Estimated time: 32–38 min
+
+This builds trust and solves the original issue upfront
+
+⸻
+
+END INSTRUCTION

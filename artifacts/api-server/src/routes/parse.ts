@@ -1438,14 +1438,37 @@ Supported formats: amrap, for_time, emom, rounds_for_time, chipper, interval.
 Rules:
 - Choose the TWO most appropriate formats given the movements. If the user specifies a format (e.g. "EMOM"), use it for the first option.
 - Design SPECIFIC workouts — decide all reps, distances, loads, and timing yourself.
-- Write a concise human-readable STRUCTURE string as a coach would write on a whiteboard.
+- Write a concise human-readable STRUCTURE string as a coach would write on a whiteboard (no theory, no fluff).
 - AMRAP rounds should complete in 60-90s. EMOM minutes achievable in 35-45s.
 - Return ONLY valid JSON, no markdown fences.
+- Do NOT include coaching language such as "compound-first approach", "gradual intensity increase", "progressive overload", or any programming theory in any field.
 
 TITLE RULES — "name" field:
 - Use a publish-ready title like "EMOM 21", "AMRAP 20", "For Time: 21-15-9", "Intervals: 6×2 Min Row".
 - Do NOT use generic names like "WOD", "test", or "Session".
 - If the user provided a title hint, use it only if it is meaningful.
+
+TIME ACCURACY — CRITICAL:
+If the user specifies a duration (e.g. "40 min workout"), you MUST estimate total time before finalising and auto-adjust to hit ±20% of the target.
+
+Time estimates (moderate pace):
+- Bike/Row Erg calories: 1 cal ≈ 6 sec (so 20 cal ≈ 2 min, 100 cal ≈ 10 min)
+- Bodyweight reps (press-ups, air squats, sit-ups, GHD): 10 reps ≈ 25 sec
+- Heavy reps (thrusters, deadlifts, HSPU): 10 reps ≈ 45 sec
+- Run: 200m ≈ 60 sec, 400m ≈ 2 min
+- Gymnastics (pull-ups, ring dips): 10 reps ≈ 40 sec
+
+Estimation formula:
+  time_per_round = sum of time for each movement in the round
+  total_workout_time = (time_per_round × rounds) + buy_in_time + cash_out_time + rest_between_rounds
+
+Adjustment hierarchy (use in order until target is within ±20%):
+  1. Adjust calories (bike/row) — easiest lever
+  2. Adjust rounds — most impactful
+  3. Adjust buy-in / cash-out volume
+  4. Adjust reps — last resort
+
+Always include "estimatedMinutes": [min, max] in each option (e.g. [32, 38] for a 35-min finish).
 
 CRITICAL — blocks field rules:
 - ALWAYS include "amount". NEVER use "duration", "time", "reps", or other synonyms — only "amount".
@@ -1587,6 +1610,9 @@ Response format — EMOM example:
         scoreType: opt.resultType ?? "",
         wod: wodCanonical,
         exercises,
+        ...(Array.isArray(opt.estimatedMinutes) && opt.estimatedMinutes.length === 2
+          ? { estimatedMinutes: opt.estimatedMinutes as [number, number] }
+          : {}),
       };
     });
 

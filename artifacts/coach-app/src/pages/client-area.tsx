@@ -79,6 +79,53 @@ function getSessionTypeBadge(session: Session): { label: string; className: stri
   }
 }
 
+/** Renders a structured BUY-IN / ROUNDS / CASH-OUT breakdown from a WOD option object. */
+function renderWodStructure(opt: any): React.ReactNode {
+  const blocks: any[] = opt.wod?.blocks ?? [];
+  if (blocks.length === 0) {
+    return opt.structure
+      ? <p className="text-xs text-muted-foreground leading-relaxed mt-1">{opt.structure}</p>
+      : null;
+  }
+  const isMulti = blocks.length > 1 || blocks.some((b: any) => b.label);
+  return (
+    <div className={`${isMulti ? "space-y-2" : "space-y-0.5"} mt-1.5`}>
+      {blocks.map((block: any, bi: number) => {
+        const label: string = block.label ?? (block.rounds ? `${block.rounds} rounds` : "");
+        return (
+          <div key={bi}>
+            {label && (
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary/50 mb-0.5">
+                {label}
+              </p>
+            )}
+            {(block.steps ?? []).map((step: any, si: number) => {
+              const name: string = step.movement?.name ?? "";
+              const unitRaw: string = step.target?.unit ?? "";
+              const val = step.target?.targetText
+                ? step.target.targetText
+                : step.target?.value != null
+                  ? (unitRaw === "reps" ? String(step.target.value) : `${step.target.value} ${unitRaw}`.trim())
+                  : "";
+              const load: string = step.load?.display ?? "";
+              return (
+                <p key={si} className="text-xs text-foreground/75">
+                  {[val, name, load ? `(${load})` : ""].filter(Boolean).join(" ")}
+                </p>
+              );
+            })}
+          </div>
+        );
+      })}
+      {Array.isArray(opt.estimatedMinutes) && opt.estimatedMinutes.length === 2 && (
+        <p className="text-[10px] text-primary/50 font-medium pt-0.5">
+          ⏱ Est. {opt.estimatedMinutes[0]}–{opt.estimatedMinutes[1]} min
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface ClientAreaProps {
   clientIdOverride?: number;
   mode?: "coach" | "client";
@@ -4132,7 +4179,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     {quickAddWodOptions.map((opt: any, i: number) => (
                       <button
                         key={i}
-                        className="w-full text-left rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5 hover:border-primary/50 hover:bg-primary/10 transition-colors"
+                        className="w-full text-left rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 hover:border-primary/50 hover:bg-primary/10 transition-colors"
                         onClick={() => { setParsedAiSession(opt); setQuickAddWodOptions(null); }}
                       >
                         <div className="flex items-center justify-between mb-0.5">
@@ -4142,9 +4189,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                           <p className="text-xs text-primary font-medium">Tap to select →</p>
                         </div>
                         <p className="text-sm font-bold leading-snug">{opt.name || "WOD"}</p>
-                        {opt.structure && (
-                          <p className="text-xs text-muted-foreground leading-relaxed">{opt.structure}</p>
-                        )}
+                        {renderWodStructure(opt)}
                       </button>
                     ))}
                     <button
@@ -4163,21 +4208,25 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                         <p className="text-xs text-emerald-600 font-medium">✓ Ready to add</p>
                       </div>
                       <p className="text-sm font-bold leading-snug">{parsedAiSession.name || "Session"}</p>
-                      {(parsedAiSession.exercises ?? []).length > 0 && (
-                        <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {(parsedAiSession.exercises as any[]).map((e: any, i: number) => (
-                            <div key={i} className="flex items-baseline justify-between gap-2">
-                              <span className="text-xs text-foreground/80 truncate">{e.name}</span>
-                              <span className="text-xs text-muted-foreground shrink-0 font-mono">
-                                {[e.sets && e.reps ? `${e.sets}×${e.reps}` : e.sets ? `${e.sets} sets` : null, e.weight, e.rpe ? `@RPE ${e.rpe}` : null].filter(Boolean).join(" ")}
-                              </span>
+                      {parsedAiSession.source === "wod_brain"
+                        ? renderWodStructure(parsedAiSession)
+                        : (parsedAiSession.exercises ?? []).length > 0
+                          ? (
+                            <div className="space-y-1 max-h-32 overflow-y-auto mt-1">
+                              {(parsedAiSession.exercises as any[]).map((e: any, i: number) => (
+                                <div key={i} className="flex items-baseline justify-between gap-2">
+                                  <span className="text-xs text-foreground/80 truncate">{e.name}</span>
+                                  <span className="text-xs text-muted-foreground shrink-0 font-mono">
+                                    {[e.sets && e.reps ? `${e.sets}×${e.reps}` : e.sets ? `${e.sets} sets` : null, e.weight, e.rpe ? `@RPE ${e.rpe}` : null].filter(Boolean).join(" ")}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                      {parsedAiSession.structure && !(parsedAiSession.exercises ?? []).length && (
-                        <p className="text-xs text-muted-foreground leading-relaxed">{parsedAiSession.structure}</p>
-                      )}
+                          )
+                          : parsedAiSession.structure
+                            ? <p className="text-xs text-muted-foreground leading-relaxed mt-1">{parsedAiSession.structure}</p>
+                            : null
+                      }
                     </div>
                     <p className="text-xs text-muted-foreground text-center font-medium">Where would you like to save this?</p>
                     <div className="grid grid-cols-1 gap-2">
@@ -4352,7 +4401,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               {quickAddWodOptions.map((opt, i) => (
                 <button
                   key={i}
-                  className="w-full text-left rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 space-y-1.5 hover:border-primary/50 hover:bg-primary/10 transition-colors"
+                  className="w-full text-left rounded-xl border bg-primary/5 border-primary/20 px-3 py-3 hover:border-primary/50 hover:bg-primary/10 transition-colors"
                   onClick={() => {
                     setParsedQuickSession(opt);
                     setEditableSession(parseWodToEditable(opt));
@@ -4366,9 +4415,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                     <p className="text-xs text-primary font-medium">Tap to select →</p>
                   </div>
                   <p className="text-sm font-bold leading-snug">{opt.name || "WOD"}</p>
-                  {opt.structure && (
-                    <p className="text-xs text-muted-foreground leading-relaxed">{opt.structure}</p>
-                  )}
+                  {renderWodStructure(opt)}
                 </button>
               ))}
               <button
