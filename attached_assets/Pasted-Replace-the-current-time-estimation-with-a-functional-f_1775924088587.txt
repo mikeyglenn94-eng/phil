@@ -1,0 +1,134 @@
+Replace the current time estimation with a functional fitness–specific model.
+
+Core principle:
+Estimate duration from workout format + movement types + fatigue, not total volume.
+
+1) Identify workout format first
+
+Classify the workout into one of these:
+- AMRAP
+- EMOM / interval-based (E2MOM, etc)
+- For time (rounds or chipper)
+- Strength / sets & reps
+- Mixed (multiple sections)
+
+Rules:
+- If the workout has an explicit time (AMRAP 20, EMOM 30), that is the duration.
+- Do not override explicit time formats with estimates.
+
+2) Break workout into sections
+
+Parse into:
+- Part A / Part B / Finisher
+- Buy-in
+- Main work
+- Cash-out
+- Rest intervals
+
+Each section must be estimated separately, then summed.
+
+3) Estimate movements by category, not generically
+
+Each movement type must have its own time model.
+
+Examples of categories:
+- Machine cals (bike, row, ski)
+- Running distance
+- Barbell cycling (light/moderate/heavy)
+- Strength reps (low reps, high load)
+- Gymnastics (pull-ups, toes-to-bar, HSPU)
+- Simple bodyweight (press-ups, sit-ups, air squats)
+- Burpees (high fatigue multiplier)
+- Carries / holds
+- Box work / lunges / step-ups
+
+Each category should have:
+- baseline pace
+- fatigue sensitivity
+
+4) Build round-based estimates properly
+
+For “rounds for time”:
+- estimate one round
+- apply fatigue scaling across rounds
+- multiply by round count
+
+Do not assume constant pace across all rounds.
+
+5) Add fatigue scaling
+
+Functional fitness slows down over time.
+
+Apply:
+- small slowdown for simple movements
+- larger slowdown for cyclical fatigue-heavy work (bike, burpees, thrusters, wall balls)
+
+Later rounds should take longer than early rounds.
+
+6) Add transition time
+
+Include:
+- moving between exercises
+- getting on/off machines
+- loading/unloading equipment
+
+Keep it small but consistent per movement change.
+
+7) Handle rest correctly
+
+- If rest is written, include it exactly
+- If no rest is written, assume continuous effort
+- Do not invent large rest periods
+
+8) Return a range, not a single number
+
+Output:
+- low estimate (fast pace)
+- likely estimate (moderate pace)
+- high estimate (fatigued pace)
+
+Example:
+Estimated time: 22–28 min
+Likely: ~25 min
+
+9) Confidence scoring
+
+Return:
+- high confidence: explicit time format
+- medium: clear rounds + movements
+- low: ambiguous or poorly parsed structure
+
+If confidence is low, show that clearly.
+
+10) Fail safely
+
+If structure is unclear:
+- do not estimate
+- show: “Time estimate unavailable until workout structure is confirmed”
+
+11) Support functional fitness-specific patterns
+
+The system must correctly handle:
+- chippers (long list, one round)
+- rounds for time
+- interval work (EMOM / E2MOM)
+- mixed modal workouts (machine + bodyweight + barbell)
+- multiple sections in one session
+
+Do not treat workouts as flat lists of reps.
+
+12) Keep estimation independent from UI wording
+
+The estimation engine must rely on structured workout data, not raw text descriptions.
+Parsing errors should not produce misleading time estimates.
+
+Implementation flow:
+
+1. Parse workout into structured format
+2. Classify workout type
+3. Classify each movement
+4. Estimate movement durations
+5. Apply round logic
+6. Apply fatigue scaling
+7. Add transitions + rest
+8. Output low / likely / high estimate + confidence

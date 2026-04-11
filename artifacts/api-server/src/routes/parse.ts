@@ -1448,27 +1448,80 @@ TITLE RULES — "name" field:
 - Do NOT use generic names like "WOD", "test", or "Session".
 - If the user provided a title hint, use it only if it is meaningful.
 
-TIME ACCURACY — CRITICAL:
-If the user specifies a duration (e.g. "40 min workout"), you MUST estimate total time before finalising and auto-adjust to hit ±20% of the target.
+TIME ESTIMATION — CRITICAL:
+Never estimate duration from total reps or calories alone. Use the structured model below.
 
-Time estimates (moderate pace):
-- Bike/Row Erg calories: 1 cal ≈ 6 sec (so 20 cal ≈ 2 min, 100 cal ≈ 10 min)
-- Bodyweight reps (press-ups, air squats, sit-ups, GHD): 10 reps ≈ 25 sec
-- Heavy reps (thrusters, deadlifts, HSPU): 10 reps ≈ 45 sec
-- Run: 200m ≈ 60 sec, 400m ≈ 2 min
-- Gymnastics (pull-ups, ring dips): 10 reps ≈ 40 sec
+STEP 1 — CLASSIFY FORMAT FIRST:
+- AMRAP N min / EMOM N min / EMOM N with M movements → duration IS N minutes. Do not override it. estimatedMinutes = [N-2, N+2].
+- E2MOM N / Interval with explicit time per interval → calculate from interval count × interval length.
+- For Time / Rounds For Time / Chipper → estimate using steps 2–7 below.
 
-Estimation formula:
-  time_per_round = sum of time for each movement in the round
-  total_workout_time = (time_per_round × rounds) + buy_in_time + cash_out_time + rest_between_rounds
+STEP 2 — BREAK INTO SECTIONS:
+Estimate each section (buy-in, main work, cash-out, finisher) independently, then sum.
 
-Adjustment hierarchy (use in order until target is within ±20%):
-  1. Adjust calories (bike/row) — easiest lever
-  2. Adjust rounds — most impactful
+STEP 3 — MOVEMENT TIME MODELS (per-rep or per-unit, moderate pace):
+Machine calories:
+  - Bike Erg: 1 cal = 7 sec (high fatigue multiplier: 1.15× per round)
+  - Row Erg:  1 cal = 8 sec (fatigue multiplier: 1.12× per round)
+  - Ski Erg:  1 cal = 9 sec (fatigue multiplier: 1.12× per round)
+
+Running:
+  - 100m = 30 sec, 200m = 60 sec, 400m = 2 min, 1km = 5 min (fatigue multiplier: 1.05×)
+
+Simple bodyweight (press-ups, air squats, sit-ups, GHD sit-ups, jumping jacks):
+  - 10 reps = 20 sec (fatigue multiplier: 1.08× per round)
+
+Gymnastics (pull-ups, ring dips, toes-to-bar, muscle-ups, HSPU):
+  - 10 reps = 40 sec (fatigue multiplier: 1.18× per round)
+
+Barbell / dumbbell cycling (light–moderate: thrusters, power cleans, KB swings, wall balls):
+  - 10 reps = 40 sec (fatigue multiplier: 1.15× per round)
+
+Heavy barbell strength reps (deadlifts, squats, strict press at high load):
+  - 10 reps = 60 sec (fatigue multiplier: 1.05× per round)
+
+Burpees (any variation):
+  - 10 reps = 50 sec (fatigue multiplier: 1.25× per round — highest)
+
+Carries, holds, sled work:
+  - 10m = 15 sec carry; 30 sec per hold set
+
+Box / step work (box jumps, step-ups, lunges):
+  - 10 reps = 30 sec (fatigue multiplier: 1.10× per round)
+
+STEP 4 — APPLY FATIGUE SCALING FOR ROUNDS:
+For "N rounds for time" with M movements per round:
+  round_1_time = sum of (reps ÷ 10 × movement_pace) for each movement
+  round_k_time = round_1_time × fatigue_multiplier^(k-1)   (use the highest multiplier in the round)
+  total_main_work = sum of round_1_time through round_N_time
+
+STEP 5 — ADD TRANSITIONS (per movement change):
+  - Moving between exercises: +5 sec each
+  - Getting on/off a machine: +10 sec
+  Keep small but consistent.
+
+STEP 6 — ADD REST:
+  - If rest is explicitly written: include it exactly.
+  - If no rest is written: assume continuous effort. Do not add rest.
+
+STEP 7 — COMPUTE RANGE:
+  low_estimate  = total × 0.85  (fast athlete)
+  high_estimate = total × 1.20  (fatigued athlete)
+  Round to nearest minute.
+  estimatedMinutes = [low_estimate, high_estimate]
+
+ADJUSTMENT HIERARCHY (if estimated time ≠ target duration by >20%):
+  1. Adjust machine calories (biggest single lever)
+  2. Adjust round count
   3. Adjust buy-in / cash-out volume
   4. Adjust reps — last resort
 
-Always include "estimatedMinutes": [min, max] in each option (e.g. [32, 38] for a 35-min finish).
+CONFIDENCE:
+  - high: explicit time format (AMRAP, EMOM) or clear rounds + simple movements
+  - medium: multi-segment or mixed modal
+  - low: ambiguous structure → set estimatedMinutes to null and do not guess
+
+Always include "estimatedMinutes": [min, max] (or null if confidence is low) in each option.
 
 CRITICAL — blocks field rules:
 - ALWAYS include "amount". NEVER use "duration", "time", "reps", or other synonyms — only "amount".
