@@ -805,6 +805,30 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     exitSelectionMode();
   };
 
+  /** Strips all logged/result data from a session so the copy is a clean prescription. */
+  function cleanSessionForCopy(session: any, newId: string, newDate: string): any {
+    const cleanedExercises = (session.exercises ?? []).map((ex: any) => ({
+      ...ex,
+      id: crypto.randomUUID(),
+      // result fields — cleared
+      clientComment: null,
+      setWeights: null,
+      setReps: null,
+    }));
+    return {
+      ...session,
+      id: newId,
+      date: newDate,
+      exercises: cleanedExercises,
+      // session-level result fields — cleared
+      clientComment: null,
+      wodResult: null,
+      runLog: null,
+      runSurface: null,
+      trailDifficulty: null,
+    };
+  }
+
   const copySelectedSessions = () => {
     const allSessions: Session[] = (clientProgrammes ?? []).flatMap(p => p.sessions as Session[]);
     const selected = allSessions.filter(s => selectedSessionIds.has(s.id));
@@ -825,7 +849,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     const newSessions = sessions.map((s, i) => {
       const offset = s.date ? differenceInDays(parseISO(s.date), baseDateObj) : 0;
       const newDate = format(addDays(targetDateObj, offset), "yyyy-MM-dd");
-      return { ...s, id: `session-${now}-${i}`, date: newDate };
+      return cleanSessionForCopy(s, `session-${now}-${i}`, newDate);
     });
     try {
       const targetProg = (clientProgrammes ?? [])[0];
@@ -1043,9 +1067,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             sets: Math.max(1, Math.round((ex.sets || 0) + setsIncrement * week)),
             reps: Math.max(1, Math.round((ex.reps || 0) * Math.pow(repsMultiplier, week))),
             ...(ex.perSetReps ? { perSetReps: (ex.perSetReps as number[]).map(r => Math.max(1, Math.round(r * Math.pow(repsMultiplier, week)))) } : {}),
-            ...(ex.setReps ? { setReps: (ex.setReps as number[]).map(r => Math.max(1, Math.round(r * Math.pow(repsMultiplier, week)))) } : {}),
+            // result fields — never copy logged performance into a new session
+            clientComment: null,
+            setWeights: null,
+            setReps: null,
           }));
-          newSessions.push({ ...session, id: crypto.randomUUID(), date: newDate, exercises: newExercises } as Session);
+          const cleanedSession = {
+            ...session,
+            id: crypto.randomUUID(),
+            date: newDate,
+            exercises: newExercises,
+            // session-level result fields — cleared
+            clientComment: null,
+            wodResult: null,
+            runLog: null,
+            runSurface: null,
+            trailDifficulty: null,
+          };
+          newSessions.push(cleanedSession as Session);
         }
       }
       result.push({ programmeId: prog.id, sessions: newSessions });
