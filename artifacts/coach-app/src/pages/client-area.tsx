@@ -1274,6 +1274,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   // "schedule" → default: send to calendar command parser
   function classifyCoachIntent(input: string): "plan" | "library" | "review" | "schedule" {
     const lower = input.toLowerCase();
+    // Copy/paste/repeat commands are always calendar (schedule) commands — check before "plan" to avoid
+    // "copy this week" being misclassified because it contains the word "week"
+    if (/\b(copy|paste|repeat|duplicate|clone|reschedule|remap|shift|move sessions)\b/.test(lower)) return "schedule";
     if (/\b(build|create|generate|plan|make|design|programme|program|session|workout|week)\b/.test(lower)) return "plan";
     if (/\b(find|search|browse|show me|look for|library|template|from library)\b/.test(lower)) return "library";
     if (/\b(review|check|is this|balanced|analyse|analyze|explain|what.s missing|what am i missing)\b/.test(lower)) return "review";
