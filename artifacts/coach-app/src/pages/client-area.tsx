@@ -805,28 +805,53 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     exitSelectionMode();
   };
 
-  /** Strips all logged/result data from a session so the copy is a clean prescription. */
-  function cleanSessionForCopy(session: any, newId: string, newDate: string): any {
-    const cleanedExercises = (session.exercises ?? []).map((ex: any) => ({
+  /**
+   * Single source of truth for result vs prescription fields.
+   *
+   * PRESCRIPTION (kept):  exercise name, order, sets, reps, rpe (target), perSetReps,
+   *   perSetRpe (target), rest, tempo, notes, rawText, weekProgression, source,
+   *   session type, workout structure (wod.blocks / segments), target distance/time/
+   *   calories, coaching notes, color.
+   *
+   * RESULT (cleared):     setWeights, setReps, clientComment (exercise-level),
+   *   session clientComment, wodResult (score / rounds / time / completion),
+   *   runLog (actual pace, distance, equivalent road pace per interval),
+   *   runSurface, trailDifficulty.
+   *
+   * Applies identically to strength, run, WOD/Hyrox, and mixed sessions.
+   */
+  function clearExerciseResults(ex: any): any {
+    return {
       ...ex,
       id: crypto.randomUUID(),
-      // result fields — cleared
-      clientComment: null,
-      setWeights: null,
-      setReps: null,
-    }));
+      // ── Result fields ────────────────────────────────────────────────────────
+      clientComment: null,   // athlete's post-set note to coach
+      setWeights: null,      // weight logged per set
+      setReps: null,         // reps achieved per set
+      // NOTE: ex.rpe / ex.perSetRpe are PRESCRIPTION (coach-prescribed target)
+      // — they are intentionally kept. There is no separate logged-RPE field.
+    };
+  }
+
+  /** Strips all logged/result data from a session so the copy is a clean prescription. */
+  function clearSessionResults(session: any, newId: string, newDate: string): any {
     return {
       ...session,
       id: newId,
       date: newDate,
-      exercises: cleanedExercises,
-      // session-level result fields — cleared
-      clientComment: null,
-      wodResult: null,
-      runLog: null,
-      runSurface: null,
-      trailDifficulty: null,
+      exercises: (session.exercises ?? []).map(clearExerciseResults),
+      // ── Session-level result fields ──────────────────────────────────────────
+      clientComment: null,    // athlete's post-session note
+      wodResult: null,        // WOD: score, rounds, time, completion status
+      runLog: null,           // run intervals: actual pace, distance, equiv road pace
+      runSurface: null,       // road / trail (logged environment, not prescription)
+      trailDifficulty: null,  // moderate / hilly / technical
     };
+  }
+
+  /** Alias used by paste-to-date — delegates to the shared clearing function. */
+  function cleanSessionForCopy(session: any, newId: string, newDate: string): any {
+    return clearSessionResults(session, newId, newDate);
   }
 
   const copySelectedSessions = () => {
@@ -1061,30 +1086,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           const dayOfWeek = parseISO(session.date).getDay();
           const dayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
           const newDate = format(addDays(weekStart, dayOffset), "yyyy-MM-dd");
-          const newExercises = ((session as any).exercises ?? []).map((ex: any) => ({
+          // Step 1: apply week-over-week progression to prescription fields only
+          const progressedExercises = ((session as any).exercises ?? []).map((ex: any) => ({
             ...ex,
-            id: crypto.randomUUID(),
-            sets: Math.max(1, Math.round((ex.sets || 0) + setsIncrement * week)),
-            reps: Math.max(1, Math.round((ex.reps || 0) * Math.pow(repsMultiplier, week))),
-            ...(ex.perSetReps ? { perSetReps: (ex.perSetReps as number[]).map(r => Math.max(1, Math.round(r * Math.pow(repsMultiplier, week)))) } : {}),
-            // result fields — never copy logged performance into a new session
-            clientComment: null,
-            setWeights: null,
-            setReps: null,
+            sets: setsIncrement !== 0 ? Math.max(1, Math.round((ex.sets || 0) + setsIncrement * week)) : ex.sets,
+            reps: repsMultiplier !== 1.0 ? String(Math.max(1, Math.round(Number(ex.reps || 0) * Math.pow(repsMultiplier, week)))) : ex.reps,
+            ...(ex.perSetReps && repsMultiplier !== 1.0 ? {
+              perSetReps: (ex.perSetReps as (string | null)[]).map(r =>
+                r != null ? String(Math.max(1, Math.round(Number(r) * Math.pow(repsMultiplier, week)))) : null
+              ),
+            } : {}),
           }));
-          const cleanedSession = {
-            ...session,
-            id: crypto.randomUUID(),
-            date: newDate,
-            exercises: newExercises,
-            // session-level result fields — cleared
-            clientComment: null,
-            wodResult: null,
-            runLog: null,
-            runSurface: null,
-            trailDifficulty: null,
-          };
-          newSessions.push(cleanedSession as Session);
+          // Step 2: clear ALL result fields using the shared helper — consistent
+          // across strength, run, WOD/Hyrox, and mixed sessions.
+          const progressedSession = { ...(session as any), exercises: progressedExercises };
+          newSessions.push(clearSessionResults(progressedSession, crypto.randomUUID(), newDate) as Session);
         }
       }
       result.push({ programmeId: prog.id, sessions: newSessions });
