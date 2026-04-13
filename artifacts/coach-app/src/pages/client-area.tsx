@@ -2204,6 +2204,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   }
   const [showGuide, setShowGuide] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
+  const [editDescription, setEditDescription] = useState("");
+  const [editDescriptionOriginal, setEditDescriptionOriginal] = useState("");
   const [editCalories, setEditCalories] = useState("");
   const [editProtein, setEditProtein] = useState("");
   const [editCarbs, setEditCarbs] = useState("");
@@ -2407,6 +2409,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const startEditing = (entry: NutritionEntry) => {
     setEditingEntryId(entry.id);
+    setEditDescription(entry.description ?? "");
+    setEditDescriptionOriginal(entry.description ?? "");
     setEditCalories(entry.calories?.toString() ?? "");
     setEditProtein(entry.protein ? parseFloat(entry.protein).toFixed(1) : "");
     setEditCarbs(entry.carbs ? parseFloat(entry.carbs).toFixed(1) : "");
@@ -2415,19 +2419,22 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   const handleSaveEdit = async (entryId: number) => {
     try {
+      const descriptionChanged = editDescription.trim() !== editDescriptionOriginal.trim();
       await updateMutation.mutateAsync({
         clientId,
         entryId,
-        data: {
-          calories: editCalories ? parseInt(editCalories, 10) : undefined,
-          protein: editProtein ? parseFloat(editProtein) : undefined,
-          carbs: editCarbs ? parseFloat(editCarbs) : undefined,
-          fats: editFats ? parseFloat(editFats) : undefined,
-        },
+        data: descriptionChanged
+          ? { description: editDescription.trim() }
+          : {
+              calories: editCalories ? parseInt(editCalories, 10) : undefined,
+              protein: editProtein ? parseFloat(editProtein) : undefined,
+              carbs: editCarbs ? parseFloat(editCarbs) : undefined,
+              fats: editFats ? parseFloat(editFats) : undefined,
+            },
       });
       queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(clientId, { date: selectedDate }) });
       setEditingEntryId(null);
-      toast({ title: "Updated" });
+      toast({ title: descriptionChanged ? "Re-parsed and updated" : "Updated" });
     } catch {
       toast({ title: "Error updating entry", variant: "destructive" });
     }
@@ -2961,54 +2968,87 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                   <div key={entry.id} className="card">
                     <div className="food-entry">
                       <div className="food-entry-header">
-                        <p className="food-entry-title flex-1">{entry.description}</p>
+                        {isEditing ? (
+                          <textarea
+                            autoFocus
+                            value={editDescription}
+                            onChange={e => setEditDescription(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Escape") setEditingEntryId(null);
+                              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSaveEdit(entry.id);
+                            }}
+                            rows={2}
+                            className="flex-1 text-sm bg-muted/50 border border-primary/30 rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/60 resize-none leading-snug"
+                            style={{ touchAction: "manipulation" }}
+                          />
+                        ) : (
+                          <p className="food-entry-title flex-1">{entry.description}</p>
+                        )}
                         <div className="food-entry-actions">
                           {isEditing ? (
-                            <button
-                              onClick={() => handleSaveEdit(entry.id)}
-                              className="icon-button text-green-500 hover:text-green-600"
-                              title="Save"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleSaveEdit(entry.id)}
+                                className="icon-button text-green-500 hover:text-green-600"
+                                title="Save"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setEditingEntryId(null)}
+                                className="icon-button hover:text-muted-foreground"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           ) : (
                             <button
                               onClick={() => startEditing(entry)}
                               className="icon-button"
-                              title="Edit macros"
+                              title="Edit"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          <button
-                            onClick={() => { setEditingEntryId(null); handleDelete(entry.id); }}
-                            className="icon-button hover:text-red-400"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!isEditing && (
+                            <button
+                              onClick={() => handleDelete(entry.id)}
+                              className="icon-button hover:text-red-400"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
 
                       {isEditing ? (
-                        <div className="grid grid-cols-4 gap-2">
-                          {[
-                            { label: "kcal", value: editCalories, set: setEditCalories, color: "text-orange-500" },
-                            { label: "P (g)", value: editProtein, set: setEditProtein, color: "text-blue-500" },
-                            { label: "C (g)", value: editCarbs, set: setEditCarbs, color: "text-yellow-600" },
-                            { label: "F (g)", value: editFats, set: setEditFats, color: "text-pink-500" },
-                          ].map(({ label, value, set, color }) => (
-                            <div key={label} className="flex flex-col gap-0.5">
-                              <label className={`text-[10px] font-semibold ${color}`}>{label}</label>
-                              <input
-                                type="number"
-                                value={value}
-                                onChange={e => set(e.target.value)}
-                                className="w-full text-xs bg-muted/50 border border-muted rounded-lg px-2 py-1.5 outline-none focus:border-primary/40 text-center"
-                                onKeyDown={e => { if (e.key === "Enter") handleSaveEdit(entry.id); if (e.key === "Escape") setEditingEntryId(null); }}
-                              />
-                            </div>
-                          ))}
+                        <div className="mt-2">
+                          <p className="text-[10px] text-muted-foreground mb-1.5">
+                            Edit description to re-parse with AI, or adjust macros directly:
+                          </p>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[
+                              { label: "kcal", value: editCalories, set: setEditCalories, color: "text-orange-500" },
+                              { label: "P (g)", value: editProtein, set: setEditProtein, color: "text-blue-500" },
+                              { label: "C (g)", value: editCarbs, set: setEditCarbs, color: "text-yellow-600" },
+                              { label: "F (g)", value: editFats, set: setEditFats, color: "text-pink-500" },
+                            ].map(({ label, value, set, color }) => (
+                              <div key={label} className="flex flex-col gap-0.5">
+                                <label className={`text-[10px] font-semibold ${color}`}>{label}</label>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  value={value}
+                                  onChange={e => set(e.target.value)}
+                                  className="w-full text-xs bg-muted/50 border border-muted rounded-lg px-2 py-1.5 outline-none focus:border-primary/40 text-center"
+                                  onKeyDown={e => { if (e.key === "Enter") handleSaveEdit(entry.id); if (e.key === "Escape") setEditingEntryId(null); }}
+                                  style={{ touchAction: "manipulation" }}
+                                />
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ) : (
                         entry.calories !== null && (

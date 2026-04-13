@@ -1,0 +1,47 @@
+Fix two issues in the nutrition logger.
+	1.	Protein estimation is too conservative for meat-heavy meals.
+Update the nutrition parsing and estimation logic so that when a meal contains explicit animal protein sources like beef burgers, duck, chicken thigh, steak, mince, salmon, tuna, eggs, or similar, protein is not underestimated by using vague low-protein default servings.
+
+Rules:
+	•	Prioritise protein accuracy over calorie accuracy when the user says they only care about protein.
+	•	If a meal contains multiple named protein sources, estimate each separately and sum them.
+	•	Use realistic typical protein values for cooked foods, especially:
+	•	lean beef / beef burger: about 25 to 27g protein per 100g cooked
+	•	chicken thigh: about 24 to 26g protein per 100g cooked edible portion
+	•	duck: about 18 to 20g protein per 100g cooked
+	•	chickpeas: about 7g protein per half cup cooked
+	•	Do not let a meal with several clear protein sources collapse into a generic low-protein restaurant estimate.
+	•	If no weights are given, use sensible typical portions, but bias toward realistic portions for adult meals rather than overly small defaults.
+	•	In the assumptions text, clearly show the assumed portion for each protein source.
+
+Example:
+For “2x 3% fat beef burgers, crispy duck salad, skin on chicken thigh, portion of chickpeas”, the protein estimate should land much closer to roughly 100 to 110g than 71g.
+	2.	Fix editing in the food entry cards.
+Right now when I click edit on a logged meal, I cannot type into the edit field. Fix the edit interaction so it behaves like a normal text input on mobile and desktop.
+
+Requirements:
+	•	Clicking edit should open the meal text in an active editable input or textarea immediately
+	•	The field must receive focus automatically
+	•	Keyboard input must work straight away without needing a second tap
+	•	On mobile Safari, tapping into the field must not be blocked by any overlay, disabled state, event handler, or focus bug
+	•	Save and cancel actions should still work
+	•	Make sure the edit mode does not accidentally render a read-only element styled like an input
+
+Please investigate and fix the root cause, not just the styling. Check for:
+	•	missing onChange handlers
+	•	controlled input state not updating
+	•	readOnly or disabled being set accidentally
+	•	z-index or overlay blocking taps
+	•	pointer-events issues
+	•	focus not being applied after render
+	•	edit state mounting the wrong component
+
+After fixing:
+	•	test adding a meal
+	•	test editing it by typing immediately
+	•	test on narrow mobile viewport
+	•	confirm that protein estimates for multi-protein meals are no longer obviously undercounted
+
+And if you want a tighter version for the edit bug alone, use this:
+
+Fix the meal card edit function. When I tap edit, the text field appears but I cannot type into it. Make the edit field a proper controlled editable textarea or input, auto-focus it on open, ensure onChange updates state, and remove anything blocking typing or taps on mobile Safari.

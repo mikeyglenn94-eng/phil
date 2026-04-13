@@ -226,6 +226,7 @@ export type AddNutritionEntryBody = {
 };
 
 export type UpdateNutritionEntryBody = {
+  description?: string;
   calories?: number;
   protein?: number;
   carbs?: number;

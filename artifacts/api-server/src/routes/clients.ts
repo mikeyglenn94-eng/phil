@@ -17,6 +17,71 @@ function macroCalories(protein: number, carbs: number, fats: number) {
   return protein * 4 + carbs * 4 + fats * 9;
 }
 
+// ── Shared AI nutrition parsing ───────────────────────────────────────────────
+const NUTRITION_SYSTEM_PROMPT = `You are a precise sports nutrition expert helping athletes track their macros accurately.
+
+The user will describe food or meals they ate. Your job is to estimate macronutrients as accurately as possible and be transparent about any assumptions you make.
+
+QUANTITIES: If the user gives a specific quantity (e.g. "200g chicken", "1 cup oats"), use that exact amount. If no quantity is given, assume a realistic adult male portion and ALWAYS state your assumption.
+
+PROTEIN ESTIMATION — critical rules:
+- ALWAYS estimate each named protein source separately, then sum. NEVER collapse a multi-protein meal into a single generic restaurant estimate.
+- Use these values for cooked / edible portions:
+  * Lean beef / beef mince / beef burger (3–5% fat): ~26g protein per 100g cooked
+  * Chicken breast: ~31g protein per 100g cooked
+  * Chicken thigh (skin-off cooked edible portion): ~25g protein per 100g
+  * Duck (cooked, skin removed for eating): ~19g protein per 100g
+  * Pork loin / pork chop: ~27g protein per 100g cooked
+  * Salmon / trout: ~25g protein per 100g cooked
+  * Tuna (tinned in water, drained): ~26g protein per 100g
+  * Prawns / shrimp: ~24g protein per 100g cooked
+  * Eggs: ~6g per whole egg
+  * Greek yoghurt (full fat): ~9g per 100g
+  * Chickpeas (cooked / canned): ~9g per 100g (~7g per half-cup)
+  * Lentils (cooked): ~9g per 100g
+  * Other legumes: ~8g per 100g cooked
+- Typical adult male portions when no weight is given:
+  * Beef burger (restaurant or homemade): 150–200g per burger → ~39–52g protein per burger
+  * Chicken thigh (1 large thigh, cooked): ~150g edible → ~37g protein
+  * Duck (restaurant salad portion): ~100–120g meat → ~19–23g protein
+  * Salmon fillet: ~150g → ~37g protein
+  * Eggs: assume 2–3 per serving unless stated otherwise
+- In your note, state the assumed portion AND protein for EACH source, e.g.: "Beef burger (2 × 180g): ~94g | Duck (~110g): ~21g | Chicken thigh (1 large): ~37g | Chickpeas (½ cup): ~7g → total ~159g"
+
+GENERAL:
+- For branded or restaurant foods, use best available nutritional data
+- Always be realistic — do not under- or over-estimate
+
+Respond ONLY with a JSON object in this exact format:
+{"calories": 450, "protein": 32.5, "carbs": 45.0, "fats": 12.0, "note": "assumed 200g chicken breast (62g protein) + 1 cup rice (4g protein)"}
+
+All macro values must be numbers (never strings or null). note is a string or null.`;
+
+async function aiParseNutrition(description: string): Promise<{
+  calories: number | null;
+  protein: string | null;
+  carbs: string | null;
+  fats: string | null;
+  aiNote: string | null;
+}> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-5.2",
+    messages: [
+      { role: "system", content: NUTRITION_SYSTEM_PROMPT },
+      { role: "user", content: description.trim() },
+    ],
+    response_format: { type: "json_object" },
+  });
+  const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+  return {
+    calories: typeof parsed.calories === "number" ? Math.round(parsed.calories) : null,
+    protein: typeof parsed.protein === "number" ? parsed.protein.toFixed(1) : null,
+    carbs: typeof parsed.carbs === "number" ? parsed.carbs.toFixed(1) : null,
+    fats: typeof parsed.fats === "number" ? parsed.fats.toFixed(1) : null,
+    aiNote: typeof parsed.note === "string" && parsed.note.trim() ? parsed.note.trim() : null,
+  };
+}
+
 const router: IRouter = Router();
 
 // List clients
@@ -142,11 +207,19 @@ router.post("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
   if (!hasImages && !hasDescription) { res.status(400).json({ error: "Either a description or a label photo is required" }); return; }
   if (!date) { res.status(400).json({ error: "Date is required" }); return; }
 
-  const imageCount = hasImages ? imageBase64Array!.length : 0;
-  const systemPrompt = `You are a precise sports nutrition expert helping athletes track their macros accurately.
+  let calories: number | null = null;
+  let protein: string | null = null;
+  let carbs: string | null = null;
+  let fats: string | null = null;
+  let aiNote: string | null = null;
 
-${hasImages
-  ? `The user has photographed ${imageCount === 1 ? "a nutrition label" : `${imageCount} nutrition labels for the same meal`}. Read ${imageCount === 1 ? "the label" : "all labels"} carefully and extract the macronutrient values.
+  try {
+    if (hasImages) {
+      // Image path: custom prompt for nutrition label reading
+      const imageCount = imageBase64Array!.length;
+      const imageSystemPrompt = `You are a precise sports nutrition expert helping athletes track their macros accurately.
+
+The user has photographed ${imageCount === 1 ? "a nutrition label" : `${imageCount} nutrition labels for the same meal`}. Read ${imageCount === 1 ? "the label" : "all labels"} carefully and extract the macronutrient values.
 
 CRITICAL — many labels have two columns: "per 100g" and "per serving/pack". Choose your calculation method based on how the user specifies their quantity:
 
@@ -160,84 +233,94 @@ RULE B — Weight-based quantity (e.g. "120g", "200g"):
   → This avoids rounding errors from dividing by serving size
 
 - If no quantity is specified, assume 1 serving and use the per-serving column
-- ${imageCount > 1 ? "Apply the appropriate rule for each label, then sum all values" : ""}
+${imageCount > 1 ? "- Apply the appropriate rule for each label, then sum all values" : ""}
 - Set note to describe exactly what you calculated (e.g. "4 × 30g packs chips (576 kcal) + 120g cheese (326 kcal)")
-- If you cannot read a label clearly, do your best estimate and mention it in the note`
-  : `The user will describe food or meals they ate. Your job is to estimate macronutrients as accurately as possible and be transparent about any assumptions you make.
-- If the user gives a specific quantity (e.g. "200g chicken", "1 cup oats"), use that exact amount
-- If no quantity is given, assume a typical single adult male serving and ALWAYS note your assumption
-- For branded or restaurant foods, use best available nutritional data
-- Protein: lean meats ~25-30g/100g, eggs ~6g each, legumes ~8g/100g cooked
-- Always be realistic — do not under- or over-estimate`}
+- If you cannot read a label clearly, do your best estimate and mention it in the note
 
 Respond ONLY with a JSON object in this exact format:
 {"calories": 450, "protein": 32.5, "carbs": 45.0, "fats": 12.0, "note": "1 serving per label (230g)"}
 
 All macro values must be numbers (never strings or null). note is a string or null.`;
 
-  let calories: number | null = null;
-  let protein: string | null = null;
-  let carbs: string | null = null;
-  let fats: string | null = null;
-  let aiNote: string | null = null;
+      type ContentPart =
+        | { type: "text"; text: string }
+        | { type: "image_url"; image_url: { url: string; detail: "low" } };
 
-  try {
-    type ContentPart =
-      | { type: "text"; text: string }
-      | { type: "image_url"; image_url: { url: string; detail: "low" } };
+      const userContent: ContentPart[] = [
+        ...imageBase64Array!.map((b64, i): ContentPart => ({
+          type: "image_url",
+          image_url: {
+            url: `data:${(imageMimeTypes ?? [])[i] ?? "image/jpeg"};base64,${b64}`,
+            detail: "low",
+          },
+        })),
+        ...(hasDescription
+          ? [{ type: "text" as const, text: `User note: ${description!.trim()}` }]
+          : []),
+      ];
 
-    const userContent: string | ContentPart[] = hasImages
-      ? [
-          ...imageBase64Array!.map((b64, i): ContentPart => ({
-            type: "image_url",
-            image_url: {
-              url: `data:${(imageMimeTypes ?? [])[i] ?? "image/jpeg"};base64,${b64}`,
-              detail: "low",
-            },
-          })),
-          ...(hasDescription
-            ? [{ type: "text" as const, text: `User note: ${description!.trim()}` }]
-            : []),
-        ]
-      : description!.trim();
-
-    const completion = await openai.chat.completions.create({
-      model: hasImages ? "gpt-4o-mini" : "gpt-5.2",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent as any },
-      ],
-      response_format: { type: "json_object" },
-    });
-    const parsed = JSON.parse(completion.choices[0].message.content || "{}");
-    calories = typeof parsed.calories === "number" ? Math.round(parsed.calories) : null;
-    protein = typeof parsed.protein === "number" ? parsed.protein.toFixed(1) : null;
-    carbs = typeof parsed.carbs === "number" ? parsed.carbs.toFixed(1) : null;
-    fats = typeof parsed.fats === "number" ? parsed.fats.toFixed(1) : null;
-    aiNote = typeof parsed.note === "string" && parsed.note.trim() ? parsed.note.trim() : null;
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: imageSystemPrompt },
+          { role: "user", content: userContent as any },
+        ],
+        response_format: { type: "json_object" },
+      });
+      const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+      calories = typeof parsed.calories === "number" ? Math.round(parsed.calories) : null;
+      protein = typeof parsed.protein === "number" ? parsed.protein.toFixed(1) : null;
+      carbs = typeof parsed.carbs === "number" ? parsed.carbs.toFixed(1) : null;
+      fats = typeof parsed.fats === "number" ? parsed.fats.toFixed(1) : null;
+      aiNote = typeof parsed.note === "string" && parsed.note.trim() ? parsed.note.trim() : null;
+    } else {
+      // Text-only path: use the shared helper with the improved protein-aware prompt
+      ({ calories, protein, carbs, fats, aiNote } = await aiParseNutrition(description!));
+    }
   } catch (err) {
     console.error("Nutrition AI parse error:", err);
   }
 
   const [entry] = await db
     .insert(nutritionEntriesTable)
-    .values({ clientId, date, description: description.trim(), calories, protein, carbs, fats, aiNote })
+    .values({ clientId, date, description: description!.trim(), calories, protein, carbs, fats, aiNote })
     .returning();
   res.status(201).json(entry);
 });
 
-// Update macros for a nutrition entry
+// Update macros (and optionally re-parse description) for a nutrition entry
 router.patch("/clients/:clientId/nutrition/:entryId", async (req, res): Promise<void> => {
   const entryId = parseInt(req.params.entryId, 10);
   if (isNaN(entryId)) { res.status(400).json({ error: "Invalid entryId" }); return; }
-  const { calories, protein, carbs, fats } = req.body as {
+  const { description, calories, protein, carbs, fats } = req.body as {
+    description?: string;
     calories?: number; protein?: number; carbs?: number; fats?: number;
   };
+
   const updates: Record<string, unknown> = {};
-  if (typeof calories === "number") updates.calories = Math.round(calories);
-  if (typeof protein === "number") updates.protein = protein.toFixed(1);
-  if (typeof carbs === "number") updates.carbs = carbs.toFixed(1);
-  if (typeof fats === "number") updates.fats = fats.toFixed(1);
+
+  if (typeof description === "string" && description.trim()) {
+    // Re-parse macros from the new description using AI
+    try {
+      const parsed = await aiParseNutrition(description);
+      updates.description = description.trim();
+      if (parsed.calories !== null) updates.calories = parsed.calories;
+      if (parsed.protein !== null) updates.protein = parsed.protein;
+      if (parsed.carbs !== null) updates.carbs = parsed.carbs;
+      if (parsed.fats !== null) updates.fats = parsed.fats;
+      updates.aiNote = parsed.aiNote;
+    } catch (err) {
+      console.error("Nutrition re-parse error:", err);
+      updates.description = description.trim();
+    }
+  } else {
+    // Manual macro override only — no AI call
+    if (typeof calories === "number") updates.calories = Math.round(calories);
+    if (typeof protein === "number") updates.protein = protein.toFixed(1);
+    if (typeof carbs === "number") updates.carbs = carbs.toFixed(1);
+    if (typeof fats === "number") updates.fats = fats.toFixed(1);
+  }
+
   const [entry] = await db
     .update(nutritionEntriesTable)
     .set(updates)
