@@ -1118,7 +1118,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
               const baseReps = parseInt(String(ex.reps || 8), 10);
               newReps = isNaN(baseReps)
                 ? ex.reps
-                : String(Math.max(3, baseReps - setsIncrement * week));
+                : String(Math.max(2, baseReps - setsIncrement * week));
             }
 
             return { ...ex, sets: newSets, reps: newReps };
