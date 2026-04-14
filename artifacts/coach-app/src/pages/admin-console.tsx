@@ -556,10 +556,10 @@ export default function AdminConsole() {
         </nav>
         <div className="border-t border-white/10 pt-4 space-y-2">
           <button
-            onClick={() => setLocation("/coach")}
+            onClick={() => setLocation("/clients")}
             className="w-full text-left px-3 py-2.5 rounded-lg text-sm text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors"
           >
-            Coach Dashboard
+            My Clients
           </button>
           <button
             onClick={() => { logout(); setLocation("/"); }}
