@@ -161,6 +161,10 @@ function toast({ ...props }: Toast) {
     },
   })
 
+  // Auto-dismiss: 3 s for destructive, 2 s for everything else
+  const autoDismissMs = props.variant === "destructive" ? 3000 : 2000
+  setTimeout(dismiss, autoDismissMs)
+
   return {
     id: id,
     dismiss,

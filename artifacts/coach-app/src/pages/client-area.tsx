@@ -693,6 +693,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const [touchGhostPos, setTouchGhostPos] = useState<{ x: number; y: number } | null>(null);
   const [touchGhostLabel, setTouchGhostLabel] = useState("");
   const isDragActiveRef = useRef(false);
+  const cellPointerMovedRef = useRef(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── AI reschedule command bar ──
@@ -3729,7 +3730,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                         key={di}
                         data-date={dateStr}
                         className={`calendar-cell transition-colors ${isDropTarget ? "!bg-primary/10 ring-2 ring-inset ring-primary/30" : ""} ${calendarView === "week" ? "!min-h-[calc(100vh-280px)]" : ""} ${pasteMode ? "cursor-copy hover:!bg-emerald-50 hover:ring-2 hover:ring-inset hover:ring-emerald-400/50" : ""}`}
-                        onClick={() => {
+                        onPointerDown={() => { cellPointerMovedRef.current = false; }}
+                        onPointerMove={() => { cellPointerMovedRef.current = true; }}
+                        onPointerUp={() => {
+                          if (cellPointerMovedRef.current) return;
                           if (pasteMode) { void pasteToDate(dateStr); return; }
                           if (isDragActiveRef.current) return;
                           setQuickAddDate(dateStr);
