@@ -1,0 +1,52 @@
+Fix: Copy-with-Progression — Compound vs Accessory Logic
+Two distinct exercise categories:
+Category 1 — Primary Compounds
+Squat, bench press, deadlift, strict press and close variations (front squat, close grip bench, Romanian deadlift used as a main lift, etc.)
+
+Sets: 3 → 4 → 5 (hard cap 5)
+Reps: exact number, decreases week-over-week as sets increase — e.g. 8 → 6 → 4
+Sub-6 rep prescriptions are only appropriate for this category
+
+Category 2 — Everything Else (accessories, isolation, secondary compounds)
+Rows, curls, lunges, push-downs, lateral raises, etc.
+
+Sets: 3 → 4 (hard cap 4, never 5)
+Reps: always a range, never a single number — e.g. 12–15, 15–20, 8–12
+Range goes up to 20 — no upper cap
+Rep range stays fixed across the block — only sets increase week-over-week
+A user can manually add a 5th set but generation never produces it
+
+Detecting the category in code:
+tsconst PRIMARY_COMPOUNDS = [
+  'squat', 'back squat', 'front squat', 'low bar squat', 'high bar squat',
+  'bench press', 'close grip bench', 'incline bench', 'decline bench',
+  'deadlift', 'conventional deadlift', 'sumo deadlift', 'romanian deadlift',
+  'strict press', 'overhead press', 'ohp', 'press'
+];
+
+function isPrimaryCompound(name: string): boolean {
+  return PRIMARY_COMPOUNDS.some(c => name.toLowerCase().includes(c));
+}
+Set progression in copyWithProgression:
+tsconst isCompound = isPrimaryCompound(exercise.name);
+const maxSets = isCompound ? 5 : 4;
+const newSets = Math.min((exercise.sets ?? 3) + weekOffset, maxSets);
+Rep progression:
+tsif (isCompound) {
+  // Exact number, decreases as sets increase
+  newReps = Math.max((exercise.reps ?? 8) - weekOffset, 3);
+} else {
+  // Keep the range fixed — never modify repsMin/repsMax on accessories
+  newRepsMin = exercise.repsMin;
+  newRepsMax = exercise.repsMax;
+}
+Bug fixes:
+
+clearExerciseResults must preserve sets, reps, repsMin, repsMax, rpe, perSetRpe, rest, tempo, notes — only null setWeights, setReps, clientComment
+Progression applied first, then clearSessionResults — never reversed
+
+AI system prompt addition:
+
+"When prescribing sets and reps, distinguish between primary compound lifts (squat, bench press, deadlift, strict press and their close variations) and all other exercises.
+Primary compounds: 3–5 sets, prescribe an exact rep count (e.g. 5, 4, 3). Reps can decrease week-over-week as sets increase across a block. Sub-6 rep prescriptions are only appropriate here.
+All other exercises: maximum 4 sets, always prescribe a rep range never a single number (e.g. 12–15, 15–20, 8–12). Rep ranges can go up to 20. Never prescribe fewer than 6 reps or more than 4 sets on accessory or secondary movements. The rep range stays fixed across a block — only sets progress. Do not generate 5-set prescriptions for anything other than primary compounds."

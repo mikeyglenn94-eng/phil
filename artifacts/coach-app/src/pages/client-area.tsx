@@ -1062,6 +1062,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     return result;
   }
 
+  // ── Compound vs accessory classification ─────────────────────────────────────
+  // Primary compounds progress differently: sets cap at 5, reps decrease as
+  // sets increase. Everything else caps sets at 4 and keeps the rep range fixed.
+  const PRIMARY_COMPOUNDS = [
+    "squat", "back squat", "front squat", "low bar squat", "high bar squat",
+    "bench press", "close grip bench", "incline bench", "decline bench",
+    "deadlift", "conventional deadlift", "sumo deadlift", "romanian deadlift",
+    "strict press", "overhead press", "ohp", "press",
+  ];
+  function isPrimaryCompound(name: string): boolean {
+    const lower = (name || "").toLowerCase();
+    return PRIMARY_COMPOUNDS.some(c => lower.includes(c));
+  }
+
   function copyWithProgression(
     sourceWeekOffset: number,
     targetWeeks: number,
@@ -1086,17 +1100,29 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           const dayOfWeek = parseISO(session.date).getDay();
           const dayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
           const newDate = format(addDays(weekStart, dayOffset), "yyyy-MM-dd");
-          // Step 1: apply week-over-week progression to prescription fields only
-          const progressedExercises = ((session as any).exercises ?? []).map((ex: any) => ({
-            ...ex,
-            sets: setsIncrement !== 0 ? Math.max(1, Math.round((ex.sets || 0) + setsIncrement * week)) : ex.sets,
-            reps: repsMultiplier !== 1.0 ? String(Math.max(1, Math.round(Number(ex.reps || 0) * Math.pow(repsMultiplier, week)))) : ex.reps,
-            ...(ex.perSetReps && repsMultiplier !== 1.0 ? {
-              perSetReps: (ex.perSetReps as (string | null)[]).map(r =>
-                r != null ? String(Math.max(1, Math.round(Number(r) * Math.pow(repsMultiplier, week)))) : null
-              ),
-            } : {}),
-          }));
+          // Step 1: apply week-over-week progression to prescription fields only.
+          // Compounds (squat, bench, deadlift, press): sets ↑ (hard cap 5), reps ↓ to match.
+          // Accessories / everything else: sets ↑ (hard cap 4), rep range stays FIXED.
+          const progressedExercises = ((session as any).exercises ?? []).map((ex: any) => {
+            const isCompound = isPrimaryCompound(ex.name || "");
+            const maxSets = isCompound ? 5 : 4;
+
+            const newSets = setsIncrement !== 0
+              ? Math.min(Math.max(1, (ex.sets || 3) + setsIncrement * week), maxSets)
+              : ex.sets;
+
+            // Compounds: exact rep number decreases in step with set increase.
+            // Accessories: rep range is frozen — never modified.
+            let newReps = ex.reps;
+            if (isCompound && setsIncrement !== 0) {
+              const baseReps = parseInt(String(ex.reps || 8), 10);
+              newReps = isNaN(baseReps)
+                ? ex.reps
+                : String(Math.max(3, baseReps - setsIncrement * week));
+            }
+
+            return { ...ex, sets: newSets, reps: newReps };
+          });
           // Step 2: clear ALL result fields using the shared helper — consistent
           // across strength, run, WOD/Hyrox, and mixed sessions.
           const progressedSession = { ...(session as any), exercises: progressedExercises };

@@ -724,6 +724,18 @@ This is the most advanced structural principle. The order of phases within a blo
 - Total exercises per session: 4–6
 - Do NOT programme intensity techniques (drop sets, supersets, failure) unless the client description asks for it
 
+### Compound vs Accessory sets and reps — STRICT RULE
+**Primary compounds** (Back Squat, Front Squat, Bench Press, Close Grip Bench, Incline Bench, Deadlift, Romanian Deadlift used as main lift, Strict Press, Overhead Press):
+- Sets: 3–5 (may reach 5 across a block as sets progress)
+- Reps: prescribe an EXACT number — e.g. 5, 4, 3, 8, 6. Sub-6 rep prescriptions are only appropriate here.
+- Reps can decrease week-over-week as sets increase (e.g. Week 1: 3×8, Week 2: 4×6, Week 3: 5×4)
+
+**All other exercises** (rows, curls, lunges, push-downs, lateral raises, leg press, RDL as accessory, etc.):
+- Sets: maximum 4. NEVER prescribe 5 sets on an accessory or isolation movement.
+- Reps: ALWAYS a range, NEVER a single number — e.g. "12-15", "15-20", "8-12". Ranges may go up to 20.
+- Rep range stays FIXED across a block — only sets increase week-over-week.
+- NEVER prescribe fewer than 6 reps on any non-compound movement.
+
 ## Hyrox specific rules (apply when the description mentions "Hyrox", "HYROX", "hyrox race", or similar)
 
 When the programme is Hyrox-focused, apply the following principles:
@@ -1719,6 +1731,16 @@ Generate a complete, well-programmed session matching the equipment, muscle grou
 - Accessories: sets of 3–4, rest 60–90s
 - Use RPE where useful: "7-8" for volume work, "8-9" for intensification, "9" for top sets
 - Leave weight as null unless the user specifies it
+
+### Compound vs Accessory sets and reps — STRICT RULE
+**Primary compounds** (Squat, Bench Press, Deadlift, Strict Press / OHP, and their close variations):
+- Sets: 3–5. Sub-6 rep prescriptions are only appropriate here.
+- Reps: prescribe an EXACT number (e.g. "5", "4", "3", "8", "6") — never a range on a true compound main lift.
+
+**All other exercises** (rows, curls, lunges, push-downs, RDL as accessory, lat pulldown, etc.):
+- Sets: maximum 4. NEVER prescribe 5 sets on an accessory or secondary movement.
+- Reps: ALWAYS a range, never a single number — e.g. "12-15", "15-20", "8-12". Ranges may go up to 20.
+- NEVER prescribe fewer than 6 reps or more than 4 sets on accessory work.
 
 ### Progression
 - Overload is the priority, not novelty. Choose exercises that allow measurable progression.
