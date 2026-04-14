@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, MapPin } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, MapPin, Lock, Send, Eye } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -126,12 +126,26 @@ function renderWodStructure(opt: any): React.ReactNode {
   );
 }
 
+export type CalendarContext = "client" | "team";
+
+interface TeamSessionRow {
+  id: number;
+  teamId: number;
+  sessionData: Session;
+  date: string;
+  status: "draft" | "published";
+  publishedAt: string | null;
+}
+
 interface ClientAreaProps {
   clientIdOverride?: number;
   mode?: "coach" | "client";
+  calendarContext?: CalendarContext;
+  teamId?: number;
+  teamMemberCount?: number;
 }
 
-export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientAreaProps = {}) {
+export default function ClientArea({ clientIdOverride, mode = "coach", calendarContext = "client", teamId, teamMemberCount = 0 }: ClientAreaProps = {}) {
   const [, params] = useRoute("/clients/:clientId");
   const [, setLocation] = useLocation();
   const search = useSearch();
@@ -141,9 +155,50 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const { clearClient } = useClientContext();
   const { logout } = useAuth();
 
-  const { data: client, isLoading: clientLoading } = useGetClient(clientId);
+  const isTeamMode = calendarContext === "team" && !!teamId;
+  const { data: client, isLoading: clientLoading } = useGetClient(clientId, { query: { enabled: !isTeamMode && !!clientId } });
   const { data: masterProgrammes } = useListProgrammes(); // master programmes (no clientId)
-  const { data: clientProgrammes } = useListProgrammes({ clientId });
+  const { data: _rawClientProgrammes } = useListProgrammes({ clientId }, { query: { enabled: !isTeamMode && !!clientId } });
+
+  // Team sessions query (only active in team mode)
+  const { data: _rawTeamSessions } = useQuery<TeamSessionRow[]>({
+    queryKey: ["team-sessions", teamId],
+    queryFn: async () => {
+      const token = localStorage.getItem("axis_auth_token");
+      const r = await fetch(`/api/teams/${teamId}/sessions`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!r.ok) throw new Error("Failed to load team sessions");
+      return r.json();
+    },
+    enabled: isTeamMode,
+    refetchInterval: 8000,
+  });
+
+  // Ref: session UUID → { dbId, status, publishedAt }  — updated each render
+  const teamSessionsMetaRef = useRef<Map<string, { dbId: number; status: string; publishedAt: string | null }>>(new Map());
+
+  // Unified clientProgrammes: real data for client mode, synthetic Programme for team mode
+  const clientProgrammes = useMemo(() => {
+    if (isTeamMode && _rawTeamSessions) {
+      const map = new Map<string, { dbId: number; status: string; publishedAt: string | null }>();
+      for (const ts of _rawTeamSessions) {
+        map.set(ts.sessionData.id, { dbId: ts.id, status: ts.status, publishedAt: ts.publishedAt });
+      }
+      teamSessionsMetaRef.current = map;
+      return [{
+        id: teamId!,
+        title: "Team Programme",
+        clientId: null,
+        sessions: _rawTeamSessions.map(ts => ts.sessionData),
+        blockLength: null,
+        sessionsPerWeek: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }] as any[];
+    }
+    return _rawClientProgrammes;
+  }, [isTeamMode, _rawTeamSessions, _rawClientProgrammes, teamId]);
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
     queryKey: ["client-analytics", clientId],
     queryFn: async () => {
@@ -693,6 +748,42 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const [calHistory, setCalHistory] = useState<ProgSnapshot[]>([]);
   const [calFuture, setCalFuture] = useState<ProgSnapshot[]>([]);
 
+  // Team-mode state
+  const [teamPublishConfirm, setTeamPublishConfirm] = useState<{ sessionId: string; dbId: number } | null>(null);
+  const [teamPublishing, setTeamPublishing] = useState(false);
+  const [teamCopiesPanel, setTeamCopiesPanel] = useState<{ dbId: number; sessionName: string } | null>(null);
+  const [teamCopies, setTeamCopies] = useState<any[]>([]);
+  const [teamCopiesLoading, setTeamCopiesLoading] = useState(false);
+
+  /** Team mode: sync sessions to team API (create/update drafts, delete removed drafts) */
+  const syncTeamSessions = async (newSessions: Session[]) => {
+    if (!teamId) return;
+    const token = localStorage.getItem("axis_auth_token");
+    const headers = { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" };
+    const meta = teamSessionsMetaRef.current;
+    const newIds = new Set(newSessions.map(s => s.id));
+
+    for (const session of newSessions) {
+      const existing = meta.get(session.id);
+      if (existing) {
+        if (existing.status === "published") continue; // never overwrite published
+        await fetch(`/api/teams/${teamId}/sessions/${existing.dbId}`, {
+          method: "PUT", headers, body: JSON.stringify({ sessionData: session, date: session.date }),
+        });
+      } else {
+        await fetch(`/api/teams/${teamId}/sessions`, {
+          method: "POST", headers, body: JSON.stringify({ sessionData: session, date: session.date }),
+        });
+      }
+    }
+
+    for (const [uuid, { dbId, status }] of meta.entries()) {
+      if (!newIds.has(uuid) && status === "draft") {
+        await fetch(`/api/teams/${teamId}/sessions/${dbId}`, { method: "DELETE", headers });
+      }
+    }
+  };
+
   /** Call before any calendar mutation to save a restore point. */
   const pushHistory = () => {
     if (!clientProgrammes) return;
@@ -702,6 +793,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   };
 
   const applySnapshot = async (snapshot: ProgSnapshot) => {
+    if (isTeamMode && teamId) {
+      const newSessions = snapshot[0]?.sessions ?? [];
+      await syncTeamSessions(newSessions);
+      await queryClient.invalidateQueries({ queryKey: ["team-sessions", teamId] });
+      return;
+    }
     await Promise.all(
       snapshot.map(({ id, sessions }) =>
         fetch(`/api/programmes/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions }) })
@@ -787,19 +884,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const deleteSelectedSessions = async () => {
     if (selectedSessionIds.size === 0) return;
     pushHistory();
-    const byProg = new Map<number, Session[]>();
-    for (const prog of (clientProgrammes ?? [])) {
-      const sessions = prog.sessions as Session[];
-      if (sessions.some(s => selectedSessionIds.has(s.id))) {
-        byProg.set(prog.id, sessions.filter(s => !selectedSessionIds.has(s.id)));
-      }
-    }
-    await Promise.all(
-      Array.from(byProg.entries()).map(([progId, sessions]) =>
-        fetch(`/api/programmes/${progId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions }) })
-      )
-    );
-    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+    // Build snapshot with selected sessions removed
+    const newSnapshot: { id: number; sessions: Session[] }[] = (clientProgrammes ?? []).map(prog => ({
+      id: prog.id,
+      sessions: (prog.sessions as Session[]).filter(s => !selectedSessionIds.has(s.id)),
+    }));
+    await applySnapshot(newSnapshot);
     const n = selectedSessionIds.size;
     toast({ title: `${n} session${n > 1 ? "s" : ""} deleted` });
     exitSelectionMode();
@@ -880,11 +970,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       const targetProg = (clientProgrammes ?? [])[0];
       if (targetProg) {
         const updatedSessions = [...(targetProg.sessions as Session[]), ...newSessions];
-        await fetch(`/api/programmes/${targetProg.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions: updatedSessions }) });
-      } else {
+        await applySnapshot([{ id: targetProg.id, sessions: updatedSessions }]);
+      } else if (!isTeamMode) {
         await fetch("/api/programmes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Sessions", clientId, sessions: newSessions }) });
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
       }
-      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
       const n = newSessions.length;
       toast({ title: `${n} session${n > 1 ? "s" : ""} pasted from ${format(targetDateObj, "EEE d MMM")}` });
       exitSelectionMode();
@@ -896,28 +986,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   const shiftSelectedSessions = async (deltaWeeks: number) => {
     if (selectedSessionIds.size === 0) return;
     pushHistory();
-    const byProg = new Map<number, Session[]>();
-    for (const prog of (clientProgrammes ?? [])) {
+    const newSnapshot = (clientProgrammes ?? []).map(prog => {
       const sessions = prog.sessions as Session[];
-      if (sessions.some(s => selectedSessionIds.has(s.id))) {
-        byProg.set(prog.id, sessions);
-      }
-    }
-    await Promise.all(
-      Array.from(byProg.entries()).map(async ([progId, sessions]) => {
-        const updated = sessions.map(s =>
+      return {
+        id: prog.id,
+        sessions: sessions.map(s =>
           selectedSessionIds.has(s.id) && s.date
             ? { ...s, date: format(addDays(parseISO(s.date), deltaWeeks * 7), "yyyy-MM-dd") }
             : s
-        );
-        await fetch(`/api/programmes/${progId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessions: updated }),
-        });
-      })
-    );
-    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        ),
+      };
+    });
+    await applySnapshot(newSnapshot);
     const n = selectedSessionIds.size;
     toast({ title: `${n} session${n > 1 ? "s" : ""} shifted ${deltaWeeks > 0 ? "forward" : "back"} 1 week` });
     exitSelectionMode();
@@ -965,12 +1045,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     const updatedSessions = (prog.sessions as Session[]).map(s =>
       s.id === sessionId ? { ...s, date: newDate } : s
     );
-    await fetch(`/api/programmes/${programmeId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessions: updatedSessions }),
-    });
-    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+    await applySnapshot([{ id: programmeId, sessions: updatedSessions }]);
     toast({ title: "Session moved" });
   };
 
@@ -978,26 +1053,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     const delta = differenceInDays(parseISO(targetDate), parseISO(originalDate));
     if (delta === 0) return;
     pushHistory();
-    const byProg = new Map<number, Session[]>();
-    for (const prog of (clientProgrammes ?? [])) {
-      const sessions = prog.sessions as Session[];
-      if (sessions.some(s => selectedSessionIds.has(s.id))) {
-        byProg.set(prog.id, sessions.map(s =>
-          selectedSessionIds.has(s.id)
-            ? { ...s, date: format(addDays(parseISO(s.date), delta), "yyyy-MM-dd") }
-            : s
-        ));
-      }
-    }
     try {
-      await Promise.all(Array.from(byProg.entries()).map(([progId, sessions]) =>
-        fetch(`/api/programmes/${progId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessions }),
-        })
-      ));
-      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      const newSnapshot = (clientProgrammes ?? []).map(prog => {
+        const sessions = prog.sessions as Session[];
+        if (!sessions.some(s => selectedSessionIds.has(s.id))) return { id: prog.id, sessions };
+        return {
+          id: prog.id,
+          sessions: sessions.map(s =>
+            selectedSessionIds.has(s.id)
+              ? { ...s, date: format(addDays(parseISO(s.date), delta), "yyyy-MM-dd") }
+              : s
+          ),
+        };
+      });
+      await applySnapshot(newSnapshot);
       toast({ title: `${selectedSessionIds.size} sessions moved` });
     } catch {
       toast({ title: "Failed to move sessions", variant: "destructive" });
@@ -1009,12 +1078,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     const prog = (clientProgrammes ?? []).find(p => p.id === programmeId);
     if (!prog) return;
     const updatedSessions = (prog.sessions as Session[]).filter(s => s.id !== sessionId);
-    await fetch(`/api/programmes/${programmeId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessions: updatedSessions }),
-    });
-    await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+    await applySnapshot([{ id: programmeId, sessions: updatedSessions }]);
     toast({ title: "Session deleted" });
   };
 
@@ -1158,14 +1222,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (!pendingCommand) return;
     setCmdSaving(true);
     try {
-      for (const change of pendingCommand.changes) {
-        await fetch(`/api/programmes/${change.programmeId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessions: change.sessions }),
-        });
-      }
-      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      await applySnapshot(pendingCommand.changes.map(c => ({ id: c.programmeId, sessions: c.sessions })));
       toast({ title: "Done!", description: pendingCommand.description });
       setPendingCommand(null);
       setCmdInput("");
@@ -1463,12 +1520,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     if (!pendingReschedule) return;
     setCmdSaving(true);
     try {
-      await fetch(`/api/programmes/${pendingReschedule.programmeId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessions: pendingReschedule.sessions }),
-      });
-      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      await applySnapshot([{ id: pendingReschedule.programmeId, sessions: pendingReschedule.sessions }]);
       toast({ title: "Programme rescheduled", description: `${pendingReschedule.programmeName} → ${pendingReschedule.dayLabels.join(" / ")}` });
       setPendingReschedule(null);
       setCmdInput("");
@@ -1630,14 +1682,23 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
   async function addSessionToClientCalendar(date: string, newSession: any, setAdding: (id: string | null) => void, sessionId: string, closeDialog: () => void, label: string) {
     setAdding(sessionId);
     try {
-      const targetProgramme = clientProgrammes?.[0];
-      if (targetProgramme) {
-        const updatedSessions = [...(targetProgramme.sessions || []), newSession];
-        await fetch(`/api/programmes/${targetProgramme.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions: updatedSessions }) });
+      if (isTeamMode && teamId) {
+        const token = localStorage.getItem("axis_auth_token");
+        const headers = { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" };
+        await fetch(`/api/teams/${teamId}/sessions`, {
+          method: "POST", headers, body: JSON.stringify({ sessionData: newSession, date }),
+        });
+        await queryClient.invalidateQueries({ queryKey: ["team-sessions", teamId] });
       } else {
-        await fetch("/api/programmes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Sessions", clientId, sessions: [newSession] }) });
+        const targetProgramme = clientProgrammes?.[0];
+        if (targetProgramme) {
+          const updatedSessions = [...(targetProgramme.sessions || []), newSession];
+          await fetch(`/api/programmes/${targetProgramme.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions: updatedSessions }) });
+        } else {
+          await fetch("/api/programmes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Sessions", clientId, sessions: [newSession] }) });
+        }
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
       }
-      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
       toast({ title: `${label} added to ${format(parseISO(date), "EEE d MMM")}` });
       closeDialog();
     } catch { toast({ title: "Failed to add session", variant: "destructive" }); }
@@ -2477,13 +2538,54 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
     { calories: 0, protein: 0, carbs: 0, fats: 0 }
   );
 
-  if (clientLoading) return (
+  // Force training tab in team mode
+  useEffect(() => {
+    if (isTeamMode) setActiveTab("training");
+  }, [isTeamMode]);
+
+  // Team: publish a session
+  const handleTeamPublishSession = async () => {
+    if (!teamPublishConfirm || !teamId) return;
+    setTeamPublishing(true);
+    try {
+      const token = localStorage.getItem("axis_auth_token");
+      const r = await fetch(`/api/teams/${teamId}/sessions/${teamPublishConfirm.dbId}/publish`, {
+        method: "POST",
+        headers: { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" },
+      });
+      if (!r.ok) throw new Error("Publish failed");
+      await queryClient.invalidateQueries({ queryKey: ["team-sessions", teamId] });
+      toast({ title: "Session published to all members" });
+      setTeamPublishConfirm(null);
+    } catch {
+      toast({ title: "Failed to publish session", variant: "destructive" });
+    } finally {
+      setTeamPublishing(false);
+    }
+  };
+
+  // Team: load client copies for a session
+  const handleViewTeamCopies = async (dbId: number, sessionName: string) => {
+    setTeamCopiesPanel({ dbId, sessionName });
+    setTeamCopiesLoading(true);
+    try {
+      const token = localStorage.getItem("axis_auth_token");
+      const r = await fetch(`/api/teams/${teamId}/sessions/${dbId}/client-copies`, {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+      if (r.ok) setTeamCopies(await r.json());
+    } catch { /* ignore */ } finally {
+      setTeamCopiesLoading(false);
+    }
+  };
+
+  if (!isTeamMode && clientLoading) return (
     <div className="flex h-screen items-center justify-center">
       <Loader2 className="w-8 h-8 animate-spin text-primary" />
     </div>
   );
 
-  if (!client) return (
+  if (!isTeamMode && !client) return (
     <div className="flex h-screen items-center justify-center flex-col gap-3">
       <p className="text-muted-foreground">Client not found</p>
       <Button variant="outline" onClick={() => setLocation("/clients")}>Back to Clients</Button>
@@ -2492,8 +2594,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
+      {/* Header — hidden in team mode */}
+      {!isTeamMode && <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
         <div className="flex items-center gap-3">
           {mode === "coach" && (
             <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setLocation("/clients")}>
@@ -2582,10 +2684,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Dashboard Tab */}
-      {activeTab === "dashboard" && (
+      {!isTeamMode && activeTab === "dashboard" && (
         <DashboardTab
           analytics={analytics}
           isLoading={analyticsLoading}
@@ -2598,7 +2700,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
 
 
       {/* Nutrition Tab */}
-      {activeTab === "nutrition" && (
+      {!isTeamMode && activeTab === "nutrition" && (
         <div className="nutrition-screen px-6 py-6 max-w-2xl mx-auto">
 
           {/* ── Tracking Mode ─────────────────────────────────────── */}
@@ -3119,7 +3221,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       )}
 
       {/* IRL Sessions Tab */}
-      {activeTab === "irl" && mode === "client" && isIrlEnabled && (
+      {!isTeamMode && activeTab === "irl" && mode === "client" && isIrlEnabled && (
         <div className="flex flex-col h-full overflow-y-auto px-4 py-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -3277,7 +3379,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
       )}
 
       {/* Training Tab */}
-      {activeTab === "training" && (
+      {(isTeamMode || activeTab === "training") && (
         <div className="relative flex flex-col h-full overflow-hidden">
 
           {/* Calendar toolbar */}
@@ -3674,10 +3776,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                             const isTouchPicked = touchDraggingActive && touchDragRef.current?.sessionId === session.id;
                             const highlight = getSessionHighlight(session);
                             const isSelected = selectedSessionIds.has(session.id);
+                            const teamMeta = isTeamMode ? teamSessionsMetaRef.current.get(session.id) : undefined;
+                            const isPublished = teamMeta?.status === "published";
                             return (
                               <div
                                 key={session.id}
-                                draggable={!selectionMode || isSelected}
+                                draggable={(!selectionMode || isSelected) && !isPublished}
                                 onDragStart={() => {
                                   if (selectionMode && isSelected) {
                                     draggedItemRef.current = { sessionId: session.id, programmeId: prog?.id ?? 0, isGroupDrag: true, originalDate: dateStr };
@@ -3794,6 +3898,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     return;
                                   }
                                   if (isDragActiveRef.current) return;
+                                  if (isPublished) return; // published team sessions are read-only
                                   if (prog) {
                                     if (mode === "client") {
                                       setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
@@ -3803,7 +3908,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                     }
                                   }
                                 }}
-                                className={`calendar-item relative group w-full text-left select-none transition-all cursor-pointer ${calendarView === "week" ? "!whitespace-normal !px-2.5 !py-2 !text-[11px] !bg-primary/10 !text-primary !rounded-md !overflow-visible hover:!bg-primary/20" : ""} ${isTouchPicked ? "opacity-50 scale-95 ring-2 ring-primary/50 ring-offset-1" : ""} ${isSelected ? "!ring-2 !ring-primary !ring-offset-1 !bg-primary/20" : ""}`}
+                                className={`calendar-item relative group w-full text-left select-none transition-all ${isPublished ? "cursor-default opacity-80" : "cursor-pointer"} ${calendarView === "week" ? `!whitespace-normal !px-2.5 !py-2 !text-[11px] !rounded-md !overflow-visible ${isPublished ? "!bg-emerald-500/15 !text-emerald-800 dark:!text-emerald-300 hover:!bg-emerald-500/20" : "!bg-primary/10 !text-primary hover:!bg-primary/20"}` : ""} ${isTouchPicked ? "opacity-50 scale-95 ring-2 ring-primary/50 ring-offset-1" : ""} ${isSelected ? "!ring-2 !ring-primary !ring-offset-1 !bg-primary/20" : ""}`}
                               >
                                 {selectionMode && (
                                   <span className="absolute top-0.5 left-0.5 z-10 pointer-events-none">
@@ -3822,10 +3927,49 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                       );
                                     })()}
                                     <span className={`block truncate font-medium text-[10px] leading-snug ${selectionMode ? "pl-4" : "pr-1"}`}>{session.name || "Session"}</span>
+                                    {isTeamMode && teamMeta && (
+                                      <span className={`inline-block text-[7px] font-bold leading-none px-1 py-0.5 rounded-full ${isPublished ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                        {isPublished ? "PUBLISHED" : "DRAFT"}
+                                      </span>
+                                    )}
                                   </>
                                 ) : (
                                   <>
                                     <span className="block font-semibold pr-5 leading-snug mb-1 line-clamp-2">{session.name || "Session"}</span>
+                                    {/* Team mode: Draft/Published badge + actions */}
+                                    {isTeamMode && teamMeta && (
+                                      <div className="flex items-center gap-1 mb-1.5">
+                                        {isPublished ? (
+                                          <>
+                                            <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                              <Check className="w-2 h-2" />PUBLISHED
+                                            </span>
+                                            <button
+                                              onClick={e => { e.stopPropagation(); void handleViewTeamCopies(teamMeta.dbId, session.name || "Session"); }}
+                                              className="inline-flex items-center gap-0.5 text-[8px] font-semibold px-1 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                                            >
+                                              <Eye className="w-2 h-2" />Copies
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                              <Pencil className="w-2 h-2" />DRAFT
+                                            </span>
+                                            <button
+                                              onClick={e => {
+                                                e.stopPropagation();
+                                                setTeamPublishConfirm({ sessionId: session.id, dbId: teamMeta.dbId });
+                                              }}
+                                              className="inline-flex items-center gap-0.5 text-[8px] font-semibold px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
+                                            >
+                                              <Send className="w-2 h-2" />Publish
+                                            </button>
+                                          </>
+                                        )}
+                                        {isPublished && <Lock className="w-2.5 h-2.5 opacity-50 shrink-0" />}
+                                      </div>
+                                    )}
                                     {(session.source === "wod_brain" || session.source === "run_brain") && session.structure && (
                                       <p className={`text-[10px] leading-snug mb-1 line-clamp-2 ${isTouchPicked ? "opacity-90" : "opacity-70"}`}>{session.structure}</p>
                                     )}
@@ -3841,7 +3985,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
                                         )}
                                       </ul>
                                     )}
-                                    {prog && (
+                                    {!isTeamMode && prog && (
                                       <p className={`mt-1.5 text-[9px] uppercase tracking-wide truncate ${isTouchPicked ? "opacity-60" : "opacity-40"}`}>{prog.title}</p>
                                     )}
                                   </>
@@ -5183,6 +5327,62 @@ export default function ClientArea({ clientIdOverride, mode = "coach" }: ClientA
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Team: Publish Confirmation Dialog */}
+      {isTeamMode && (
+        <Dialog open={!!teamPublishConfirm} onOpenChange={o => { if (!o) setTeamPublishConfirm(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Publish Session?</DialogTitle>
+              <DialogDescription>
+                This will push the session to all {teamMemberCount > 0 ? teamMemberCount : ""} team members' calendars. Once published, the template becomes read-only.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setTeamPublishConfirm(null)} disabled={teamPublishing}>Cancel</Button>
+              <Button onClick={() => void handleTeamPublishSession()} disabled={teamPublishing} className="gap-1.5">
+                {teamPublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                Publish to Team
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Team: View Client Copies Side Panel */}
+      {isTeamMode && teamCopiesPanel && (
+        <div className="fixed inset-y-0 right-0 z-50 w-80 bg-background border-l shadow-xl flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+            <div>
+              <p className="font-semibold text-sm">Client Copies</p>
+              <p className="text-xs text-muted-foreground truncate max-w-[220px]">{teamCopiesPanel.sessionName}</p>
+            </div>
+            <button onClick={() => setTeamCopiesPanel(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+            {teamCopiesLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              </div>
+            ) : teamCopies.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No copies yet</p>
+            ) : (
+              teamCopies.map((copy: any) => (
+                <div key={copy.clientId} className="flex items-center gap-2.5 p-2.5 rounded-lg border bg-muted/30">
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs shrink-0">
+                    {(copy.clientName || "?").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{copy.clientName}</p>
+                    <p className="text-xs text-muted-foreground">{copy.date ? format(parseISO(copy.date), "d MMM yyyy") : "—"}</p>
+                  </div>
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Added</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
