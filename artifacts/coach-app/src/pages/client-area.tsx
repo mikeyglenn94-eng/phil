@@ -3728,7 +3728,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                       <div
                         key={di}
                         data-date={dateStr}
-                        className={`calendar-cell transition-colors ${di >= 5 ? "bg-muted/20" : ""} ${isDropTarget ? "!bg-primary/10 ring-2 ring-inset ring-primary/30" : ""} ${calendarView === "week" ? "!min-h-[calc(100vh-280px)]" : ""} ${pasteMode ? "cursor-copy hover:!bg-emerald-50 hover:ring-2 hover:ring-inset hover:ring-emerald-400/50" : ""}`}
+                        className={`calendar-cell transition-colors ${isDropTarget ? "!bg-primary/10 ring-2 ring-inset ring-primary/30" : ""} ${calendarView === "week" ? "!min-h-[calc(100vh-280px)]" : ""} ${pasteMode ? "cursor-copy hover:!bg-emerald-50 hover:ring-2 hover:ring-inset hover:ring-emerald-400/50" : ""}`}
                         onClick={() => {
                           if (pasteMode) { void pasteToDate(dateStr); return; }
                           if (isDragActiveRef.current) return;
