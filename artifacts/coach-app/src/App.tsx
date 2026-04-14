@@ -18,6 +18,8 @@ import CoachClientCalendar from "./pages/coach-client-calendar";
 import Library from "./pages/library";
 import LibraryBuilder from "./pages/library-builder";
 import StrengthBlocks from "./pages/strength-blocks";
+import Teams from "./pages/teams";
+import TeamDetail from "./pages/team-detail";
 import { AppSidebar } from "./components/app-sidebar";
 import { ClientProvider, useClientContext } from "./contexts/client-context";
 import { AuthProvider, useAuth } from "./contexts/auth-context";
@@ -122,6 +124,8 @@ function CoachLayout() {
                 <Route path="/clients" component={ClientsList} />
                 <Route path="/clients/:clientId/programmes/:programmeId" component={CoachClientCalendar} />
                 <Route path="/clients/:clientId" component={ClientArea} />
+                <Route path="/teams/:teamId" component={TeamDetail} />
+                <Route path="/teams" component={Teams} />
                 <Route path="/library/builder/:programmeId" component={LibraryBuilder} />
                 <Route path="/library" component={Library} />
                 <Route path="/strength-blocks" component={StrengthBlocks} />

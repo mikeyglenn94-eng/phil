@@ -1,0 +1,112 @@
+New Feature: Team Programmes
+Overview
+A coach builds a master programme for a team. Sessions sit in draft (work mode) until published. On publish, every team member gets their own copy of that session on the same calendar date. Clients can modify their copy (swap exercises, log results) and the coach can see what changed.
+
+Database — new tables
+sqlteams
+  id, name, coachId (FK → users), createdAt
+
+team_members
+  id, teamId (FK → teams), clientId (FK → clients), joinedAt
+
+team_programmes
+  id, teamId (FK → teams), title, sessions (JSONB), createdAt, updatedAt
+  -- identical JSONB session structure to existing programmes table
+
+team_sessions
+  id, teamProgrammeId (FK → team_programmes), sessionData (JSONB), date, status ('draft' | 'published'), publishedAt
+
+client_team_sessions
+  id, teamSessionId (FK → team_sessions), clientId (FK → clients), sessionData (JSONB), createdAt, updatedAt
+  -- sessionData is the client's own copy, modified from the master
+  -- modifications tracked as: originalSessionData (snapshot at publish time) stored alongside sessionData
+The originalSessionData snapshot is taken at publish time so you can always diff what the client changed.
+
+API routes (no /api prefix in handlers)
+GET    /teams                          → list all teams for coach
+POST   /teams                          → create team
+GET    /teams/:teamId                  → team detail + members
+POST   /teams/:teamId/members          → add client to team (clientId in body)
+DELETE /teams/:teamId/members/:clientId → remove client from team
+
+GET    /teams/:teamId/programme        → get master programme + all sessions
+POST   /teams/:teamId/sessions         → create/save a session on master calendar
+PUT    /teams/:teamId/sessions/:id     → update master session
+DELETE /teams/:teamId/sessions/:id     → delete master session
+
+POST   /teams/:teamId/sessions/:id/publish
+  → sets status = 'published', publishedAt = now
+  → for each client in team_members, inserts a row into client_team_sessions
+    with sessionData = deep clone of master sessionData (result fields cleared via clearSessionResults)
+    and originalSessionData = same clone (immutable snapshot)
+
+GET    /teams/:teamId/sessions/:id/client-copies
+  → returns all client_team_sessions for this session
+  → includes diff: for each client copy, compare sessionData.exercises vs originalSessionData.exercises
+    and flag any exercises where name differs (swap) or sets/reps differ (modification)
+
+GET    /clients/:clientId/team-sessions
+  → returns all published client_team_sessions for this client across all teams
+  → these appear on the client's calendar alongside their personal programme sessions
+
+PUT    /client-team-sessions/:id
+  → client updates their own copy (exercise swaps, logging sets/weights/reps)
+  → always updates sessionData only, never originalSessionData
+
+Frontend — new section in coach nav
+Add "Teams" to the coach sidebar navigation, between Clients and Library.
+/teams — Teams list page
+
+Lists all teams with name, member count, programme status
+"Create Team" button → modal to name the team → POST /teams → redirect to /teams/:teamId
+
+/teams/:teamId — Team detail page
+Two tabs: Programme | Members
+Members tab:
+
+List of clients on the team with join date
+"Add Client" button → searchable dropdown of existing clients (a client can appear in multiple teams)
+Remove client button per row
+
+Programme tab:
+
+Full calendar builder — identical component to the existing client-area calendar and library builder
+Same command bar (AI, voice, copy/paste, manual add)
+Same session cards, drag and drop, multi-select, undo/redo
+Sessions show a status badge: Draft (grey) or Published (green)
+Each session card has a Publish button when in draft
+On publish: confirmation modal — "This will send this session to X members. Published sessions cannot be unpublished." → confirm → POST publish endpoint
+Published sessions on master calendar are read-only (locked icon) — coach can still add new draft sessions around them
+"View Client Copies" button on published sessions → opens a side panel showing each team member's copy with diff highlights (swapped exercises shown in amber, modified sets/reps shown in blue)
+
+
+Client experience
+
+Team sessions appear on the client's existing calendar alongside their personal programme sessions
+Visually distinguished with a small team badge/tag on the session card (e.g. "Team: [team name]")
+Client opens the session → full session detail view, identical to personal sessions
+Client can: swap exercises, log sets/weights/reps, leave comments
+Client cannot: change the session date, delete the session
+All modifications save to client_team_sessions.sessionData only
+
+
+Diff logic (coach visibility)
+When coach views client copies, compute the diff server-side or client-side by comparing sessionData.exercises vs originalSessionData.exercises per exercise id:
+tstype ExerciseDiff = {
+  exerciseId: string;
+  type: 'swapped' | 'modified' | 'unchanged';
+  original: Exercise;
+  current: Exercise;
+}
+
+swapped — exercise name differs
+modified — name same but sets, repsMin, repsMax, or rpe differ from original prescription
+Logged results (setWeights, setReps) are never flagged as modifications — those are expected
+
+
+Important implementation rules
+
+Reuse existing calendar builder component — do not duplicate it. Pass a mode="team" prop if any minor conditional behaviour is needed (e.g. showing draft/publish controls), but the core calendar, command bar, and session logic are unchanged
+clearSessionResults must be called on every session clone at publish time — clients start with clean prescription, no results carried over
+A client joining a team after a session is published does NOT retroactively receive that session — only sessions published after their join date are distributed
+Team sessions and personal programme sessions are separate — a team session never overwrites a client's personal calendar

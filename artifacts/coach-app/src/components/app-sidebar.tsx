@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Dumbbell, Users, Eye, BookOpen, LogOut, ShieldCheck } from "lucide-react";
+import { Users, Eye, BookOpen, LogOut, ShieldCheck, UsersRound } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -53,6 +53,17 @@ export function AppSidebar() {
                   >
                     <Users className="w-4 h-4" />
                     <span>Clients</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <Link href="/teams">
+                  <SidebarMenuButton
+                    isActive={location.startsWith("/teams")}
+                    className="hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground font-medium rounded-lg"
+                  >
+                    <UsersRound className="w-4 h-4" />
+                    <span>Teams</span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>

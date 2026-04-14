@@ -2,7 +2,25 @@
 
 ## Overview
 
-A voice-first training platform for athletes and coaches. Supports AI-assisted programme generation, athlete self-serve calendar/session logging, WOD recording, run interval tracking, analytics, and AI coaching layer. Role-based access: athletes, coaches, and admins each have separate experiences.
+A voice-first training platform for athletes and coaches. Supports AI-assisted programme generation, athlete self-serve calendar/session logging, WOD recording, run interval tracking, analytics, AI coaching layer, and team programme management. Role-based access: athletes, coaches, and admins each have separate experiences.
+
+## Teams Feature
+
+Coaches can create teams, add clients as members, build shared programmes (calendar of sessions), and publish sessions to all team members at once.
+
+- **`/teams`** — Teams list page; "New Team" button creates a team and redirects to detail
+- **`/teams/:teamId`** — Team detail with two tabs:
+  - **Programme tab**: weekly calendar grid of team sessions; sessions are `draft` until published; each draft has a Publish button + Delete; published sessions are locked (read-only) with a View Copies eye button
+  - **Members tab**: searchable add-member flow; remove members per row
+- **Publish flow**: confirmation modal shows member count → POST `/api/teams/:id/sessions/:id/publish` → inserts one `client_team_sessions` row per member (results cleared via `clearSessionResults`); session status → `published`
+- **Client copies**: eye icon opens a slide-over panel with each member's copy and a diff (swapped exercises in amber, modified prescription in blue)
+- **Client calendar integration**: `GET /clients/:clientId/team-sessions` returns published team sessions; these render alongside personal programme sessions with a team badge
+
+### Database tables
+- `teams` — id, name, coachId (FK → users), createdAt
+- `team_members` — id, teamId, clientId, joinedAt
+- `team_sessions` — id, teamId, sessionData (JSONB Session), date, status, publishedAt
+- `client_team_sessions` — id, teamSessionId, clientId, sessionData, originalSessionData (immutable snapshot at publish time)
 
 ## Auth Architecture
 

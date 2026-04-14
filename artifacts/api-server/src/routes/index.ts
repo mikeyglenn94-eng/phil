@@ -19,6 +19,7 @@ import analyticsRouter from "./analytics";
 import coachingRouter from "./coaching";
 import coachParseRouter from "./coach-parse";
 import irlRouter from "./irl";
+import teamsRouter from "./teams";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(analyticsRouter);
 router.use(coachingRouter);
 router.use(coachParseRouter);
 router.use(irlRouter);
+router.use(teamsRouter);
 
 export default router;
