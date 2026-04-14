@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,6 +12,9 @@ export const clientsTable = pgTable("clients", {
   dailyFatGoal: integer("daily_fat_goal"),
   creditResetAt: timestamp("credit_reset_at", { withTimezone: true }),
   irlClient: boolean("irl_client").notNull().default(false),
+  onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+  equipmentList: text("equipment_list"),
+  onboardingData: jsonb("onboarding_data"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

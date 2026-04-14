@@ -358,8 +358,8 @@ router.post("/generate-rationale", async (req, res): Promise<void> => {
 });
 
 router.post("/generate-programme", async (req, res): Promise<void> => {
-  const { description, startDate, strengthStyle, clientId } = req.body as {
-    description: string; startDate: string; strengthStyle?: "straight" | "variety"; clientId?: number;
+  const { description, startDate, strengthStyle, clientId, weekOnly } = req.body as {
+    description: string; startDate: string; strengthStyle?: "straight" | "variety"; clientId?: number; weekOnly?: boolean;
   };
   if (!description || !startDate) {
     res.status(400).json({ error: "description and startDate are required" });
@@ -375,9 +375,12 @@ router.post("/generate-programme", async (req, res): Promise<void> => {
     }
   }
 
-  // If no week count is mentioned, prepend "6-week" so the AI never defaults to 1 week
+  // weekOnly = preview mode: generate exactly 1 week so the user can review before committing
+  // Otherwise: ensure a multi-week block is generated (default 6 weeks)
   const weekMentioned = /\b(\d+)[\s-]?week|\bweeks?\b/i.test(description);
-  const effectiveDescription = weekMentioned ? description : `6-week ${description}`;
+  const effectiveDescription = weekOnly
+    ? description
+    : weekMentioned ? description : `6-week ${description}`;
 
   const chosenModel = selectModel(effectiveDescription);
   req.log.info({ model: chosenModel, hasClientId: !!clientId }, "generate-programme model selected");
@@ -863,12 +866,18 @@ Think of Week 1 as defining the block template. Weeks 2, 3, and 4 are progressio
 **Final check before outputting:** Scan every strength session. If any exercise name in Week 2+ differs from its Week 1 counterpart, replace it with the Week 1 exercise name. The output is only correct when every week has the same exercises.
 `;
 
+  const weekOnlySection = weekOnly ? `
+
+## WEEK 1 PREVIEW ONLY — CRITICAL CONSTRAINT
+Generate EXACTLY 1 week of sessions. All day numbers must be between 1 and 7 (inclusive). Do NOT generate any sessions with dayNumber greater than 7. blockLength must be 1. This is a preview for the user to review and tweak before the full programme is built.
+` : "";
+
   try {
     const completion = await openai.chat.completions.create({
-      model: chosenModel,
-      max_completion_tokens: chosenModel === "gpt-4o" ? 16384 : 32768,
+      model: weekOnly ? "gpt-4o" : chosenModel,
+      max_completion_tokens: weekOnly ? 8192 : (chosenModel === "gpt-4o" ? 16384 : 32768),
       messages: [
-        { role: "system", content: systemPrompt + styleSection },
+        { role: "system", content: systemPrompt + weekOnlySection + styleSection },
         { role: "user", content: `Description: "${effectiveDescription}"` },
       ],
     });
@@ -918,6 +927,72 @@ Think of Week 1 as defining the block template. Weeks 2, 3, and 4 are progressio
   } catch (err) {
     req.log.error({ err }, "Error generating programme");
     res.status(500).json({ error: "Failed to generate programme" });
+  }
+});
+
+router.post("/tweak-programme-preview", async (req, res): Promise<void> => {
+  const { sessions, instruction, equipmentList } = req.body as {
+    sessions: any[];
+    instruction: string;
+    equipmentList?: string;
+  };
+  if (!sessions || !instruction) {
+    res.status(400).json({ error: "sessions and instruction are required" });
+    return;
+  }
+
+  const equipmentContext = equipmentList
+    ? `\n\nUSER'S EQUIPMENT: ${equipmentList}\nOnly prescribe exercises using this equipment. If the user requests an exercise requiring unavailable equipment, suggest alternatives that only use listed equipment.`
+    : "";
+
+  const systemPrompt = `You are a fitness programming assistant. The user has a 1-week programme preview and wants to tweak it.
+
+You will receive the current sessions JSON and a natural language instruction. Apply ONLY what the instruction asks for and return the complete updated sessions.
+
+CRITICAL RULES:
+- When swapping or modifying an exercise, apply the change to ALL instances of that exercise across ALL sessions in the week, not just one session. After making the change, confirm it in your message: "Lat pulldown swapped for seated row across all sessions."
+- Preserve all session structure: dates, ids, names, source fields, colors
+- Do NOT restructure or rename sessions unless the instruction explicitly asks for it
+- Do NOT change exercises the instruction didn't mention
+- If the user asks to move a session to a different day, update the date field only
+- Return ONLY valid JSON: {"sessions": [...complete updated sessions...], "message": "Brief description of what changed"}${equipmentContext}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      max_completion_tokens: 8192,
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Current week 1 sessions:\n${JSON.stringify(sessions, null, 2)}\n\nInstruction: "${instruction}"`,
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    let result: { sessions?: any[]; message?: string };
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      res.status(500).json({ error: "AI returned invalid JSON" });
+      return;
+    }
+
+    const updatedSessions = (result.sessions ?? sessions).map((s: any) => ({
+      ...s,
+      exercises: (s.exercises ?? []).map((ex: any) => ({
+        ...ex,
+        id: ex.id || `ex-${randomUUID().slice(0, 8)}`,
+        weekProgression: ex.weekProgression ?? [],
+      })),
+    }));
+
+    res.json({ sessions: updatedSessions, message: result.message ?? "Preview updated." });
+  } catch (err) {
+    req.log.error({ err }, "Error tweaking programme preview");
+    res.status(500).json({ error: "Failed to tweak preview" });
   }
 });
 

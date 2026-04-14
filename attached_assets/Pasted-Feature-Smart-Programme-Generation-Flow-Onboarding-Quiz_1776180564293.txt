@@ -1,0 +1,120 @@
+Feature: Smart Programme Generation Flow + Onboarding Quiz
+This change affects two things: the onboarding flow for new users, and the programme generation logic everywhere in the app (client area, teams, library builder). The preview-and-confirm pattern becomes the standard for all AI programme generation.
+
+Part 1: Onboarding Quiz
+Trigger: any authenticated user with no existing sessions on their calendar is shown the onboarding flow on first login.
+First screen — before anything else:
+"Do you have a coach programming for you?"
+Two options:
+
+Yes, I have a coach → skip entire onboarding quiz, go straight to the calendar with a single dismissible message: "Your coach will set up your programme. You'll see your sessions here when they're ready."
+No, I'll build my own programme → proceed to quiz below
+
+
+Full-screen step-by-step quiz, one question per screen, progress bar at top. Smooth transition between steps. Can be skipped at any point via a "Skip for now" link — takes them to an empty calendar.
+Steps:
+1. Name — "What should we call you?" (pre-fill from account if available)
+2. Goal — single select:
+
+Lose fat
+Build muscle
+Get stronger
+Improve fitness
+Train for an event
+
+3. Experience — single select:
+
+Beginner (under 1 year)
+Intermediate (1–3 years)
+Advanced (3+ years)
+
+4. Training days per week — single select: 2 / 3 / 4 / 5+
+5. Session length — single select: 30 min / 45 min / 60 min / 90 min
+6. Equipment — single select:
+
+Full gym
+Home with kit
+Bodyweight only
+
+6b. Home with kit only — follow-up step:
+If user selects "Home with kit", show an additional screen before proceeding:
+"What equipment do you have at home?"
+Free text input with voice support. Placeholder: e.g. "Barbell, squat rack, dumbbells up to 40kg, pull-up bar, resistance bands"
+User types or speaks their full equipment list. No suggestions or dropdowns — they describe exactly what they have. This list is saved to their profile and passed to the AI on every programme generation and exercise suggestion call.
+
+Full gym → AI assumes access to every barbell, machine, cable, dumbbell, and cardio equipment in a commercial gym. No restrictions.
+Bodyweight only → AI restricts to bodyweight exercises only.
+Home with kit → AI must not prescribe any exercise requiring equipment not on the user's list. If the user attempts to swap to an exercise requiring unavailable equipment during the preview tweak phase, AI responds: "That exercise needs a cable machine — you haven't listed one. Want me to suggest alternatives with your kit?"
+
+7. Focus — multi-select:
+
+Powerlifting
+Hyrox
+General fitness
+Running
+Hybrid
+
+8. Start date — date picker, default today, minimum today
+On completion → proceed to programme preview flow below.
+Store all answers in the user's profile for future AI context.
+
+Part 2: Programme Generation Flow (used everywhere — onboarding, client area, teams)
+This replaces the current behaviour where AI generates a full multi-week programme immediately. The new logic is:
+Step 1 — Generate week 1 preview only
+AI generates a single week based on the command or onboarding answers. This is the only week built at this stage. Display it as a preview card — not yet on the calendar.
+The preview shows:
+
+Each session as a card with day, session type, exercises, sets, reps
+An "Any changes?" input bar at the bottom with microphone — same component as the post-session feedback box (reuse it)
+Placeholder chips: "Swap an exercise", "Change a day", "Make it harder", "Remove a session"
+A Confirm & Build Full Programme button
+A Start over link
+
+Step 2 — Natural language tweaks to the preview
+User types or speaks changes in natural language. Examples:
+
+"Swap lat pulldown for seated row"
+"I don't have a lat pulldown" → AI suggests 2–3 alternatives, user picks one
+"Move Thursday to Friday"
+"Make Monday shorter"
+"I don't have a cable machine" → AI identifies all exercises in the preview requiring a cable machine and suggests alternatives using only the user's listed equipment
+
+Critical rule: when a user swaps or modifies an exercise, apply the change to all instances of that exercise across the entire programme, not just the current session. If lat pulldown appears on Monday and Thursday, swapping it updates both. Confirm this to the user: "Lat pulldown swapped for seated row across all sessions."
+AI updates the week 1 preview in place. User can make as many tweaks as they want before confirming.
+Step 3 — Confirm
+User hits "Confirm & Build Full Programme". At this point:
+
+AI builds weeks 2–4 using week 1 as the confirmed template
+Applies progression rules week-over-week:
+
+Primary compounds (squat, bench press, deadlift, strict press and close variations): sets progress 3→4→5, exact rep count decreases as sets increase
+Accessories and all other exercises: sets progress 3→4 (hard cap 4), rep range stays fixed (always a range e.g. 12–15, never a single number), range can go up to 20
+Week 4 is a deload: 50% volume, same rep ranges
+
+
+All 4 weeks land on the calendar from the chosen start date
+Show a brief loading state: "Building your programme..."
+On completion: calendar opens at the start date showing the full month populated
+
+Step 4 — Post-generation guidance (onboarding only)
+After the calendar loads, show a single dismissible tooltip/coach mark sequence (3 steps max):
+
+"This is your training calendar. Tap any session to log it."
+"Use the command bar to ask your coach anything — swap exercises, adjust the plan, add sessions."
+"After each session, tell us how it felt and we'll adapt future sessions."
+
+Dismiss on tap. Never show again once dismissed.
+
+Token efficiency rule
+Never generate more than 1 week of sessions in a single AI call during the preview phase. Weeks 2–4 are only generated after the user confirms week 1. This applies to all programme generation across the app — client area, onboarding, teams — not just onboarding.
+
+Apply to future sessions — existing feature
+The "Apply to future sessions" feedback box already exists on the post-session screen. No changes needed there. The preview tweak input in Step 2 above uses the same component.
+
+AI system prompt rules for programme generation
+Add the following rules to the AI system prompt used for all programme generation:
+
+"Never use the phrase 'easy run'. Always use: recovery run, steady run, long steady run, or quality session."
+"For home gym users, only prescribe exercises using equipment explicitly listed in the user's equipment profile. Never assume access to machines, cables, or barbells unless listed."
+"For full gym users, assume access to all standard commercial gym equipment including all barbells, dumbbells, cable machines, Smith machine, leg press, lat pulldown, seated row, chest press, all cardio machines."
+"When prescribing sets and reps, distinguish between primary compound lifts (squat, bench press, deadlift, strict press and their close variations) and all other exercises. Primary compounds: 3–5 sets, prescribe an exact rep count (e.g. 5, 4, 3), reps decrease week-over-week as sets increase. All other exercises: maximum 4 sets, always prescribe a rep range never a single number (e.g. 12–15, 15–20, 8–12), rep ranges can go up to 20, never prescribe fewer than 6 reps or more than 4 sets on accessory or secondary movements, rep range stays fixed across the block while sets progress."

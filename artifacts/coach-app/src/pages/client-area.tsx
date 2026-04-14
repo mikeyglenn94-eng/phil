@@ -327,6 +327,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const [confirmingGenerated, setConfirmingGenerated] = useState(false);
   const [strengthStyle, setStrengthStyle] = useState<"straight" | "variety">("straight");
   const [runEnv, setRunEnv] = useState<string[]>([]);
+  const [previewTweakInput, setPreviewTweakInput] = useState("");
+  const [previewTweakLoading, setPreviewTweakLoading] = useState(false);
+  const [previewTweakMessage, setPreviewTweakMessage] = useState("");
 
   // IRL booking state
   const [isIrlEnabled, setIsIrlEnabled] = useState(false);
@@ -396,11 +399,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         setRationaleText(capturedRationale);
         setRationaleReady(true);
       }
-      // Step 2: generate the full programme
+      // Step 2: generate week 1 preview only (user confirms before weeks 2-4 are built)
       const res = await fetch("/api/generate-programme", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, weekOnly: true }),
       });
       if (res.status === 429) { setGenerationLimitError(true); return; }
       if (!res.ok) throw new Error(await res.text());
@@ -413,18 +416,89 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     }
   }
 
+  function decreaseCompoundReps(reps: string | undefined | null, weekIdx: number): string {
+    if (!reps) return "";
+    const r = String(reps).trim();
+    const single = r.match(/^(\d+)$/);
+    if (single) return String(Math.max(1, parseInt(single[1]) - weekIdx));
+    const range = r.match(/^(\d+)[–\-](\d+)$/);
+    if (range) {
+      const lo = Math.max(1, parseInt(range[1]) - weekIdx);
+      const hi = Math.max(lo + 1, parseInt(range[2]) - weekIdx);
+      return `${lo}-${hi}`;
+    }
+    return r;
+  }
+
+  function expandWeeks(week1Sessions: any[], totalWeeks: number = 4): any[] {
+    if (week1Sessions.length === 0) return [];
+    const dates = week1Sessions.map((s: any) => s.date).filter(Boolean).sort() as string[];
+    if (dates.length === 0) return week1Sessions;
+    const anchor = parseISO(dates[0]);
+    const result: any[] = week1Sessions.map((s: any) => ({ ...s }));
+    for (let week = 2; week <= totalWeeks; week++) {
+      const weekDayOffset = (week - 1) * 7;
+      const isDeload = week === totalWeeks;
+      for (const session of week1Sessions) {
+        const sessionDate = parseISO(session.date);
+        const dayOffset = differenceInDays(sessionDate, anchor);
+        const newDate = format(addDays(anchor, weekDayOffset + dayOffset), "yyyy-MM-dd");
+        const weekIdx = week - 1;
+        const updatedExercises = (session.exercises ?? []).map((ex: any) => {
+          const newId = `ex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          if (isDeload) return { ...ex, id: newId, sets: Math.max(1, Math.round((ex.sets ?? 3) / 2)) };
+          if (isPrimaryCompound(ex.name ?? "")) {
+            return { ...ex, id: newId, sets: Math.min(5, (ex.sets ?? 3) + weekIdx), reps: decreaseCompoundReps(ex.reps, weekIdx) };
+          }
+          return { ...ex, id: newId, sets: weekIdx >= 1 ? Math.min(4, (ex.sets ?? 3) + 1) : (ex.sets ?? 3) };
+        });
+        result.push({
+          ...session,
+          id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          date: newDate,
+          exercises: updatedExercises,
+        });
+      }
+    }
+    return result;
+  }
+
+  async function handleTweakPreview() {
+    if (!generatedPreview || !previewTweakInput.trim()) return;
+    setPreviewTweakLoading(true);
+    setPreviewTweakMessage("");
+    try {
+      const res = await fetch("/api/tweak-programme-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessions: generatedPreview.sessions, instruction: previewTweakInput.trim() }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setGeneratedPreview(prev => prev ? { ...prev, sessions: data.sessions } : null);
+      setPreviewTweakMessage(data.message ?? "Preview updated.");
+      setPreviewTweakInput("");
+    } catch {
+      setPreviewTweakMessage("Couldn't apply that change — try rephrasing.");
+    } finally {
+      setPreviewTweakLoading(false);
+    }
+  }
+
   async function handleConfirmGenerated() {
     if (!generatedPreview) return;
     setConfirmingGenerated(true);
     try {
+      // Expand week 1 to a full 4-week programme with progression rules applied
+      const allSessions = expandWeeks(generatedPreview.sessions, 4);
       const saveRes = await fetch("/api/programmes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: generatedPreview.title,
-          sessions: generatedPreview.sessions,
+          sessions: allSessions,
           clientId,
-          ...(generatedPreview.blockLength != null ? { blockLength: generatedPreview.blockLength } : {}),
+          blockLength: 4,
           ...(generatedPreview.sessionsPerWeek != null ? { sessionsPerWeek: generatedPreview.sessionsPerWeek } : {}),
         }),
       });
@@ -438,7 +512,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       setGeneratedPreview(null);
       setDescribeText("");
       setStrengthStyle(null);
-      toast({ title: "Programme built!", description: `"${generatedPreview.title}" added to the calendar.` });
+      setPreviewTweakInput("");
+      setPreviewTweakMessage("");
+      toast({ title: "Programme built!", description: `"${generatedPreview.title}" — 4 weeks added to the calendar.` });
     } catch {
       toast({ title: "Failed to save programme", variant: "destructive" });
     } finally {
@@ -4408,32 +4484,88 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               ) : (
                 <>
                   {(generatedPreview as any).rationale && (
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 space-y-1">
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
                       <p className="text-[11px] font-semibold text-primary/60 uppercase tracking-wider mb-1.5">Coach's logic</p>
                       <p className="text-xs text-foreground/80 leading-relaxed">{(generatedPreview as any).rationale}</p>
                     </div>
                   )}
-                  <div className="rounded-xl border bg-muted/30 p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-sm leading-snug">{generatedPreview.title}</p>
-                      <span className="text-xs text-muted-foreground shrink-0">{generatedPreview.sessions.length} sessions</span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold">{generatedPreview.title}</p>
+                      <span className="text-xs text-muted-foreground">Week 1 preview · {generatedPreview.sessions.length} sessions</span>
                     </div>
-                    <div className="space-y-1 max-h-36 overflow-y-auto">
-                      {generatedPreview.sessions.map((s: any) => {
-                        const isWod = s.source === "wod_brain";
-                        const isRun = s.source === "run_brain";
-                        return (
-                          <div key={s.id} className="flex items-center gap-2 text-xs">
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isWod ? "bg-violet-500" : isRun ? "bg-green-500" : "bg-primary"}`} />
-                            <span className="text-muted-foreground w-14 shrink-0">{format(parseISO(s.date), "EEE d MMM")}</span>
-                            <span className="font-medium truncate">{s.name}</span>
+                    {generatedPreview.sessions.map((s: any) => {
+                      const isWod = s.source === "wod_brain";
+                      const isRun = s.source === "run_brain";
+                      return (
+                        <div key={s.id} className="rounded-xl border bg-background p-3 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${isWod ? "bg-violet-500" : isRun ? "bg-emerald-500" : "bg-primary"}`} />
+                            <span className="text-[11px] text-muted-foreground">{format(parseISO(s.date), "EEE d MMM")}</span>
+                            <span className="font-semibold text-sm">{s.name}</span>
                           </div>
-                        );
-                      })}
-                    </div>
+                          {isWod || isRun ? (
+                            <p className="text-xs text-muted-foreground leading-relaxed pl-4">{s.structure}</p>
+                          ) : (
+                            <div className="space-y-0.5 pl-4">
+                              {(s.exercises ?? []).slice(0, 5).map((ex: any, i: number) => (
+                                <div key={i} className="flex items-baseline justify-between gap-2">
+                                  <span className="text-xs text-foreground/80 truncate">{ex.name}</span>
+                                  <span className="text-xs text-muted-foreground shrink-0 font-mono tabular-nums">
+                                    {ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.sets ? `${ex.sets} sets` : ""}
+                                    {ex.rpe ? ` @RPE${ex.rpe}` : ""}
+                                  </span>
+                                </div>
+                              ))}
+                              {(s.exercises ?? []).length > 5 && (
+                                <p className="text-[11px] text-muted-foreground">+{s.exercises.length - 5} more</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 leading-relaxed">
-                    💡 Once added, use the calendar to fine-tune dates, swap exercises, or adjust sessions — no need to regenerate for small changes.
+
+                  {/* Tweak input */}
+                  <div className="space-y-2 pt-1 border-t">
+                    <p className="text-xs font-medium text-muted-foreground">Any changes to week 1?</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["Swap an exercise", "Change a day", "Make it harder", "Remove a session"].map(chip => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => setPreviewTweakInput(chip + " — ")}
+                          className="text-xs px-2.5 py-1 rounded-full border bg-muted/30 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="e.g. Swap lat pulldown for seated row..."
+                        value={previewTweakInput}
+                        onChange={e => setPreviewTweakInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter" && previewTweakInput.trim()) { void handleTweakPreview(); } }}
+                        className="text-sm flex-1"
+                        disabled={previewTweakLoading}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => void handleTweakPreview()}
+                        disabled={!previewTweakInput.trim() || previewTweakLoading}
+                        className="shrink-0 px-3"
+                      >
+                        {previewTweakLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      </Button>
+                    </div>
+                    {previewTweakMessage && (
+                      <p className="text-xs text-emerald-600 leading-relaxed">{previewTweakMessage}</p>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Week 1 is your template. Confirming will build weeks 2–4 with automatic progression, and week 4 as a deload.
                   </p>
                 </>
               )}
@@ -4566,13 +4698,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   )}
                 </>
               ) : (
-                <>
-                  <Button variant="ghost" size="sm" onClick={() => setGeneratedPreview(null)} className="text-muted-foreground">← Back</Button>
-                  <Button onClick={handleConfirmGenerated} disabled={confirmingGenerated} className="gap-2">
-                    {confirmingGenerated ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    Add to {client?.name ?? "Client"}'s Calendar
+                <div className="w-full flex flex-col gap-2">
+                  <Button onClick={handleConfirmGenerated} disabled={confirmingGenerated || previewTweakLoading} className="gap-2 w-full">
+                    {confirmingGenerated ? <><Loader2 className="w-4 h-4 animate-spin" /> Building your programme…</> : <><Sparkles className="w-4 h-4" /> Confirm &amp; Build Full Programme</>}
                   </Button>
-                </>
+                  <button
+                    type="button"
+                    onClick={() => { setGeneratedPreview(null); setPreviewTweakInput(""); setPreviewTweakMessage(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
+                  >
+                    ← Start over
+                  </button>
+                </div>
               )}
             </DialogFooter>
           )}

@@ -177,6 +177,24 @@ router.post("/clients/:clientId/verify-password", async (req, res): Promise<void
   res.json({ success: ok });
 });
 
+// Save onboarding quiz answers + mark completed
+router.patch("/clients/:clientId/onboarding", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.clientId, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { onboardingData, onboardingCompleted, equipmentList } = req.body as {
+    onboardingData?: Record<string, unknown>;
+    onboardingCompleted?: boolean;
+    equipmentList?: string;
+  };
+  const update: Record<string, unknown> = {};
+  if (onboardingData !== undefined) update.onboardingData = onboardingData;
+  if (onboardingCompleted !== undefined) update.onboardingCompleted = onboardingCompleted;
+  if (equipmentList !== undefined) update.equipmentList = equipmentList;
+  const [client] = await db.update(clientsTable).set(update as any).where(eq(clientsTable.id, id)).returning();
+  if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+  res.json(toPublicClient(client));
+});
+
 // List nutrition entries for a client (optionally filtered by date)
 router.get("/clients/:clientId/nutrition", async (req, res): Promise<void> => {
   const clientId = parseInt(req.params.clientId, 10);
