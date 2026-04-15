@@ -38,3 +38,17 @@ export const nutritionEntriesTable = pgTable("nutrition_entries", {
 export const insertNutritionEntrySchema = createInsertSchema(nutritionEntriesTable).omit({ id: true, createdAt: true });
 export type InsertNutritionEntry = z.infer<typeof insertNutritionEntrySchema>;
 export type NutritionEntry = typeof nutritionEntriesTable.$inferSelect;
+
+export const clientGoalsTable = pgTable("client_goals", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clientsTable.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  targetDate: text("target_date"),
+  priority: text("priority").notNull().default("equal"),
+  parsedTargets: jsonb("parsed_targets"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertClientGoalSchema = createInsertSchema(clientGoalsTable).omit({ id: true, createdAt: true });
+export type InsertClientGoal = z.infer<typeof insertClientGoalSchema>;
+export type ClientGoal = typeof clientGoalsTable.$inferSelect;

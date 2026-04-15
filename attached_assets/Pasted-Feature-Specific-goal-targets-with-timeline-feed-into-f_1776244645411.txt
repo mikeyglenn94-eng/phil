@@ -1,0 +1,93 @@
+Feature: Specific goal targets with timeline — feed into fitness score and Phil
+Part 1 — Goal input in Customise panel
+Replace the current goal dropdown with a free text goal entry system. Remove the dropdown entirely.
+In the Customise Dashboard panel, the YOUR GOAL section becomes:
+YOUR GOAL
+─────────────────────────────────────
+What are you working toward?
+[Free text input — e.g. "130kg bench and sub 1:30 half marathon by October"]
+
+Target date (optional)
+[Date picker]
+
++ Add another goal
+Users can add up to 3 goals. Each goal has:
+Free text description
+Optional target date
+Optional priority weight: Primary / Secondary (default equal if not specified)
+Save to a new clientGoals table:
+sql
+clientGoals
+  id, clientId, description, targetDate, priority ('primary' | 'secondary' | 'equal'), createdAt
+Part 2 — Phil parses the goals
+When goals are saved, send them to Phil to extract structured targets:
+ts
+// Phil extracts structured data from free text
+// "130kg bench and sub 1:30 half marathon by October"
+// →
+[
+  { metric: 'bench_e1rm', target: 130, unit: 'kg', priority: 'equal' },
+  { metric: 'half_marathon', target: 90, unit: 'minutes', priority: 'equal' }
+]
+Store the parsed structured targets alongside the free text in clientGoals. The free text is always the source of truth — the structured data is just for scoring.
+Phil extracts these metrics:
+Squat / bench / deadlift 1RM targets (kg or lbs)
+Run time targets (5k, 10k, half marathon, marathon) in minutes
+Weight/body composition targets ("lose 5kg", "get to 80kg")
+Volume targets ("train 4 days a week")
+If Phil can't confidently extract a structured target he stores the free text only and scores it as a consistency-only goal.
+Part 3 — Fitness score oriented to specific goals
+Keep the existing three-component structure (consistency 40%, performance trend 35%, planning 25%) but orient each component toward the user's specific goals:
+Consistency (40%) — unchanged calculation, no modifications needed. Showing up is showing up regardless of goal.
+Performance trend (35%) — instead of equal weighting across all four metrics, weight by what the user's goals actually reference:
+ts
+function getMetricWeights(parsedGoals) {
+  const weights = { squat: 0, bench: 0, deadlift: 0, fiveK: 0, halfMarathon: 0 };
+  
+  parsedGoals.forEach(goal => {
+    const w = goal.priority === 'primary' ? 2 : 1;
+    if (goal.metric === 'bench_e1rm') weights.bench += w;
+    if (goal.metric === 'squat_e1rm') weights.squat += w;
+    if (goal.metric === 'deadlift_e1rm') weights.deadlift += w;
+    if (goal.metric === 'half_marathon') weights.halfMarathon += w;
+    if (goal.metric === '5k') weights.fiveK += w;
+  });
+  
+  // Normalise to sum to 1
+  const total = Object.values(weights).reduce((a, b) => a + b, 0);
+  if (total === 0) return { squat: 0.25, bench: 0.25, deadlift: 0.25, fiveK: 0.25 };
+  return Object.fromEntries(Object.entries(weights).map(([k, v]) => [k, v / total]));
+}
+If a user says "I don't want to lose too much strength" alongside a running goal — Phil flags strength metrics as Secondary, running as Primary. Strength still contributes to the score but at half the weight.
+Planning (25%) — unchanged. Having sessions planned ahead is goal-agnostic.
+Part 4 — Progress toward target on dashboard
+Below the fitness score card, add a new Goal Progress section. For each goal with a structured target:
+GOAL PROGRESS
+─────────────────────────────────────
+🏋️ Bench Press → 130kg
+Current: 110kg  ████████░░  85%
+At current rate: ~14 weeks  [Oct 2026 target]
+
+🏃 Half Marathon → 1:30
+Current est: 1:42  ██████░░░░  70%  
+At current rate: ~18 weeks  [Oct 2026 target ⚠️ tight]
+Show a progress bar, current value, estimated weeks to target based on recent rate of change, and a warning indicator if the target date looks tight given current trajectory.
+If there's no recent data for a metric, show: "Log more sessions to track progress"
+Part 5 — Phil references goals in responses
+Add goals to Phil's context on every AI call:
+ts
+const goalContext = clientGoals.map(g => 
+  `Goal: ${g.description}${g.targetDate ? ` by ${g.targetDate}` : ''} (${g.priority})`
+).join('\n');
+Phil uses this to:
+Reference specific targets when building programmes: "You need a 130kg bench by October — I'm going to build you a strength block that gets you there"
+Flag when the current programme isn't aligned with the goal: "Your programme has a lot of conditioning work but your main goal is bench strength — want me to rebalance it?"
+Update progress estimates after logging: "Good session. You hit 115kg today. You're ahead of pace for your October target."
+Part 6 — First time nudge
+If goals are not set, show the existing nudge banner on the dashboard:
+"Tell Phil what you're working toward and he'll track your progress → Customise"
+Replaces the previous generic "Set your training goal" nudge.
+Do not change:
+The underlying fitness score formula structure
+Any existing dashboard toggles
+Any calendar or programme logic

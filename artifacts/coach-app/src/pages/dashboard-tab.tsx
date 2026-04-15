@@ -2,10 +2,11 @@ import React, { useState, useEffect } from "react";
 import {
   BarChart3, Trophy, CheckSquare, TrendingUp, Footprints,
   Timer, Dumbbell, SlidersHorizontal, ChevronDown, Sparkles,
-  Share2, Download, Check, Loader2, UtensilsCrossed,
+  Share2, Download, Check, Loader2, UtensilsCrossed, Target, Plus, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import CoachingSheet from "@/components/coaching-sheet";
 
@@ -565,6 +566,29 @@ function computeNutritionStats(
 
 // ── Main component ────────────────────────────────────────────────
 
+interface ClientGoal {
+  id: number;
+  clientId: number;
+  description: string;
+  targetDate: string | null;
+  priority: "primary" | "secondary" | "equal";
+  parsedTargets: ParsedTarget[] | null;
+  createdAt: string;
+}
+
+interface ParsedTarget {
+  metric: "bench_e1rm" | "squat_e1rm" | "deadlift_e1rm" | "5k" | "10k" | "half_marathon" | "marathon" | "bodyweight" | "sessions_per_week";
+  target: number;
+  unit: string;
+  direction?: "lose" | "gain" | "reach";
+}
+
+interface GoalFormEntry {
+  description: string;
+  targetDate: string;
+  priority: "primary" | "secondary" | "equal";
+}
+
 interface Props {
   analytics: AnalyticsData | undefined;
   isLoading: boolean;
@@ -823,6 +847,53 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
 
   useEffect(() => { savePrefs(clientId, prefs); }, [prefs, clientId]);
 
+  // ── Training goals state ───────────────────────────────────────
+  const [goals, setGoals] = useState<ClientGoal[]>([]);
+  const [goalsLoading, setGoalsLoading] = useState(true);
+  const [newGoalDesc, setNewGoalDesc] = useState("");
+  const [newGoalDate, setNewGoalDate] = useState("");
+  const [newGoalPriority, setNewGoalPriority] = useState<"primary" | "secondary" | "equal">("equal");
+  const [savingNewGoal, setSavingNewGoal] = useState(false);
+  const [deletingGoalId, setDeletingGoalId] = useState<number | null>(null);
+  const [goalError, setGoalError] = useState("");
+
+  useEffect(() => {
+    setGoalsLoading(true);
+    fetch(`/api/clients/${clientId}/training-goals`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: ClientGoal[]) => { setGoals(data || []); setGoalsLoading(false); })
+      .catch(() => { setGoalsLoading(false); });
+  }, [clientId]);
+
+  async function handleAddGoal() {
+    if (!newGoalDesc.trim()) { setGoalError("Please describe your goal."); return; }
+    setSavingNewGoal(true);
+    setGoalError("");
+    try {
+      const r = await fetch(`/api/clients/${clientId}/training-goals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: newGoalDesc.trim(), targetDate: newGoalDate || undefined, priority: newGoalPriority }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        setGoalError((e as any).error ?? "Failed to save goal.");
+      } else {
+        const goal: ClientGoal = await r.json();
+        setGoals(g => [...g, goal]);
+        setNewGoalDesc(""); setNewGoalDate(""); setNewGoalPriority("equal");
+      }
+    } catch { setGoalError("Failed to save goal."); }
+    setSavingNewGoal(false);
+  }
+
+  async function handleDeleteGoal(id: number) {
+    setDeletingGoalId(id);
+    await fetch(`/api/clients/${clientId}/training-goals/${id}`, { method: "DELETE" }).catch(() => {});
+    setGoals(g => g.filter(x => x.id !== id));
+    setDeletingGoalId(null);
+  }
+
   // Fetch nutrition logs for last 7 days when card is enabled
   useEffect(() => {
     if (!prefs.showNutritionCard) return;
@@ -1054,6 +1125,134 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
           </p>
         )}
       </div>
+
+      {/* ── Goal Progress ────────────────────────────────────── */}
+      {(() => {
+        if (goalsLoading || goals.length === 0) return null;
+
+        const progressItems: {
+          icon: string; label: string; targetStr: string;
+          current: number | null; target: number; unit: string;
+          currentLabel: string; targetDate: string | null; pct: number;
+          weeksEst: number | null; tight: boolean;
+        }[] = [];
+
+        for (const goal of goals) {
+          if (!goal.parsedTargets) continue;
+          for (const t of goal.parsedTargets) {
+            const targetNum = Number(t.target);
+
+            if (t.metric === "bench_e1rm") {
+              const curr = analytics?.strengthMetrics.bench.current ?? null;
+              const prev = analytics?.strengthMetrics.bench.previous ?? null;
+              if (curr === null) continue;
+              const pct = Math.min(Math.round((curr / targetNum) * 100), 100);
+              const weeklyGain = prev !== null ? (curr - prev) / 4 : null;
+              const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((targetNum - curr) / weeklyGain) : null;
+              const tight = goal.targetDate && weeksEst !== null ? weeksEst > Math.floor((new Date(goal.targetDate).getTime() - Date.now()) / 604800000) : false;
+              progressItems.push({ icon: "🏋️", label: "Bench Press", targetStr: `${targetNum}kg`, current: curr, target: targetNum, unit: "kg", currentLabel: `${curr}kg`, targetDate: goal.targetDate, pct, weeksEst, tight });
+            }
+            if (t.metric === "squat_e1rm") {
+              const curr = analytics?.strengthMetrics.squat.current ?? null;
+              const prev = analytics?.strengthMetrics.squat.previous ?? null;
+              if (curr === null) continue;
+              const pct = Math.min(Math.round((curr / targetNum) * 100), 100);
+              const weeklyGain = prev !== null ? (curr - prev) / 4 : null;
+              const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((targetNum - curr) / weeklyGain) : null;
+              const tight = goal.targetDate && weeksEst !== null ? weeksEst > Math.floor((new Date(goal.targetDate).getTime() - Date.now()) / 604800000) : false;
+              progressItems.push({ icon: "🏋️", label: "Squat", targetStr: `${targetNum}kg`, current: curr, target: targetNum, unit: "kg", currentLabel: `${curr}kg`, targetDate: goal.targetDate, pct, weeksEst, tight });
+            }
+            if (t.metric === "deadlift_e1rm") {
+              const curr = analytics?.strengthMetrics.deadlift.current ?? null;
+              const prev = analytics?.strengthMetrics.deadlift.previous ?? null;
+              if (curr === null) continue;
+              const pct = Math.min(Math.round((curr / targetNum) * 100), 100);
+              const weeklyGain = prev !== null ? (curr - prev) / 4 : null;
+              const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((targetNum - curr) / weeklyGain) : null;
+              const tight = goal.targetDate && weeksEst !== null ? weeksEst > Math.floor((new Date(goal.targetDate).getTime() - Date.now()) / 604800000) : false;
+              progressItems.push({ icon: "🏋️", label: "Deadlift", targetStr: `${targetNum}kg`, current: curr, target: targetNum, unit: "kg", currentLabel: `${curr}kg`, targetDate: goal.targetDate, pct, weeksEst, tight });
+            }
+            if (t.metric === "5k" || t.metric === "half_marathon" || t.metric === "10k") {
+              const currStr = analytics?.runMetrics.estimated5K.current ?? null;
+              const prevStr = analytics?.runMetrics.estimated5K.previous ?? null;
+              if (!currStr) continue;
+              const currSecs = paceToSeconds(currStr) ? paceToSeconds(currStr)! * (t.metric === "half_marathon" ? 26.2 : t.metric === "10k" ? 2 : 1) : null;
+              const targetSecs = targetNum * 60;
+              if (currSecs === null) continue;
+              const pct = Math.min(Math.round((targetSecs / currSecs) * 100), 100);
+              const prevSecs = prevStr ? (paceToSeconds(prevStr) ? paceToSeconds(prevStr)! * (t.metric === "half_marathon" ? 26.2 : t.metric === "10k" ? 2 : 1) : null) : null;
+              const weeklyGain = prevSecs !== null ? (prevSecs - currSecs) / 4 : null;
+              const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((currSecs - targetSecs) / weeklyGain) : null;
+              const tight = goal.targetDate && weeksEst !== null ? weeksEst > Math.floor((new Date(goal.targetDate).getTime() - Date.now()) / 604800000) : false;
+              const mLabel = t.metric === "half_marathon" ? "Half Marathon" : t.metric === "10k" ? "10K" : "5K";
+              const tLabel = `${Math.floor(targetNum / 60)}:${String(targetNum % 60).padStart(2, "0")}`;
+              const cMins = Math.floor(currSecs / 60), cSecs = Math.round(currSecs % 60);
+              const cLabel = `${cMins}:${String(cSecs).padStart(2, "0")}`;
+              progressItems.push({ icon: "🏃", label: mLabel, targetStr: tLabel, current: currSecs, target: targetSecs, unit: "min", currentLabel: `est. ${cLabel}`, targetDate: goal.targetDate, pct, weeksEst, tight });
+            }
+          }
+        }
+
+        if (progressItems.length === 0) return null;
+
+        return (
+          <div className="bg-card border rounded-2xl px-5 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Goal Progress</span>
+              <Target className="w-4 h-4 text-muted-foreground/40" />
+            </div>
+            <div className="space-y-4">
+              {progressItems.map((item, i) => (
+                <div key={i}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-semibold">
+                      {item.icon} {item.label} → {item.targetStr}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground font-medium">{item.pct}%</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs text-muted-foreground w-16 shrink-0">{item.currentLabel}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${item.pct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    {item.weeksEst !== null ? (
+                      <>
+                        At current rate: ~{item.weeksEst} weeks
+                        {item.targetDate && (
+                          <span className={item.tight ? " text-amber-500" : ""}>
+                            {" "}[{new Date(item.targetDate + "T00:00:00").toLocaleString("default", { month: "short", year: "numeric" })} target{item.tight ? " ⚠️ tight" : ""}]
+                          </span>
+                        )}
+                      </>
+                    ) : item.current !== null ? (
+                      "Log more sessions to estimate pace"
+                    ) : (
+                      "Log more sessions to track progress"
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Goal nudge (no goals set) ─────────────────────────── */}
+      {!goalsLoading && goals.length === 0 && (
+        <button
+          onClick={() => setEditOpen(true)}
+          className="w-full flex items-center gap-2.5 px-4 py-3 rounded-2xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors text-left"
+        >
+          <Target className="w-4 h-4 text-primary shrink-0" />
+          <span className="text-[13px] text-foreground/80 font-medium flex-1">Tell Phil what you're working toward and he'll track your progress</span>
+          <span className="text-[11px] text-primary/70 font-semibold">Set goal →</span>
+        </button>
+      )}
 
       {/* ── Why it moved ─────────────────────────────────────── */}
       <div className="rounded-2xl border bg-card overflow-hidden -mt-2">
@@ -1403,6 +1602,84 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
             <PrefRow label="Distance Run"   checked={prefs.showDistanceRun}  onToggle={() => toggle("showDistanceRun")}  />
             <PrefRow label="Volume Lifted"  checked={prefs.showVolumeLifted} onToggle={() => toggle("showVolumeLifted")} />
           </div>
+
+          {/* ── YOUR GOAL ─────────────────────────────────────── */}
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Your Goal</p>
+          <p className="text-xs text-muted-foreground mb-3">What are you working toward? Phil will use this to track progress and personalise your programme.</p>
+
+          {/* Existing goals */}
+          {goals.map(goal => (
+            <div key={goal.id} className="flex items-start gap-2 mb-2 p-3 rounded-xl bg-muted/50">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium leading-snug">{goal.description}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {goal.targetDate && (
+                    <span className="text-[11px] text-muted-foreground">
+                      Target: {new Date(goal.targetDate + "T00:00:00").toLocaleDateString("default", { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                  )}
+                  {goal.priority !== "equal" && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${goal.priority === "primary" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                      {goal.priority}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors p-1"
+                disabled={deletingGoalId === goal.id}
+                onClick={() => void handleDeleteGoal(goal.id)}
+              >
+                {deletingGoalId === goal.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          ))}
+
+          {/* Add new goal form */}
+          {goals.length < 3 && (
+            <div className="space-y-2 mt-1">
+              <Input
+                placeholder={goals.length === 0 ? `e.g. "130kg bench and sub 1:30 half marathon by October"` : "Add another goal…"}
+                value={newGoalDesc}
+                onChange={e => setNewGoalDesc(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") void handleAddGoal(); }}
+                className="text-sm"
+              />
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  value={newGoalDate}
+                  onChange={e => setNewGoalDate(e.target.value)}
+                  className="text-sm flex-1"
+                  placeholder="Target date (optional)"
+                />
+                <select
+                  value={newGoalPriority}
+                  onChange={e => setNewGoalPriority(e.target.value as "primary" | "secondary" | "equal")}
+                  className="text-sm border rounded-md px-2 py-1.5 bg-background text-foreground"
+                >
+                  <option value="equal">Equal</option>
+                  <option value="primary">Primary</option>
+                  <option value="secondary">Secondary</option>
+                </select>
+              </div>
+              {goalError && <p className="text-xs text-red-500">{goalError}</p>}
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full gap-1.5"
+                disabled={savingNewGoal || !newGoalDesc.trim()}
+                onClick={() => void handleAddGoal()}
+              >
+                {savingNewGoal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                {goals.length === 0 ? "Save goal" : "Add goal"}
+              </Button>
+            </div>
+          )}
+
+          {goals.length >= 3 && (
+            <p className="text-xs text-muted-foreground mt-1">Maximum 3 goals. Remove one to add another.</p>
+          )}
 
           <Button className="w-full mt-6" onClick={() => setEditOpen(false)}>Done</Button>
         </SheetContent>

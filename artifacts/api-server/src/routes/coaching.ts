@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { db, clientGoalsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -85,6 +87,7 @@ The client's current dashboard context is provided in each message.`;
 // Phil responds in-character: direct, practical, coach voice.
 
 router.post("/clients/:clientId/phil-chat", async (req, res) => {
+  const clientId = parseInt(req.params.clientId, 10);
   const { message, history } = req.body as {
     message: string;
     history?: { role: "user" | "assistant"; content: string }[];
@@ -95,6 +98,18 @@ router.post("/clients/:clientId/phil-chat", async (req, res) => {
     return;
   }
 
+  let goalContext = "";
+  if (!isNaN(clientId)) {
+    try {
+      const goals = await db.select().from(clientGoalsTable).where(eq(clientGoalsTable.clientId, clientId));
+      if (goals.length) {
+        goalContext = "\n\nClient's current goals:\n" + goals.map(g =>
+          `- ${g.description}${g.targetDate ? ` (target: ${g.targetDate})` : ""} [${g.priority}]`
+        ).join("\n");
+      }
+    } catch { /* non-fatal */ }
+  }
+
   const systemPrompt = `You are Phil, the lead coach at MG Coaching. You are direct, knowledgeable, and results-driven. You speak like a real coach — concise, slightly opinionated, and practical. You never sound robotic or over-hyped.
 
 You are having a conversation with a client. Keep replies SHORT (1-3 sentences max). Be warm but efficient.
@@ -102,8 +117,9 @@ You are having a conversation with a client. Keep replies SHORT (1-3 sentences m
 If the client says something like "hi", "thanks", "great" — acknowledge briefly and prompt them to get to work.
 If the client asks a question, answer it directly and practically.
 If the client states a vague goal without enough detail, ask ONE focused clarifying question (don't ask multiple questions at once).
+Reference the client's goals when relevant — e.g. after a good session: mention how it contributes to their target.
 Never generate a full programme here — just gather context and guide the client to the right action.
-Never say "User request is vague" or expose any technical error language to the client.`;
+Never say "User request is vague" or expose any technical error language to the client.${goalContext}`;
 
   const msgs: { role: "user" | "assistant"; content: string }[] = [];
   if (history?.length) {

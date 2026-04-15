@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, programmesTable } from "@workspace/db";
+import { db, programmesTable, clientGoalsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -270,11 +270,36 @@ function computeRawScore(
   return Math.round(consistency * 0.40 + perfTrend * 0.35 + balance * 0.25);
 }
 
+function goalWeightsFromTargets(parsedGoals: any[]): { squat: number; bench: number; deadlift: number; running: number } {
+  const raw = { squat: 0, bench: 0, deadlift: 0, running: 0 };
+  for (const goal of parsedGoals) {
+    if (!goal?.parsedTargets) continue;
+    const w = goal.priority === "primary" ? 2 : 1;
+    for (const t of (goal.parsedTargets as any[])) {
+      if (t.metric === "squat_e1rm")    raw.squat    += w;
+      if (t.metric === "bench_e1rm")    raw.bench    += w;
+      if (t.metric === "deadlift_e1rm") raw.deadlift += w;
+      if (t.metric === "5k" || t.metric === "half_marathon" || t.metric === "10k" || t.metric === "marathon") raw.running += w;
+    }
+  }
+  const total = raw.squat + raw.bench + raw.deadlift + raw.running;
+  if (total === 0) return { squat: 0.25, bench: 0.25, deadlift: 0.25, running: 0.25 };
+  return {
+    squat:    raw.squat    / total,
+    bench:    raw.bench    / total,
+    deadlift: raw.deadlift / total,
+    running:  raw.running  / total,
+  };
+}
+
 function computePerfTrendScore(
   curr: { squat: number | null; bench: number | null; deadlift: number | null; est5K: string | null },
-  prev: { squat: number | null; bench: number | null; deadlift: number | null; est5K: string | null }
+  prev: { squat: number | null; bench: number | null; deadlift: number | null; est5K: string | null },
+  weights?: { squat: number; bench: number; deadlift: number; running: number }
 ): number {
   let score = 50;
+
+  const w = weights ?? { squat: 0.25, bench: 0.25, deadlift: 0.25, running: 0.25 };
 
   const liftDelta = (c: number | null, p: number | null): number | null => {
     if (c === null || p === null || p === 0) return null;
@@ -287,19 +312,23 @@ function computePerfTrendScore(
     return (ps - cs) / ps; // positive = faster = better
   };
 
-  for (const d of [
-    liftDelta(curr.squat,    prev.squat),
-    liftDelta(curr.bench,    prev.bench),
-    liftDelta(curr.deadlift, prev.deadlift),
-    timeDelta(curr.est5K,    prev.est5K),
-  ]) {
+  // Scale contribution by weight relative to equal (0.25 baseline = multiplier 1.0)
+  const entries: [number | null, number][] = [
+    [liftDelta(curr.squat,    prev.squat),    w.squat],
+    [liftDelta(curr.bench,    prev.bench),    w.bench],
+    [liftDelta(curr.deadlift, prev.deadlift), w.deadlift],
+    [timeDelta(curr.est5K,    prev.est5K),    w.running],
+  ];
+
+  for (const [d, mw] of entries) {
     if (d === null) continue;
-    if      (d >  0.05) score += 15;
-    else if (d >  0.02) score += 8;
-    else if (d >  0)    score += 3;
-    else if (d > -0.02) score -= 3;
-    else if (d > -0.05) score -= 8;
-    else                score -= 15;
+    const scale = mw * 4; // 0.25 baseline × 4 = 1.0 multiplier
+    if      (d >  0.05) score += Math.round(15 * scale);
+    else if (d >  0.02) score += Math.round( 8 * scale);
+    else if (d >  0)    score += Math.round( 3 * scale);
+    else if (d > -0.02) score -= Math.round( 3 * scale);
+    else if (d > -0.05) score -= Math.round( 8 * scale);
+    else                score -= Math.round(15 * scale);
   }
 
   return Math.max(0, Math.min(100, score));
@@ -549,9 +578,13 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
     .map(wk => bucketMap.get(wk)?.completed ?? 0)
     .reduce((a, b) => a + b, 0) / (LOOKBACK - 1);
 
+  const clientGoals = await db.select().from(clientGoalsTable).where(eq(clientGoalsTable.clientId, clientId));
+  const goalWeights = goalWeightsFromTargets(clientGoals);
+
   const perfTrend = computePerfTrendScore(
     { ...strengthCurr, est5K: est5KCurr },
-    { ...strengthPrev, est5K: est5KPrev }
+    { ...strengthPrev, est5K: est5KPrev },
+    goalWeights
   );
 
   const rawScores = recentWeeks.map(wk => {

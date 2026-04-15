@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, clientsTable, nutritionEntriesTable, programmesTable } from "@workspace/db";
+import { db, clientsTable, nutritionEntriesTable, programmesTable, clientGoalsTable } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import type { Session } from "@workspace/db";
 import bcrypt from "bcryptjs";
@@ -407,6 +407,101 @@ router.post("/clients/:clientId/assign-programme", async (req, res): Promise<voi
     .returning();
 
   res.status(201).json(assigned);
+});
+
+// ── Training Goals ────────────────────────────────────────────────────────────
+
+async function parseGoalWithPhil(description: string): Promise<any[]> {
+  try {
+    const prompt = `You are Phil, a fitness coach. A client has entered this goal:
+"${description}"
+
+Extract any structured fitness targets from this text. Recognise:
+- Lift targets: squat, bench, deadlift (e.g. "130kg bench" → metric: "bench_e1rm", target: 130, unit: "kg")
+- Run time targets: 5k, 10k, half marathon, marathon in minutes (e.g. "sub 1:30 half marathon" → metric: "half_marathon", target: 90, unit: "minutes")
+- Weight targets: body weight changes (e.g. "lose 5kg", "get to 80kg" → metric: "bodyweight", target: value, unit: "kg", direction: "lose" | "gain" | "reach")
+- Volume targets: training frequency (e.g. "train 4 days a week" → metric: "sessions_per_week", target: 4, unit: "days")
+
+If you cannot confidently extract a structured target, return an empty array.
+Return JSON: {"targets": [{"metric": "...", "target": ..., "unit": "..."}]}`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+      max_tokens: 200,
+      temperature: 0.1,
+    });
+    const raw = completion.choices[0]?.message?.content ?? '{"targets":[]}';
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.targets) ? parsed.targets : [];
+  } catch {
+    return [];
+  }
+}
+
+router.get("/clients/:clientId/training-goals", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  const goals = await db.select().from(clientGoalsTable).where(eq(clientGoalsTable.clientId, clientId));
+  res.json(goals);
+});
+
+router.post("/clients/:clientId/training-goals", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+
+  const existing = await db.select().from(clientGoalsTable).where(eq(clientGoalsTable.clientId, clientId));
+  if (existing.length >= 3) {
+    res.status(400).json({ error: "Maximum of 3 goals allowed" }); return;
+  }
+
+  const { description, targetDate, priority = "equal" } = req.body as {
+    description: string; targetDate?: string; priority?: string;
+  };
+  if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
+
+  const parsedTargets = await parseGoalWithPhil(description);
+
+  const [goal] = await db.insert(clientGoalsTable).values({
+    clientId, description, targetDate: targetDate || null,
+    priority: ["primary", "secondary", "equal"].includes(priority) ? priority : "equal",
+    parsedTargets: parsedTargets.length ? parsedTargets : null,
+  }).returning();
+  res.status(201).json(goal);
+});
+
+router.put("/clients/:clientId/training-goals/:id", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  const id       = parseInt(req.params.id, 10);
+  if (isNaN(clientId) || isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { description, targetDate, priority } = req.body as {
+    description?: string; targetDate?: string; priority?: string;
+  };
+
+  const updates: Partial<{ description: string; targetDate: string | null; priority: string; parsedTargets: any }> = {};
+  if (description !== undefined) {
+    updates.description = description;
+    updates.parsedTargets = await parseGoalWithPhil(description);
+  }
+  if (targetDate !== undefined) updates.targetDate = targetDate || null;
+  if (priority !== undefined && ["primary", "secondary", "equal"].includes(priority)) updates.priority = priority;
+
+  const [updated] = await db.update(clientGoalsTable)
+    .set(updates)
+    .where(and(eq(clientGoalsTable.id, id), eq(clientGoalsTable.clientId, clientId)))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "Goal not found" }); return; }
+  res.json(updated);
+});
+
+router.delete("/clients/:clientId/training-goals/:id", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  const id       = parseInt(req.params.id, 10);
+  if (isNaN(clientId) || isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(clientGoalsTable).where(and(eq(clientGoalsTable.id, id), eq(clientGoalsTable.clientId, clientId)));
+  res.status(204).send();
 });
 
 export default router;
