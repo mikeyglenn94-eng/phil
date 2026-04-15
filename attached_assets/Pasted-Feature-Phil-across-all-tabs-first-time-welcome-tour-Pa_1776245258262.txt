@@ -1,0 +1,84 @@
+Feature: Phil across all tabs + first time welcome tour
+Part 1 — Phil is global, not just on Training
+Phil's chat panel is available on all three tabs: Dashboard, Nutrition, and Training. He is always accessible, always in character, always contextual to the current screen.
+The Phil panel implementation is the same component across all tabs. Pass a currentTab: 'dashboard' | 'nutrition' | 'training' prop so Phil knows where the user is and can respond accordingly.
+Phil's panel state persists across tab switches for the session. If a user is mid-conversation with Phil on Dashboard and switches to Training, the conversation history stays intact.
+Part 2 — Phil's contextual behaviour per tab
+On Dashboard:
+Phil can:
+
+Answer questions about the fitness score ("what is my score based on?", "why did my score drop?")
+Explain any dashboard metric ("what is e1RM?", "what does consistency measure?")
+Answer general training and nutrition questions
+Reference the user's goals and progress data
+If asked to build a programme, adjust the calendar, or anything training-calendar related, Phil responds: "Let's go to your training calendar for that." and automatically navigates to the Training tab, where the conversation continues
+
+On Nutrition:
+Phil can:
+
+Answer nutrition questions ("how much protein should I eat?", "what should I have before training?")
+Log food directly ("log 200g chicken breast for lunch") by executing the nutrition log action without the user having to type into the food input manually
+Explain macros, calories, and nutrition targets in plain language
+If asked about training or calendar changes, navigates to Training tab
+
+On Training:
+Phil behaves exactly as currently built. No changes.
+Navigation rule:
+When Phil navigates the user to another tab, he says so conversationally first:
+
+"Let's go to your training calendar for that." then navigates to Training
+"Check your nutrition tab, I've logged that for you." then navigates to Nutrition
+Never navigate silently. Always tell the user what's happening.
+
+Part 3 — First time welcome tour
+Trigger: user has zero sessions logged AND it is their first login (track with a hasSeenWelcome flag on the user record, set to true after welcome is shown, never show again).
+When triggered, Phil sends a sequence of 3 welcome messages into the chat panel on the Dashboard, one at a time with 1000ms between each:
+Message 1:
+"Right, welcome. I'm Phil, your coach. I live here across the whole app so you can ask me anything at any time."
+Message 2:
+"Quick lay of the land. Training tab is where your programme lives and where we'll build everything. Nutrition tab tracks what you're eating. This dashboard shows your progress over time as you train."
+Message 3:
+"That's enough admin. What are you training for? Tell me your goal and I'll build your first month."
+After message 3, the input bar in the Phil panel is auto-focused so the user can type immediately.
+No buttons, no "next" clicks, no coach marks, no tooltips. Just Phil talking. The user reads it, then types back.
+Part 4 — Empty dashboard state for new users
+A new user with no training data should not see a dashboard full of blank or zeroed cards.
+When hasSeenWelcome is true but zero sessions have been logged:
+
+Hide the following cards entirely: Fitness Score, Consistency, Performance (e1RM cards), This Week, This Month
+Show a single centred message in the dashboard content area: "Your dashboard will come alive once you start training. Head to Training to build your first programme."
+Phil is still present and accessible in the panel
+
+Once the user has at least one logged session, all cards appear normally. No refresh needed, update reactively.
+Part 5 — Phil's context on Dashboard
+Pass the following data to Phil when he is on the Dashboard tab so he can answer questions intelligently:
+tsconst dashboardContext = {
+  fitnessScore: client.fitnessScore,
+  fitnessScoreChange: client.fitnessScoreChange,
+  consistency: client.consistencyThisWeek,
+  weeklyWin: client.weeklyWin,
+  performanceMetrics: {
+    squat: client.squatE1RM,
+    bench: client.benchE1RM,
+    deadlift: client.deadliftE1RM,
+    fiveK: client.estimatedFiveK
+  },
+  goals: client.goals,
+  recentSessions: client.recentSessions.slice(0, 5)
+};
+Add to Phil's system prompt when on Dashboard:
+
+"You are currently on the user's dashboard. You have access to their fitness score, consistency data, performance metrics, and goals. Use this data to give specific, relevant answers. If asked about their score or progress, reference their actual numbers. If asked to do anything that requires the training calendar, navigate there first."
+
+Part 6 — No em dashes anywhere
+Add to Phil's system prompt:
+
+"Never use em dashes in any response. Use a full stop, a comma, or rewrite the sentence instead."
+
+Global find and replace across the entire frontend for any hardcoded em dash characters in UI copy, toast messages, placeholder text, and empty states. Replace with a comma, full stop, or reworded sentence.
+Do not change:
+
+Any existing Phil conversation logic on Training
+Any calendar or programme logic
+Any nutrition logging logic
+Coach or admin facing UI
