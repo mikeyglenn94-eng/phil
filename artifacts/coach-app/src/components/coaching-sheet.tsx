@@ -10,6 +10,7 @@ export function buildAiContext(
   analytics: AnalyticsData,
   thisWeekData: AnalyticsData["byWeek"][0] | undefined,
   lastWeekData: AnalyticsData["byWeek"][0] | undefined,
+  oneRMLines?: string[],
 ): string {
   const { fitnessScore, adherence, strengthMetrics, runMetrics, byWeek } = analytics;
   const lines: string[] = [];
@@ -61,6 +62,10 @@ export function buildAiContext(
   const totalSessions = byWeek.reduce((s, w) => s + w.sessionCount, 0);
   lines.push(`Total sessions logged across all time: ${totalSessions}`);
   if (totalSessions < 5) lines.push("Data is limited — this is an early-stage user with few logged sessions.");
+
+  if (oneRMLines && oneRMLines.length > 0) {
+    lines.push(`Current 1RMs: ${oneRMLines.join(", ")}`);
+  }
 
   return lines.join("\n");
 }
@@ -161,11 +166,12 @@ interface Props {
   thisWeekData: AnalyticsData["byWeek"][0] | undefined;
   lastWeekData: AnalyticsData["byWeek"][0] | undefined;
   clientId: number;
+  oneRMLines?: string[];
 }
 
 // ── Main component ────────────────────────────────────────────────
 
-export default function CoachingSheet({ open, onOpenChange, analytics, thisWeekData, lastWeekData, clientId }: Props) {
+export default function CoachingSheet({ open, onOpenChange, analytics, thisWeekData, lastWeekData, clientId, oneRMLines }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -174,7 +180,7 @@ export default function CoachingSheet({ open, onOpenChange, analytics, thisWeekD
   const inputRef = useRef<HTMLInputElement>(null);
 
   const suggestedPrompts = getSuggestedPrompts(analytics, thisWeekData);
-  const aiContext = buildAiContext(analytics, thisWeekData, lastWeekData);
+  const aiContext = buildAiContext(analytics, thisWeekData, lastWeekData, oneRMLines);
 
   // Reset when sheet closes
   useEffect(() => {

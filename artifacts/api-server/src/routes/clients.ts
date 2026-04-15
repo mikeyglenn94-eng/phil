@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, clientsTable, nutritionEntriesTable, programmesTable, clientGoalsTable, usersTable, clientBaselinesTable } from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
+import { db, clientsTable, nutritionEntriesTable, programmesTable, clientGoalsTable, usersTable, clientBaselinesTable, clientLiftsTable, clientOneRMsTable } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import type { Session } from "@workspace/db";
 import bcrypt from "bcryptjs";
@@ -591,6 +591,146 @@ router.patch("/clients/:clientId/mark-welcome-seen", async (req, res): Promise<v
     .set({ hasSeenWelcome: true })
     .where(eq(usersTable.clientId, clientId));
   res.json({ ok: true });
+});
+
+// ── 1RM TRACKER ───────────────────────────────────────────────────
+
+const DEFAULT_LIFTS = [
+  "Back Squat",
+  "Bench Press",
+  "Deadlift",
+  "Strict Press",
+  "Power Clean",
+  "Clean",
+  "Snatch",
+  "Clean and Jerk",
+];
+
+async function seedDefaultLifts(clientId: number): Promise<void> {
+  const existing = await db.select({ id: clientLiftsTable.id })
+    .from(clientLiftsTable)
+    .where(eq(clientLiftsTable.clientId, clientId))
+    .limit(1);
+  if (existing.length > 0) return;
+  await db.insert(clientLiftsTable).values(
+    DEFAULT_LIFTS.map(name => ({ clientId, exerciseName: name, isDefault: true, isHidden: false }))
+  );
+}
+
+async function buildLiftList(clientId: number) {
+  const lifts = await db.select()
+    .from(clientLiftsTable)
+    .where(eq(clientLiftsTable.clientId, clientId))
+    .orderBy(clientLiftsTable.createdAt);
+
+  const result = await Promise.all(lifts.map(async lift => {
+    const history = await db.select()
+      .from(clientOneRMsTable)
+      .where(and(
+        eq(clientOneRMsTable.clientId, clientId),
+        eq(clientOneRMsTable.exerciseName, lift.exerciseName),
+      ))
+      .orderBy(desc(clientOneRMsTable.loggedAt))
+      .limit(10);
+
+    const current = history[0] ?? null;
+    return {
+      id: lift.id,
+      exerciseName: lift.exerciseName,
+      isDefault: lift.isDefault,
+      isHidden: lift.isHidden,
+      currentWeightKg: current ? parseFloat(current.weightKg) : null,
+      loggedAt: current?.loggedAt?.toISOString() ?? null,
+      source: current?.source ?? null,
+      history: history.map(h => ({
+        id: h.id,
+        weightKg: parseFloat(h.weightKg),
+        loggedAt: h.loggedAt.toISOString(),
+        source: h.source,
+      })),
+    };
+  }));
+
+  return result;
+}
+
+// GET /clients/:clientId/lifts
+router.get("/clients/:clientId/lifts", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  await seedDefaultLifts(clientId);
+  const lifts = await buildLiftList(clientId);
+  res.json({ lifts });
+});
+
+// POST /clients/:clientId/lifts — add a custom lift (or un-hide an existing one)
+router.post("/clients/:clientId/lifts", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  const { exerciseName } = req.body as { exerciseName?: string };
+  if (!exerciseName?.trim()) { res.status(400).json({ error: "exerciseName required" }); return; }
+  const name = exerciseName.trim();
+
+  const [existing] = await db.select()
+    .from(clientLiftsTable)
+    .where(and(
+      eq(clientLiftsTable.clientId, clientId),
+      eq(clientLiftsTable.exerciseName, name),
+    ))
+    .limit(1);
+
+  if (existing) {
+    if (existing.isHidden) {
+      await db.update(clientLiftsTable)
+        .set({ isHidden: false })
+        .where(eq(clientLiftsTable.id, existing.id));
+    }
+  } else {
+    await db.insert(clientLiftsTable).values({ clientId, exerciseName: name, isDefault: false, isHidden: false });
+  }
+
+  const lifts = await buildLiftList(clientId);
+  res.json({ lifts });
+});
+
+// PATCH /clients/:clientId/lifts/:liftId/toggle-hidden
+router.patch("/clients/:clientId/lifts/:liftId/toggle-hidden", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  const liftId   = parseInt(req.params.liftId, 10);
+  if (isNaN(clientId) || isNaN(liftId)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [lift] = await db.select()
+    .from(clientLiftsTable)
+    .where(and(eq(clientLiftsTable.clientId, clientId), eq(clientLiftsTable.id, liftId)))
+    .limit(1);
+  if (!lift) { res.status(404).json({ error: "Lift not found" }); return; }
+
+  await db.update(clientLiftsTable)
+    .set({ isHidden: !lift.isHidden })
+    .where(eq(clientLiftsTable.id, liftId));
+
+  const lifts = await buildLiftList(clientId);
+  res.json({ lifts });
+});
+
+// POST /clients/:clientId/one-rms — log a 1RM entry
+router.post("/clients/:clientId/one-rms", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  const { exerciseName, weightKg, source = "manual" } = req.body as {
+    exerciseName?: string; weightKg?: number; source?: string;
+  };
+  if (!exerciseName?.trim() || !weightKg || weightKg <= 0) {
+    res.status(400).json({ error: "exerciseName and weightKg required" }); return;
+  }
+  await db.insert(clientOneRMsTable).values({
+    clientId,
+    exerciseName: exerciseName.trim(),
+    weightKg: String(weightKg),
+    source,
+  });
+  const lifts = await buildLiftList(clientId);
+  res.json({ lifts });
 });
 
 export default router;

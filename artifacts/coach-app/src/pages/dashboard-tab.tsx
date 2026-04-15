@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
   BarChart3, Trophy, CheckSquare, TrendingUp, Footprints,
-  Timer, Dumbbell, SlidersHorizontal, ChevronDown, Sparkles,
-  Share2, Download, Check, Loader2, UtensilsCrossed, Target, Plus, Trash2,
+  Timer, Dumbbell, SlidersHorizontal, ChevronDown, ChevronRight, Sparkles,
+  Share2, Download, Check, Loader2, UtensilsCrossed, Target, Plus, Trash2, Eye, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -570,6 +570,29 @@ function computeNutritionStats(
   return { nutritionPercent: Math.round(weekly * 100), loggedDays, closeDays, hitDays };
 }
 
+// ── 1RM tracker types & helpers ───────────────────────────────────
+
+interface OneRMEntry { id: number; weightKg: number; loggedAt: string; source: string }
+interface ClientLiftWithRM {
+  id: number;
+  exerciseName: string;
+  isDefault: boolean;
+  isHidden: boolean;
+  currentWeightKg: number | null;
+  loggedAt: string | null;
+  source: string | null;
+  history: OneRMEntry[];
+}
+
+const LIFT_TO_METRIC: Record<string, string> = {
+  "Back Squat":   "squat_e1rm",
+  "Bench Press":  "bench_e1rm",
+  "Deadlift":     "deadlift_e1rm",
+};
+
+const PCT_LEVELS = [60, 70, 75, 80, 85, 90];
+function roundHalf(n: number) { return Math.round(n * 2) / 2; }
+
 // ── Main component ────────────────────────────────────────────────
 
 interface ClientGoal {
@@ -958,6 +981,71 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
     setPbSaved(true);
     setTimeout(() => setPbSaved(false), 2500);
   }
+
+  // ── 1RM Tracker state & handlers ──────────────────────────────
+  const [clientLifts, setClientLifts] = useState<ClientLiftWithRM[]>([]);
+  const [liftSectionOpen, setLiftSectionOpen] = useState(false);
+  const [expandedLiftId, setExpandedLiftId] = useState<number | null>(null);
+  const [liftLogInputs, setLiftLogInputs] = useState<Record<number, string>>({});
+  const [liftLogSaving, setLiftLogSaving] = useState<Record<number, boolean>>({});
+  const [addLiftOpen, setAddLiftOpen] = useState(false);
+  const [newLiftName, setNewLiftName] = useState("");
+  const [addLiftSaving, setAddLiftSaving] = useState(false);
+
+  async function fetchLifts() {
+    const data = await fetch(`/api/clients/${clientId}/lifts`).then(r => r.json()).catch(() => ({ lifts: [] }));
+    setClientLifts(data.lifts ?? []);
+  }
+
+  useEffect(() => { void fetchLifts(); }, [clientId]);
+
+  async function handleLogOneRM(liftId: number, exerciseName: string) {
+    const kg = parseFloat(liftLogInputs[liftId] ?? "");
+    if (!kg || kg <= 0) return;
+    setLiftLogSaving(p => ({ ...p, [liftId]: true }));
+    await fetch(`/api/clients/${clientId}/one-rms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exerciseName, weightKg: kg, source: "manual" }),
+    }).catch(() => {});
+    await fetchLifts();
+    setLiftLogInputs(p => ({ ...p, [liftId]: "" }));
+    setLiftLogSaving(p => ({ ...p, [liftId]: false }));
+  }
+
+  async function handleToggleLiftHidden(liftId: number) {
+    await fetch(`/api/clients/${clientId}/lifts/${liftId}/toggle-hidden`, { method: "PATCH" }).catch(() => {});
+    await fetchLifts();
+  }
+
+  async function handleAddLift() {
+    if (!newLiftName.trim()) return;
+    setAddLiftSaving(true);
+    await fetch(`/api/clients/${clientId}/lifts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exerciseName: newLiftName.trim() }),
+    }).catch(() => {});
+    await fetchLifts();
+    setNewLiftName("");
+    setAddLiftOpen(false);
+    setAddLiftSaving(false);
+  }
+
+  function getGoalTarget(exerciseName: string, goalList: ClientGoal[]): number | null {
+    const metric = LIFT_TO_METRIC[exerciseName];
+    if (!metric) return null;
+    for (const goal of goalList) {
+      for (const t of goal.parsedTargets ?? []) {
+        if (t.metric === metric && t.target > 0) return t.target;
+      }
+    }
+    return null;
+  }
+
+  const oneRMLines = clientLifts
+    .filter(l => !l.isHidden && l.currentWeightKg !== null)
+    .map(l => `${l.exerciseName}: ${l.currentWeightKg}kg`);
 
   // Fetch nutrition logs for last 7 days when card is enabled
   useEffect(() => {
@@ -1689,7 +1777,179 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
         </section>
       )}
 
-      {/* ── 6. Edit Dashboard button ─────────────────────────── */}
+      {/* ── 6. Strength Records (1RM Tracker) ───────────────── */}
+      {clientLifts.length > 0 && (
+        <section>
+          <button
+            className="flex items-center justify-between w-full"
+            onClick={() => setLiftSectionOpen(o => !o)}
+          >
+            <h2 className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase">Strength Records</h2>
+            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${liftSectionOpen ? "" : "-rotate-90"}`} />
+          </button>
+
+          {liftSectionOpen && (
+            <div className="mt-2 space-y-1.5">
+              {clientLifts.filter(l => !l.isHidden).map(lift => {
+                const goalTarget = getGoalTarget(lift.exerciseName, goals);
+                const goalPct = (goalTarget && lift.currentWeightKg)
+                  ? Math.min(100, Math.round((lift.currentWeightKg / goalTarget) * 100))
+                  : null;
+                const isExpanded = expandedLiftId === lift.id;
+
+                return (
+                  <div key={lift.id} className="rounded-xl border bg-card overflow-hidden">
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+                      onClick={() => setExpandedLiftId(isExpanded ? null : lift.id)}
+                    >
+                      <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                      <span className="flex-1 text-sm font-medium truncate">{lift.exerciseName}</span>
+                      {lift.currentWeightKg !== null ? (
+                        <span className="text-sm font-semibold tabular-nums">{lift.currentWeightKg}kg</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No entry</span>
+                      )}
+                      {goalPct !== null && (
+                        <span className="text-[11px] text-muted-foreground ml-1 tabular-nums">{goalPct}%</span>
+                      )}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-3 pb-3 pt-1 border-t space-y-3">
+                        {goalPct !== null && goalTarget && lift.currentWeightKg && (
+                          <div>
+                            <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
+                              <span>{lift.currentWeightKg}kg current</span>
+                              <span>{goalPct}% of {goalTarget}kg goal</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${goalPct}%` }} />
+                            </div>
+                          </div>
+                        )}
+
+                        {lift.currentWeightKg !== null && (
+                          <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Training percentages</p>
+                            <div className="grid grid-cols-3 gap-x-4 gap-y-1">
+                              {PCT_LEVELS.map(pct => (
+                                <div key={pct} className="flex justify-between text-xs">
+                                  <span className="text-muted-foreground">{pct}%</span>
+                                  <span className="font-medium tabular-nums">{roundHalf(lift.currentWeightKg! * pct / 100)}kg</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {lift.history.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">History</p>
+                            <div className="space-y-1">
+                              {lift.history.slice(0, 8).map((h, i) => (
+                                <div key={h.id} className="flex justify-between text-xs">
+                                  <span className="text-muted-foreground">
+                                    {new Date(h.loggedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}
+                                    {h.source !== "manual" && <span className="ml-1 opacity-60">({h.source})</span>}
+                                  </span>
+                                  <span className={i === 0 ? "font-semibold" : "text-muted-foreground"}>{h.weightKg}kg</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 items-center">
+                          <Input
+                            type="number"
+                            placeholder="Log new 1RM (kg)"
+                            step="0.5"
+                            min="0"
+                            value={liftLogInputs[lift.id] ?? ""}
+                            onChange={e => setLiftLogInputs(p => ({ ...p, [lift.id]: e.target.value }))}
+                            className="h-7 text-xs flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs px-3"
+                            disabled={!liftLogInputs[lift.id] || liftLogSaving[lift.id]}
+                            onClick={() => void handleLogOneRM(lift.id, lift.exerciseName)}
+                          >
+                            {liftLogSaving[lift.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : "Log"}
+                          </Button>
+                          <button
+                            className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                            onClick={() => void handleToggleLiftHidden(lift.id)}
+                          >
+                            <Eye className="w-3 h-3" />
+                            Hide
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {clientLifts.some(l => l.isHidden) && (
+                <div className="pt-0.5">
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-1">Hidden lifts</p>
+                  {clientLifts.filter(l => l.isHidden).map(lift => (
+                    <button
+                      key={lift.id}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground py-0.5 w-full hover:text-foreground"
+                      onClick={() => void handleToggleLiftHidden(lift.id)}
+                    >
+                      <Eye className="w-3 h-3" />
+                      Show {lift.exerciseName}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {addLiftOpen ? (
+                <div className="flex gap-2 items-center pt-0.5">
+                  <Input
+                    placeholder="Exercise name"
+                    value={newLiftName}
+                    onChange={e => setNewLiftName(e.target.value)}
+                    className="h-7 text-xs flex-1"
+                    onKeyDown={e => { if (e.key === "Enter") void handleAddLift(); }}
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs px-3"
+                    disabled={!newLiftName.trim() || addLiftSaving}
+                    onClick={() => void handleAddLift()}
+                  >
+                    {addLiftSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs px-2"
+                    onClick={() => { setAddLiftOpen(false); setNewLiftName(""); }}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1 py-1 hover:text-foreground"
+                  onClick={() => setAddLiftOpen(true)}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add lift
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── 7. Edit Dashboard button ─────────────────────────── */}
       <div className="pt-2">
         <Button
           variant="ghost"
@@ -1710,6 +1970,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
         thisWeekData={thisWeekData}
         lastWeekData={lastWeekData}
         clientId={clientId}
+        oneRMLines={oneRMLines}
       />
 
       {/* ── Preferences sheet ────────────────────────────────── */}
