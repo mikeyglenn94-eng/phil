@@ -4226,7 +4226,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     {(() => {
                                       const badge = getSessionTypeBadge(session);
                                       return (
-                                        <span className={`inline-block text-[8px] font-semibold leading-none px-1.5 py-0.5 rounded-full mb-0.5 ${badge.className} ${selectionMode ? "ml-4" : ""}`}>{badge.label}</span>
+                                        <span className={`inline-block text-[8px] font-semibold leading-none px-1.5 py-0.5 rounded-full mb-2 ${badge.className} ${selectionMode ? "ml-4" : ""}`}>{badge.label}</span>
                                       );
                                     })()}
                                     <span className={`block truncate font-medium text-[10px] leading-snug ${selectionMode ? "pl-4" : "pr-1"}`}>{session.name || "Session"}</span>
@@ -5667,7 +5667,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   <div key={t.id} className="rounded-xl border border-orange-100 bg-orange-50/40 p-4 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <div className="flex items-center gap-2 flex-wrap mb-2">
                           <span className="text-xs font-bold text-orange-700 bg-orange-100 rounded px-2 py-0.5 capitalize">{t.level}</span>
                           <span className="text-xs text-muted-foreground">{t.durationWeeks}w · {t.sessionsPerWeek}×/wk</span>
                           <span className="text-xs text-amber-600 font-bold">#{idx + 1}</span>
@@ -5810,7 +5810,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     <div key={result.id} className={`rounded-xl border p-4 space-y-2 ${catColor[bucket] ?? ""}`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
                             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeColor[bucket] ?? ""}`}>
                               {bucketLabel[bucket] ?? bucket}
                             </span>

@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
+import html2canvas from "html2canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
-  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2,
+  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Trash2,
   Pencil,
 } from "lucide-react";
 import {
@@ -505,16 +506,12 @@ export default function ClientSession() {
 
   // Share state
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
   const [shareFile, setShareFile] = useState<File | null>(null);
   const [shareImageLoading, setShareImageLoading] = useState(false);
   const [shareSaved, setShareSaved] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [shareIsStrength, setShareIsStrength] = useState(false);
-  const [shareShowTopSet, setShareShowTopSet] = useState(true);
   const [shareShowComment, setShareShowComment] = useState(true);
-  const [shareSize, setShareSize] = useState<"story" | "square">("story");
   const [shareGoals, setShareGoals] = useState<any[]>([]);
+  const shareWidgetRef = useRef<HTMLDivElement>(null);
 
   // Feedback state
   const [feedbackText, setFeedbackText] = useState("");
@@ -634,23 +631,6 @@ export default function ClientSession() {
     }
   }, [session]);
 
-  // Live share preview — regenerate when size or toggles change
-  useEffect(() => {
-    if (!showShareModal) return;
-    let cancelled = false;
-    setShareImageLoading(true);
-    const timer = setTimeout(async () => {
-      const file = await generateShareImage({ size: shareSize, showTopSet: shareShowTopSet, showComment: shareShowComment });
-      if (cancelled) return;
-      if (file) {
-        setShareFile(file);
-        setShareImageUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
-      }
-      setShareImageLoading(false);
-    }, 200);
-    return () => { cancelled = true; clearTimeout(timer); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shareSize, shareShowTopSet, shareShowComment, showShareModal]);
 
   // ── Pre-warm mic permission (prevents iOS freeze on first Record tap) ─────────
   useEffect(() => {
@@ -1246,444 +1226,6 @@ export default function ClientSession() {
     </div>
   );
 
-  // ── Share workout — Strava-style dark card ──────────────────────────────────
-  async function generateShareImage(
-    opts: { size?: "story" | "square"; showTopSet?: boolean; showComment?: boolean } = {}
-  ): Promise<File | null> {
-    const { size = "story", showComment = true } = opts;
-    await document.fonts.ready;
-    const W = 1080;
-    const H = size === "square" ? 1080 : 1920;
-    const canvas = document.createElement("canvas");
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-
-    const src = (session as any).source as string | undefined;
-    const isRun = src === "run_brain" || src === "endurance_cycle";
-    const isWod = src === "wod_brain";
-    const isStrength = !isRun && !isWod;
-    const allExercises = [...(session.exercises || []), ...addedExercises];
-    const dateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM").toUpperCase();
-    const name = session.name || "Session";
-    const structure = (session as any).structure as string | undefined;
-
-    const scale = H === 1080 ? 0.56 : 1; // shrink fonts for square
-
-    // ── Load Phil image ───────────────────────────────────────────────────────
-    const philImg = new Image();
-    philImg.crossOrigin = "anonymous";
-    await new Promise<void>(resolve => {
-      philImg.onload = () => resolve();
-      philImg.onerror = () => resolve();
-      philImg.src = "/phil.png?" + Date.now();
-    });
-
-    // ── Solid dark background ─────────────────────────────────────────────────
-    ctx.fillStyle = "#0a0a0a";
-    ctx.fillRect(0, 0, W, H);
-
-    // Subtle gradient overlay from top
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, H * 0.5);
-    bgGrad.addColorStop(0, "rgba(99, 102, 241, 0.08)");
-    bgGrad.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, W, H);
-
-    const pad = Math.round(72 * scale);
-    const cx = pad + Math.round(60 * scale);
-    const right = W - pad - Math.round(60 * scale);
-    const contentW = right - cx;
-
-    function fs(n: number) { return Math.round(n * scale); }
-    function wrapText(text: string, maxW: number, font: string): string {
-      ctx!.font = font;
-      let t = text;
-      while (ctx!.measureText(t).width > maxW && t.length > 4) t = t.slice(0, -1);
-      return t !== text ? t + "…" : t;
-    }
-
-    // ── Top accent bar ────────────────────────────────────────────────────────
-    const accentGrad = ctx.createLinearGradient(pad, 0, pad + Math.round(400 * scale), 0);
-    accentGrad.addColorStop(0, "rgba(99, 102, 241, 1)");
-    accentGrad.addColorStop(1, "rgba(139, 92, 246, 0)");
-    ctx.fillStyle = accentGrad;
-    ctx.beginPath();
-    ctx.roundRect(pad, Math.round(52 * scale), Math.round(400 * scale), Math.round(6 * scale), 3);
-    ctx.fill();
-
-    let cy = Math.round(100 * scale);
-
-    // ── "Trained with Phil" header ────────────────────────────────────────────
-    if (philImg.naturalWidth > 0) {
-      const logoH = Math.round(52 * scale);
-      const logoW = Math.round(philImg.naturalWidth * (logoH / philImg.naturalHeight));
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx + logoW / 2, cy - logoH / 2 + Math.round(4 * scale), logoW / 2, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(philImg, cx, cy - logoH + Math.round(8 * scale), logoW, logoH);
-      ctx.restore();
-      ctx.fillStyle = "rgba(255,255,255,0.52)";
-      ctx.font = `500 ${fs(28)}px 'Inter', system-ui, sans-serif`;
-      ctx.fillText("Trained with Phil", cx + logoW + Math.round(18 * scale), cy);
-    } else {
-      ctx.fillStyle = "rgba(255,255,255,0.52)";
-      ctx.font = `500 ${fs(28)}px 'Inter', system-ui, sans-serif`;
-      ctx.fillText("Trained with Phil", cx, cy);
-    }
-
-    // Date right-aligned
-    ctx.fillStyle = "rgba(255,255,255,0.38)";
-    ctx.font = `500 ${fs(30)}px 'Inter', system-ui, sans-serif`;
-    ctx.textAlign = "right";
-    ctx.fillText(dateStr, right, cy);
-    ctx.textAlign = "left";
-
-    cy += Math.round(80 * scale);
-
-    // ── Session type badge ────────────────────────────────────────────────────
-    const badgeColor = isRun ? "rgba(134,239,172,0.90)" : isWod ? "rgba(196,181,253,0.90)" : "rgba(99,102,241,0.90)";
-    const badgeLabel = isRun ? "RUN" : isWod ? "WOD" : "STRENGTH";
-    ctx.fillStyle = badgeColor;
-    ctx.font = `700 ${fs(28)}px 'Inter', system-ui, sans-serif`;
-    ctx.fillText(badgeLabel, cx, cy);
-    cy += Math.round(52 * scale);
-
-    // ── Session name ──────────────────────────────────────────────────────────
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `800 ${fs(72)}px 'Inter', system-ui, sans-serif`;
-    ctx.fillText(wrapText(name, contentW, ctx.font), cx, cy);
-    cy += Math.round(30 * scale);
-
-    // ── Divider ───────────────────────────────────────────────────────────────
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
-    ctx.lineWidth = Math.round(2 * scale);
-    ctx.beginPath(); ctx.moveTo(cx, cy + Math.round(24 * scale)); ctx.lineTo(right, cy + Math.round(24 * scale)); ctx.stroke();
-    cy += Math.round(90 * scale);
-
-    // ── HIGHLIGHT section ─────────────────────────────────────────────────────
-    if (isStrength) {
-      // Best set by estimated 1RM (weight × (1 + reps/30))
-      let heroExName = "", heroExId = "";
-      let heroWeight = 0, heroReps = 0, heroE1rm = 0;
-      for (const ex of allExercises) {
-        const eName = nameOverrides[ex.id] || ex.name;
-        for (const s of (logs[ex.id] || [])) {
-          if (s.weight && s.reps && s.weight > 0 && s.reps > 0) {
-            const e1rm = s.weight * (1 + s.reps / 30);
-            if (e1rm > heroE1rm) {
-              heroE1rm = e1rm; heroWeight = s.weight; heroReps = s.reps;
-              heroExName = eName; heroExId = ex.id;
-            }
-          }
-        }
-      }
-      // Fallback: prescribed top set if nothing logged
-      if (!heroExName && allExercises.length > 0) {
-        const ex = allExercises[0];
-        heroExName = nameOverrides[ex.id] || ex.name;
-        heroExId = ex.id;
-        const pw = (ex as any).prescribedWeight;
-        const pr = ex.reps;
-        if (pw) heroWeight = parseFloat(String(pw)) || 0;
-        if (pr) heroReps = parseInt(String(pr)) || 0;
-      }
-
-      const est1RM = heroReps > 1 ? Math.round(heroWeight * (1 + heroReps / 30)) : heroWeight;
-      const exVolToday = (logs[heroExId] || []).reduce((sum, s) =>
-        (s.weight && s.reps) ? sum + s.weight * s.reps : sum, 0);
-      const prevKey = normalizeExerciseName(heroExName);
-      const prevData = prevLogsMap[prevKey];
-      let prevBestW = 0, prevBestR = 0, prevBestE1rm = 0;
-      if (prevData) {
-        for (const s of prevData.sets) {
-          if (s.weight && s.reps) {
-            const e = s.weight * (1 + s.reps / 30);
-            if (e > prevBestE1rm) { prevBestE1rm = e; prevBestW = s.weight; prevBestR = s.reps; }
-          }
-        }
-      }
-      let insight = "";
-      if (prevBestW > 0 && heroE1rm > prevBestE1rm) insight = `New estimated 1RM for ${heroExName}`;
-      else if (prevBestW > 0 && heroWeight > prevBestW) insight = `+${heroWeight - prevBestW}kg vs last time`;
-      else if (prevBestR > 0 && heroReps > prevBestR && heroWeight >= prevBestW) insight = `+${heroReps - prevBestR} reps vs last time`;
-
-      if (heroExName) {
-        ctx.fillStyle = badgeColor;
-        ctx.font = `700 ${fs(28)}px 'Inter', system-ui, sans-serif`;
-        ctx.fillText("BEST SET", cx, cy);
-        cy += Math.round(58 * scale);
-
-        ctx.fillStyle = "rgba(255,255,255,0.50)";
-        ctx.font = `500 ${fs(54)}px 'Inter', system-ui, sans-serif`;
-        ctx.fillText(wrapText(heroExName, contentW, ctx.font), cx, cy);
-        cy += Math.round(24 * scale);
-
-        const heroText = heroWeight > 0 ? `${heroWeight}kg  ×  ${heroReps}` : heroExName;
-        let hfs = fs(140);
-        ctx.font = `800 ${hfs}px 'Inter', system-ui, sans-serif`;
-        while (ctx.measureText(heroText).width > contentW + Math.round(60 * scale) && hfs > fs(72)) {
-          hfs -= Math.round(6 * scale);
-          ctx.font = `800 ${hfs}px 'Inter', system-ui, sans-serif`;
-        }
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(heroText, cx, cy + hfs + Math.round(28 * scale));
-        cy += hfs + Math.round(64 * scale);
-
-        ctx.strokeStyle = "rgba(255,255,255,0.08)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(cx, cy + Math.round(24 * scale)); ctx.lineTo(right, cy + Math.round(24 * scale)); ctx.stroke();
-        cy += Math.round(72 * scale);
-
-        const metrics: { label: string; value: string }[] = [];
-        if (est1RM > 0)    metrics.push({ label: "EST. 1RM",  value: `${est1RM}kg` });
-        if (exVolToday > 0) metrics.push({ label: "VOLUME",   value: `${Math.round(exVolToday).toLocaleString()}kg` });
-        if (prevBestW > 0)  metrics.push({ label: "LAST TIME", value: `${prevBestW}kg × ${prevBestR}` });
-        const shown = metrics.slice(0, 3);
-        if (shown.length) {
-          const mW = contentW / shown.length;
-          for (let i = 0; i < shown.length; i++) {
-            const mx = cx + i * mW;
-            ctx.fillStyle = "rgba(255,255,255,0.28)";
-            ctx.font = `600 ${fs(24)}px 'Inter', system-ui, sans-serif`;
-            ctx.fillText(shown[i].label, mx, cy);
-            ctx.fillStyle = "rgba(255,255,255,0.88)";
-            ctx.font = `600 ${fs(48)}px 'Inter', system-ui, sans-serif`;
-            ctx.fillText(shown[i].value, mx, cy + Math.round(56 * scale));
-          }
-          cy += Math.round(130 * scale);
-        }
-        if (insight) {
-          ctx.fillStyle = badgeColor;
-          ctx.font = `500 ${fs(34)}px 'Inter', system-ui, sans-serif`;
-          ctx.fillText(`↑ ${insight}`, cx, cy);
-          cy += Math.round(52 * scale);
-        }
-      }
-
-    } else if (isRun) {
-      ctx.fillStyle = badgeColor;
-      ctx.font = `700 ${fs(28)}px 'Inter', system-ui, sans-serif`;
-      ctx.fillText("RUN SUMMARY", cx, cy);
-      cy += Math.round(58 * scale);
-
-      const loggedIntervals = runIntervals.filter(r => r.pace.trim());
-      if (loggedIntervals.length > 0) {
-        let totalDistKm = 0;
-        let totalSecs = 0;
-        for (const r of loggedIntervals) {
-          const d = parseFloat(r.distance) || 0;
-          const p = paceToSeconds(r.pace);
-          if (d > 0 && p) { totalDistKm += d; totalSecs += p * d; }
-        }
-        const avgPace = totalDistKm > 0 && totalSecs > 0 ? secondsToPace(totalSecs / totalDistKm) : null;
-        const distStr = totalDistKm > 0 ? `${totalDistKm.toFixed(1)}km` : `${loggedIntervals.length} intervals`;
-        const heroText = avgPace ? `${distStr}  @  ${avgPace}/km` : distStr;
-        let hfs = fs(110);
-        ctx.font = `800 ${hfs}px 'Inter', system-ui, sans-serif`;
-        while (ctx.measureText(heroText).width > contentW + Math.round(60 * scale) && hfs > fs(56)) {
-          hfs -= Math.round(6 * scale);
-          ctx.font = `800 ${hfs}px 'Inter', system-ui, sans-serif`;
-        }
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(heroText, cx, cy + hfs);
-        cy += hfs + Math.round(64 * scale);
-      } else {
-        // Show target/structure
-        if (structure) {
-          ctx.fillStyle = "rgba(255,255,255,0.82)";
-          ctx.font = `400 ${fs(40)}px 'Inter', system-ui, sans-serif`;
-          const words = structure.split(" ");
-          let line = "";
-          for (const word of words) {
-            const test = line ? `${line} ${word}` : word;
-            if (ctx.measureText(test).width > contentW) {
-              ctx.fillText(line, cx, cy); cy += Math.round(58 * scale); line = word;
-            } else line = test;
-            if (cy > H - Math.round(300 * scale)) break;
-          }
-          if (line) { ctx.fillText(line, cx, cy); cy += Math.round(58 * scale); }
-        }
-      }
-
-    } else {
-      // WOD
-      ctx.fillStyle = badgeColor;
-      ctx.font = `700 ${fs(28)}px 'Inter', system-ui, sans-serif`;
-      ctx.fillText("WOD", cx, cy);
-      cy += Math.round(58 * scale);
-
-      const wr = wodResult as any;
-      const hasResult = wr.time || wr.rounds || wr.score || wr.notes;
-      if (hasResult) {
-        const resultStr = wr.time || (wr.rounds ? `${wr.rounds} rounds` : "") || wr.score || "";
-        if (resultStr) {
-          let hfs = fs(120);
-          ctx.font = `800 ${hfs}px 'Inter', system-ui, sans-serif`;
-          while (ctx.measureText(resultStr).width > contentW + Math.round(60 * scale) && hfs > fs(60)) {
-            hfs -= Math.round(6 * scale);
-            ctx.font = `800 ${hfs}px 'Inter', system-ui, sans-serif`;
-          }
-          ctx.fillStyle = "#ffffff";
-          ctx.fillText(resultStr, cx, cy + hfs);
-          cy += hfs + Math.round(64 * scale);
-        }
-        if (wr.notes) {
-          ctx.fillStyle = "rgba(255,255,255,0.52)";
-          ctx.font = `400 ${fs(38)}px 'Inter', system-ui, sans-serif`;
-          ctx.fillText(wrapText(wr.notes, contentW, ctx.font), cx, cy);
-          cy += Math.round(56 * scale);
-        }
-      } else if (structure) {
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
-        ctx.font = `400 ${fs(40)}px 'Inter', system-ui, sans-serif`;
-        const words = structure.split(" ");
-        let line = "";
-        for (const word of words) {
-          const test = line ? `${line} ${word}` : word;
-          if (ctx.measureText(test).width > contentW) {
-            ctx.fillText(line, cx, cy); cy += Math.round(56 * scale); line = word;
-          } else line = test;
-          if (cy > H - Math.round(300 * scale)) break;
-        }
-        if (line) { ctx.fillText(line, cx, cy); cy += Math.round(56 * scale); }
-      }
-    }
-
-    // ── Session comment ───────────────────────────────────────────────────────
-    const comment = sessionComment.trim();
-    if (showComment && comment && cy < H - Math.round(360 * scale)) {
-      cy += Math.round(24 * scale);
-      ctx.fillStyle = "rgba(255,255,255,0.36)";
-      ctx.font = `italic ${fs(36)}px 'Inter', system-ui, sans-serif`;
-      let cl = `"${comment}"`;
-      while (ctx.measureText(cl).width > contentW && cl.length > 4) cl = cl.slice(0, -1);
-      if (cl !== `"${comment}"`) cl += '…"';
-      ctx.fillText(cl, cx, cy);
-      cy += Math.round(56 * scale);
-    }
-
-    // ── GOAL PROGRESS section ─────────────────────────────────────────────────
-    const goalSpaceNeeded = Math.round(220 * scale);
-    if (shareGoals.length > 0 && cy < H - goalSpaceNeeded - Math.round(200 * scale)) {
-      // Find most relevant goal for this session type
-      type GoalItem = { label: string; currentStr: string; targetStr: string; pct: number; est?: boolean };
-      let goalItem: GoalItem | null = null;
-
-      outer: for (const goal of shareGoals) {
-        if (!goal.parsedTargets) continue;
-        for (const t of goal.parsedTargets) {
-          const targetNum = Number(t.target);
-          if (isStrength && (t.metric === "bench_e1rm" || t.metric === "squat_e1rm" || t.metric === "deadlift_e1rm")) {
-            const smKey = t.metric === "bench_e1rm" ? "bench" : t.metric === "squat_e1rm" ? "squat" : "deadlift";
-            const liftLabel = t.metric === "bench_e1rm" ? "Bench" : t.metric === "squat_e1rm" ? "Squat" : "Deadlift";
-            const heroName = allExercises.map(e => (nameOverrides[e.id] || e.name).toLowerCase()).some(n => n.includes(smKey));
-            if (!heroName) continue;
-            const currE1rm = (() => {
-              let best = 0;
-              for (const ex of allExercises) {
-                for (const s of (logs[ex.id] || [])) {
-                  if (s.weight && s.reps) { const e = s.weight * (1 + s.reps / 30); if (e > best) best = e; }
-                }
-              }
-              return best > 0 ? Math.round(best) : null;
-            })();
-            if (currE1rm === null) continue;
-            const pct = Math.min(Math.round((currE1rm / targetNum) * 100), 100);
-            goalItem = { label: `${liftLabel} → ${targetNum}kg`, currentStr: `${currE1rm}kg est.`, targetStr: `${targetNum}kg`, pct, est: true };
-            break outer;
-          }
-          if (isRun && (t.metric === "5k" || t.metric === "10k" || t.metric === "half_marathon" || t.metric === "marathon")) {
-            const mLabel = { "5k": "5K", "10k": "10K", "half_marathon": "Half Marathon", "marathon": "Marathon" }[t.metric];
-            const targetSecs = targetNum * 60;
-            const fmt = (s: number) => { const m = Math.floor(s / 60), ss = Math.round(s % 60); return `${m}:${ss.toString().padStart(2, "0")}`; };
-            let currSecs: number | null = null;
-            let est = false;
-            for (const r of runIntervals.filter(r => r.pace.trim())) {
-              const p = paceToSeconds(r.pace); const d = parseFloat(r.distance) || 0;
-              if (p && d > 0 && t.metric === "5k") { currSecs = p * 5; est = true; break; }
-            }
-            if (currSecs === null) continue;
-            let pct = 0;
-            if (currSecs <= targetSecs) pct = 100;
-            else pct = Math.max(0, Math.min(100, 100 - Math.round(((currSecs - targetSecs) / targetSecs) * 100)));
-            goalItem = { label: `${mLabel} → ${fmt(targetSecs)}`, currentStr: `${fmt(currSecs)}${est ? " est." : ""}`, targetStr: fmt(targetSecs), pct, est };
-            break outer;
-          }
-        }
-      }
-
-      if (goalItem) {
-        const gTop = cy + Math.round(16 * scale);
-        ctx.strokeStyle = "rgba(255,255,255,0.08)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(cx, gTop); ctx.lineTo(right, gTop); ctx.stroke();
-        cy = gTop + Math.round(52 * scale);
-
-        ctx.fillStyle = "rgba(255,255,255,0.28)";
-        ctx.font = `600 ${fs(22)}px 'Inter', system-ui, sans-serif`;
-        ctx.fillText("GOAL PROGRESS", cx, cy);
-        cy += Math.round(44 * scale);
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = `600 ${fs(36)}px 'Inter', system-ui, sans-serif`;
-        ctx.fillText(goalItem.label, cx, cy);
-        ctx.textAlign = "right";
-        ctx.fillStyle = "rgba(255,255,255,0.50)";
-        ctx.font = `500 ${fs(30)}px 'Inter', system-ui, sans-serif`;
-        ctx.fillText(goalItem.currentStr, right, cy);
-        ctx.textAlign = "left";
-        cy += Math.round(44 * scale);
-
-        // Progress bar
-        const barH = Math.round(14 * scale);
-        const barR = barH / 2;
-        // Background track
-        ctx.fillStyle = "rgba(255,255,255,0.12)";
-        ctx.beginPath(); ctx.roundRect(cx, cy, right - cx, barH, barR); ctx.fill();
-        // Filled portion
-        if (goalItem.pct > 0) {
-          const filledW = Math.round((right - cx) * goalItem.pct / 100);
-          const fillGrad = ctx.createLinearGradient(cx, 0, cx + filledW, 0);
-          fillGrad.addColorStop(0, "rgba(99,102,241,1)");
-          fillGrad.addColorStop(1, "rgba(139,92,246,1)");
-          ctx.fillStyle = fillGrad;
-          ctx.beginPath(); ctx.roundRect(cx, cy, filledW, barH, barR); ctx.fill();
-        }
-        cy += barH + Math.round(28 * scale);
-
-        ctx.fillStyle = "rgba(99,102,241,0.90)";
-        ctx.font = `700 ${fs(30)}px 'Inter', system-ui, sans-serif`;
-        ctx.fillText(`${goalItem.pct}%`, cx, cy);
-      }
-    }
-
-    // ── Phil avatar bottom right (slightly off-edge) ──────────────────────────
-    if (philImg.naturalWidth > 0) {
-      const philH = Math.round(H * 0.135);
-      const philW = Math.round(philImg.naturalWidth * (philH / philImg.naturalHeight));
-      const philX = W - philW + Math.round(philW * 0.08);
-      const philY = H - philH + Math.round(philH * 0.10);
-      ctx.globalAlpha = 0.92;
-      ctx.drawImage(philImg, philX, philY, philW, philH);
-      ctx.globalAlpha = 1;
-    }
-
-    // ── Bottom brand text ─────────────────────────────────────────────────────
-    ctx.fillStyle = "rgba(255,255,255,0.18)";
-    ctx.font = `500 ${fs(26)}px 'Inter', system-ui, sans-serif`;
-    ctx.textAlign = "left";
-    ctx.fillText("mgcoaching.app", cx, H - Math.round(52 * scale));
-
-    const fileName = `phil-${(name || "session").toLowerCase().replace(/\s+/g, "-")}-${dateStr.toLowerCase().replace(/\s+/g, "-")}.png`;
-    return new Promise(resolve => {
-      canvas.toBlob(blob => {
-        if (!blob) { resolve(null); return; }
-        resolve(new File([blob], fileName, { type: "image/png" }));
-      }, "image/png");
-    });
-  }
 
   function buildShareText(): string {
     const name = session.name || "Session";
@@ -1714,19 +1256,12 @@ export default function ClientSession() {
   }
 
   async function openShareModal() {
-    const src = (session as any).source as string | undefined;
-    const isStrength = !(src === "wod_brain" || src === "run_brain" || src === "endurance_cycle");
-    setShareIsStrength(isStrength);
-    setShareShowTopSet(true);
-    setShareShowComment(true);
     setShareSaved(false);
-    setShareCopied(false);
-    setShareSize("story");
-    setShowShareModal(true);
-    setShareImageLoading(true);
-    setShareImageUrl(null);
+    setShareShowComment(true);
     setShareFile(null);
-    // Fetch goals for goal progress card
+    setShareGoals([]);
+    setShowShareModal(true);
+    // Fetch goals for goal progress strip
     const cid = programme?.clientId;
     if (cid) {
       fetch(`/api/clients/${cid}/training-goals`)
@@ -1734,66 +1269,47 @@ export default function ClientSession() {
         .then(data => setShareGoals(Array.isArray(data) ? data : []))
         .catch(() => {});
     }
-    const file = await generateShareImage({ size: "story", showTopSet: true, showComment: true });
-    if (file) {
-      setShareFile(file);
-      setShareImageUrl(URL.createObjectURL(file));
-    }
-    setShareImageLoading(false);
   }
 
   function closeShareModal() {
     setShowShareModal(false);
-    if (shareImageUrl) { URL.revokeObjectURL(shareImageUrl); setShareImageUrl(null); }
     setShareFile(null);
   }
 
-  async function shareInstagram() {
-    if (!shareFile) return;
-    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [shareFile] })) {
-      try { await navigator.share({ files: [shareFile], title: session.name || "Workout" }); }
-      catch { /* cancelled */ }
-    }
-  }
-
   async function handleSaveImage() {
-    if (!shareFile || !shareImageUrl) return;
-    // On iOS/Android: native share sheet puts "Save Image" at the top
-    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [shareFile] })) {
-      try { await navigator.share({ files: [shareFile] }); setShareSaved(true); setTimeout(() => setShareSaved(false), 2000); return; }
-      catch { /* user cancelled */ return; }
-    }
-    // Desktop fallback: trigger download
-    const a = document.createElement("a");
-    a.href = shareImageUrl; a.download = "axis-workout.png"; a.click();
-    setShareSaved(true); setTimeout(() => setShareSaved(false), 2000);
-  }
-
-  async function handleCopyImage() {
-    if (!shareFile) return;
+    if (!shareWidgetRef.current) return;
+    setShareImageLoading(true);
     try {
-      const item = new ClipboardItem({ "image/png": shareFile });
-      await navigator.clipboard.write([item]);
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2500);
-    } catch {
-      // Fallback: try download if clipboard write fails
-      handleSaveImage();
-    }
-  }
-
-  async function handleCopyText() {
-    try {
-      await navigator.clipboard.writeText(buildShareText());
-      setShareCopied(true); setTimeout(() => setShareCopied(false), 2000);
-    } catch { /* */ }
-  }
-
-  async function handleShareMore() {
-    if (!shareFile) return;
-    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [shareFile] })) {
-      try { await navigator.share({ files: [shareFile], title: session.name || "Workout" }); }
-      catch { /* cancelled */ }
+      const canvas = await html2canvas(shareWidgetRef.current, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+      });
+      canvas.toBlob(blob => {
+        if (!blob) return;
+        const name = session.name || "session";
+        const file = new File([blob], `phil-${name.toLowerCase().replace(/\s+/g, "-")}.png`, { type: "image/png" });
+        setShareFile(file);
+        // iOS/Android: native share sheet
+        if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+          navigator.share({ files: [file] }).then(() => {
+            setShareSaved(true); setTimeout(() => setShareSaved(false), 2500);
+          }).catch(() => {});
+        } else {
+          // Desktop: download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = file.name; a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+          setShareSaved(true); setTimeout(() => setShareSaved(false), 2500);
+        }
+      }, "image/png");
+    } catch (err) {
+      console.error("html2canvas error", err);
+    } finally {
+      setShareImageLoading(false);
     }
   }
 
@@ -2947,7 +2463,63 @@ export default function ClientSession() {
       )}
 
       {/* ── Share Activity Modal ──────────────────────────────────────── */}
-      {showShareModal && (
+      {showShareModal && (() => {
+        // ── Widget data ──────────────────────────────────────────────────────
+        const shareSrc = (session as any).source as string | undefined;
+        const shareIsRun = shareSrc === "run_brain" || shareSrc === "endurance_cycle";
+        const shareIsWod = shareSrc === "wod_brain";
+        const shareIsStrength = !shareIsRun && !shareIsWod;
+        const shareAllEx = [...(session.exercises || []), ...addedExercises];
+
+        const shareDateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM").toUpperCase();
+
+        // Best set by e1RM
+        const calcE1rm = (w: number, r: number) => w * (1 + r / 30);
+        let shareBest: { name: string; weight: number; reps: number } | null = null;
+        let shareBestE1rm = 0;
+        let shareTotalVol = 0;
+        shareAllEx.forEach(ex => {
+          (logs[ex.id] || []).forEach(lg => {
+            if (lg.weight && lg.reps) {
+              shareTotalVol += lg.weight * lg.reps;
+              const e = calcE1rm(lg.weight, lg.reps);
+              if (e > shareBestE1rm) { shareBestE1rm = e; shareBest = { name: nameOverrides[ex.id] || ex.name, weight: lg.weight, reps: lg.reps }; }
+            }
+          });
+        });
+
+        // Run: logged intervals
+        const shareLoggedRuns = runIntervals.filter(r => r.pace?.trim());
+        const shareTotalKm = shareLoggedRuns.reduce((s, r) => { const k = parseFloat(r.distance); return s + (isNaN(k) ? 0 : k); }, 0);
+
+        // WOD result
+        const shareWodVal = (wodResult as any)?.value as string | undefined;
+
+        // Goal strip — pick most relevant
+        let shareGoalItem: any = null;
+        for (const g of shareGoals) {
+          const m = g.metric as string;
+          if (shareIsRun && ["5k","10k","half_marathon","marathon"].includes(m)) { shareGoalItem = g; break; }
+          if (shareIsStrength && ["bench_e1rm","squat_e1rm","deadlift_e1rm"].includes(m)) { shareGoalItem = g; break; }
+        }
+        if (!shareGoalItem && shareGoals.length > 0) shareGoalItem = shareGoals[0];
+
+        // Goal progress %
+        let shareGoalPct = 0;
+        let shareGoalLabel = "";
+        if (shareGoalItem) {
+          const current = parseFloat(shareGoalItem.currentValue ?? "0");
+          const target = parseFloat(shareGoalItem.targetValue ?? "0");
+          if (target > 0) shareGoalPct = Math.min(100, Math.round((current / target) * 100));
+          shareGoalLabel = shareGoalItem.metric?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "";
+        }
+
+        // Badge colours
+        const badgeBg = shareIsRun ? "rgba(134,239,172,0.15)" : shareIsWod ? "rgba(196,181,253,0.15)" : "rgba(99,102,241,0.20)";
+        const badgeColor = shareIsRun ? "#86EFAC" : shareIsWod ? "#C4B5FD" : "#818CF8";
+        const badgeText = shareIsRun ? "RUN" : shareIsWod ? "WOD" : "STRENGTH";
+
+        return (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/70" onClick={closeShareModal} />
           <div className="relative bg-background rounded-t-3xl shadow-2xl max-h-[94vh] overflow-y-auto flex flex-col">
@@ -2962,39 +2534,119 @@ export default function ClientSession() {
               <div className="w-12" />
             </div>
 
-            {/* Size tabs */}
-            <div className="flex gap-1 px-5 pt-4 pb-2 shrink-0">
-              {(["story", "square"] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => { setShareSize(s); }}
-                  className={[
-                    "flex-1 py-2 rounded-xl text-sm font-semibold transition-all border",
-                    shareSize === s
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-muted/40 text-muted-foreground border-border hover:bg-muted",
-                  ].join(" ")}
-                >
-                  {s === "story" ? "Story  9:16" : "Square  1:1"}
-                </button>
-              ))}
-            </div>
-
-            {/* Card preview — full width, correct aspect ratio */}
-            <div className="px-5 pt-2 pb-3 shrink-0">
+            {/* Widget preview — on subtle grey background */}
+            <div className="px-5 pt-5 pb-3 shrink-0 bg-[#f0f0f0] dark:bg-zinc-800">
+              {/* The widget div — captured by html2canvas */}
               <div
-                className="relative w-full rounded-2xl overflow-hidden shadow-xl bg-[#0a0a0a]"
-                style={{ aspectRatio: shareSize === "square" ? "1 / 1" : "9 / 16" }}
+                ref={shareWidgetRef}
+                style={{
+                  width: "100%",
+                  background: "#0d0d0d",
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  fontFamily: '"Inter", "SF Pro Display", system-ui, sans-serif',
+                  color: "#ffffff",
+                }}
               >
-                {shareImageLoading ? (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-white/50" />
+                {/* ── Header ── */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <img src="/phil.png" crossOrigin="anonymous" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+                    <span style={{ color: "rgba(255,255,255,0.9)", fontWeight: 600, fontSize: 14, letterSpacing: "-0.01em" }}>Trained with Phil</span>
                   </div>
-                ) : shareImageUrl ? (
-                  <img src={shareImageUrl} alt="Workout card" className="absolute inset-0 w-full h-full object-cover" />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <p className="text-white/30 text-xs text-center px-4">Couldn't generate card</p>
+                  <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, fontWeight: 500 }}>{shareDateStr}</span>
+                </div>
+
+                {/* ── Main content ── */}
+                <div style={{ padding: "16px 18px" }}>
+                  {/* Badge + name */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                    <span style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", background: badgeBg, color: badgeColor }}>{badgeText}</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: "#ffffff" }}>{session.name || "Session"}</span>
+                  </div>
+
+                  {/* ── STRENGTH content ── */}
+                  {shareIsStrength && shareBest && (
+                    <div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.02em", lineHeight: 1 }}>
+                        {shareBest.weight}kg <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 20 }}>× {shareBest.reps}</span>
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 13, color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{shareBest.name}</div>
+                      {shareTotalVol > 0 && (
+                        <div style={{ marginTop: 10, fontSize: 12, color: "rgba(255,255,255,0.38)" }}>
+                          Total volume: {Math.round(shareTotalVol).toLocaleString()} kg
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {shareIsStrength && !shareBest && (
+                    <div style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>
+                      {shareAllEx.slice(0, 4).map(ex => <div key={ex.id} style={{ marginBottom: 4 }}>• {nameOverrides[ex.id] || ex.name}</div>)}
+                    </div>
+                  )}
+
+                  {/* ── RUN content ── */}
+                  {shareIsRun && shareLoggedRuns.length > 0 && (
+                    <div>
+                      {shareLoggedRuns.map((r, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+                          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>
+                            {r.distance ? `${r.distance} km` : r.label || `Rep ${i + 1}`}
+                          </span>
+                          <span style={{ fontSize: 13, color: badgeColor, fontWeight: 600 }}>
+                            {r.pace} /km
+                          </span>
+                        </div>
+                      ))}
+                      {shareTotalKm > 0 && (
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+                          Total {shareTotalKm.toFixed(1)} km
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {shareIsRun && shareLoggedRuns.length === 0 && (() => {
+                    const struct = (session as any).structure as string | undefined;
+                    return (
+                      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", lineHeight: 1.5 }}>
+                        {struct || runIntervals.map((r, i) => (
+                          <div key={i} style={{ marginBottom: 4 }}>• {r.distance ? `${r.distance} km` : r.label || `Rep ${i + 1}`}{r.targetPace ? ` @ ${r.targetPace}/km` : ""}</div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── WOD content ── */}
+                  {shareIsWod && (
+                    <div>
+                      {shareWodVal ? (
+                        <div style={{ fontSize: 28, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.02em" }}>{shareWodVal}</div>
+                      ) : (
+                        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", lineHeight: 1.5 }}>
+                          {((session as any).structure as string | undefined) || session.name}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Comment ── */}
+                  {shareShowComment && sessionComment.trim() && (
+                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 12, color: "rgba(255,255,255,0.50)", fontStyle: "italic", lineHeight: 1.5 }}>
+                      "{sessionComment.trim()}"
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Goal strip ── */}
+                {shareGoalItem && (
+                  <div style={{ padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.50)", fontWeight: 500 }}>{shareGoalLabel}</span>
+                      <span style={{ fontSize: 11, color: badgeColor, fontWeight: 700 }}>{shareGoalPct}%</span>
+                    </div>
+                    <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.10)", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${shareGoalPct}%`, background: "linear-gradient(90deg, #6366F1, #8B5CF6)", borderRadius: 3 }} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -3002,7 +2654,7 @@ export default function ClientSession() {
 
             {/* Comment toggle */}
             {sessionComment.trim() && (
-              <div className="px-5 pb-2 shrink-0">
+              <div className="px-5 pt-3 shrink-0">
                 <button
                   onClick={() => setShareShowComment(v => !v)}
                   className={[
@@ -3018,37 +2670,28 @@ export default function ClientSession() {
               </div>
             )}
 
-            {/* Action buttons */}
+            {/* Action button */}
             <div className="px-5 py-4 flex flex-col gap-3 shrink-0">
               <button
                 onClick={() => void handleSaveImage()}
-                disabled={shareImageLoading || !shareFile}
-                className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-base shadow-md disabled:opacity-40 transition-opacity"
+                disabled={shareImageLoading}
+                className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-base shadow-md disabled:opacity-50 transition-opacity"
               >
                 {shareSaved
                   ? <><Check className="w-5 h-5" /> Saved!</>
                   : shareImageLoading
-                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Generating…</>
-                  : <><Download className="w-5 h-5" /> Save Image</>
+                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Saving…</>
+                  : <><Download className="w-5 h-5" /> Save and add to your story</>
                 }
               </button>
-              <button
-                onClick={() => void handleCopyImage()}
-                disabled={shareImageLoading || !shareFile}
-                className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl bg-muted text-foreground font-semibold text-base border disabled:opacity-40 transition-opacity"
-              >
-                {shareCopied
-                  ? <><Check className="w-5 h-5 text-green-500" /> Copied to clipboard</>
-                  : <><Copy className="w-5 h-5" /> Copy to Clipboard</>
-                }
-              </button>
-              <p className="text-xs text-muted-foreground text-center">
-                Save image then share directly to Instagram Stories, WhatsApp, or any app.
+              <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                Save the image, open Instagram Stories, add your photo, then tap the sticker button to add this overlay.
               </p>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       </>)} {/* end !isEditMode */}
 

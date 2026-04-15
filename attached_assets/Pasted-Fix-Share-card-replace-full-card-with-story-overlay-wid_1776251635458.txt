@@ -1,0 +1,71 @@
+Fix: Share card — replace full card with story overlay widget
+The concept:
+Not a full background card. A compact dark overlay widget — like the Marchon example — that the user saves and places on top of their own photo in Instagram Stories. Small, readable, on-brand.
+Widget design:
+Roughly 600px wide, height determined by content (typically 180-250px). Dark background with slight transparency/blur feel (#0d0d0d at 95% opacity). Rounded corners (16px). Compact and clean.
+┌─────────────────────────────────────┐
+│ [Phil avatar 24px] Trained with Phil    WED 15 APR │
+├─────────────────────────────────────┤
+│ [RUN badge]  5x1km                  │
+│                                     │
+│ 5 × 1km @ 4:45/km                  │
+│ Total: 5km                          │
+├─────────────────────────────────────┤
+│ Half Marathon → 1:30   ████░░  62% │
+└─────────────────────────────────────┘
+Content rules:
+Run sessions:
+
+Show each interval with distance and pace if logged, target pace if not
+Total distance and time if available
+Clean list format like the Marchon card — each interval on its own line
+
+Strength sessions:
+
+Best set of the day: exercise name, weight, reps
+e.g. "Bench Press 102.5kg x 5"
+Secondary: total volume if available ("18,450kg total volume")
+
+WOD sessions:
+
+WOD name + result if logged (time, rounds, score)
+
+Goal progress strip:
+
+Single line at the bottom if goal set
+Most relevant goal to the session type
+Progress bar + percentage
+Omit if no goal set — don't leave an empty space
+
+Phil on the widget:
+
+Small circular avatar (24px) next to "Trained with Phil" text in the header
+Use phil.png — circular crop
+No full body Phil, no squashing. Just the face avatar, clean.
+
+Remove:
+
+The transparent/checkered background entirely
+The full body Phil in the bottom corner
+The Story 9:16 / Square 1:1 tabs
+"mgcoaching.app" URL watermark — replace with "trainwithphil.app" or leave blank for now
+
+Export:
+Single PNG at 2x resolution (retina). Transparent background so it sits cleanly on any photo in Stories.
+tsconst canvas = await html2canvas(widgetElement, {
+  backgroundColor: null, // transparent outer background
+  scale: 2,
+  useCORS: true
+});
+The sharing screen UI:
+
+Preview shows the widget at full width, centred, on a subtle grey background so the user can see it clearly
+Below the preview: "Save and add to your story"
+One button: Save Image — downloads the widget PNG
+Remove Copy to Clipboard — not needed, they save and import to Stories manually
+Instruction text: "Save the image, open Instagram Stories, add your photo, then tap the sticker button to add this overlay"
+
+Do not change:
+
+Any session logging logic
+Any other part of the app
