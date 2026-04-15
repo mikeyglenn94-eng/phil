@@ -236,4 +236,36 @@ router.post("/coach-parse", async (req, res) => {
   }
 });
 
+// ── POST /api/programme-thinking ─────────────────────────────────────────
+// Returns 4-6 Phil-voice thinking messages to animate during generation.
+// Runs in parallel with actual generation — fast call.
+
+router.post("/programme-thinking", async (req, res) => {
+  const { planSummary } = req.body as { planSummary: string };
+
+  if (!planSummary?.trim()) {
+    res.json({ messages: [] });
+    return;
+  }
+
+  const prompt = `You are Phil, an AI coach. You are about to build this programme:\n${planSummary}\n\nGenerate 4-6 very short messages (1 sentence each, max 12 words) that show your coaching thought process as you build it. Reference the actual plan details — be specific, be Phil. No fluff.\n\nGood examples:\n- "Starting with a 3-week accumulation block before we back off."\n- "Keeping Monday as your heaviest day — you'll be freshest."\n- "Building the runs around your strength days so you're not dead on both."\n- "Week 4 is a deload. Don't skip it — that's where the gains happen."\n- "Pairing bench and rows on the same day — push/pull, saves time."\n\nReturn JSON: {"messages": ["...", "...", ...]}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+      max_tokens: 300,
+      temperature: 0.8,
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? '{"messages":[]}';
+    const parsed = JSON.parse(raw);
+    res.json({ messages: Array.isArray(parsed.messages) ? parsed.messages : [] });
+  } catch (err) {
+    console.error("[programme-thinking] OpenAI error:", err);
+    res.json({ messages: [] });
+  }
+});
+
 export default router;

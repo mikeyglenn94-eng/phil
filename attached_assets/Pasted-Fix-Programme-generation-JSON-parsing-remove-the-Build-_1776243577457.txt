@@ -1,0 +1,46 @@
+Fix: Programme generation JSON parsing + remove the Build Your Plan modal
+Part 1 — Fix JSON parsing error
+The error "AI returned invalid JSON — try rephrasing your description" means the AI is returning a response that fails JSON.parse(). This is a fragile implementation. Fix it properly:
+tsasync function parseAIProgrammeResponse(rawResponse: string) {
+  // Strip any markdown code fences the AI might wrap around JSON
+  const cleaned = rawResponse
+    .replace(/```json\n?/gi, '')
+    .replace(/```\n?/gi, '')
+    .trim();
+  
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    // If JSON parse fails, send back to AI with strict instruction
+    const retry = await callAI({
+      messages: [
+        { role: 'user', content: `Convert this to valid JSON only, no other text:\n${cleaned}` }
+      ]
+    });
+    const retryText = retry.content[0].text
+      .replace(/```json\n?/gi, '')
+      .replace(/```\n?/gi, '')
+      .trim();
+    return JSON.parse(retryText);
+  }
+}
+Add this retry logic everywhere the app parses AI JSON responses — programme generation, session generation, nutrition parsing, anywhere JSON.parse() is called on an AI response.
+Part 2 — Remove the Build Your Plan modal
+The "Build Your Plan" modal with its form fields, running environment selector, and Generate button is redundant. Phil handles all of this through conversation. Remove it entirely.
+When the user clicks "Build this" in the Phil chat panel, or Phil has gathered enough context through conversation, programme generation happens directly — no modal, no form, no separate Generate button.
+The running environment question ("Road / Treadmill / Track / Hills") should be asked by Phil conversationally if relevant:
+
+"What surface are you running on — road, treadmill, track, or trails?"
+
+The start date should be asked by Phil:
+
+"When do you want to start? I'll default to next Monday if you don't have a preference."
+
+Part 3 — "Build this" button in Phil panel
+When Phil has summarised a plan and is ready to generate, show a single "Build this" button as a message action in the chat thread — not a modal. Tapping it triggers generation directly.
+The button should only appear after Phil has confirmed the plan summary with the user. Not before.
+Do not change:
+
+The programme generation logic itself
+The calendar rendering of generated sessions
+The session structure or JSONB schema

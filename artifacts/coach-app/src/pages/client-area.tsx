@@ -789,6 +789,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     text: string;
     ts: Date;
     coachParseData?: CoachParseResult;
+    action?: {
+      type: "save_session";
+      session: any;
+      sessionType: string;
+      date: string;
+    } | {
+      type: "pick_wod";
+      options: any[];
+      date: string;
+    };
   }
   const [philOpen, setPhilOpen] = useState(false);
   const [philMessages, setPhilMessages] = useState<PhilMessage[]>([]);
@@ -1544,42 +1554,173 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     return "strength";
   }
 
-  // ── Open the plan/session builder pre-filled from a parse result ─────────
-  // For sessions: auto-generates immediately without requiring another click.
-  // For programmes: pre-fills the programme builder describe field.
+  // ── Next Monday date helper ────────────────────────────────────────────────
+  function getNextMonday(): string {
+    const today = new Date();
+    const day = today.getDay();
+    const daysToAdd = day === 0 ? 1 : 8 - day;
+    return format(addDays(today, daysToAdd), "yyyy-MM-dd");
+  }
+
+  // ── Save a single session directly to the calendar ─────────────────────────
+  async function saveSessionDirectly(session: any, date: string) {
+    setSavingAiSession("calendar");
+    try {
+      const newSession = { ...session, id: `session-${Date.now()}`, date };
+      await addSessionToClientCalendar(date, newSession, () => {}, newSession.id, () => {
+        navigateToWeekOf(date);
+        addPhilMsg(`Done — "${session.name ?? "Session"}" added to ${format(parseISO(date), "EEE d MMM")}.`);
+      }, session.name ?? "Session");
+    } catch {
+      addPhilMsg("Something went wrong saving the session. Try again.");
+    } finally {
+      setSavingAiSession(null);
+    }
+  }
+
+  // ── Build a single session from Phil — no modal ────────────────────────────
+  async function handleBuildSessionFromPhil(brief: string, type: "strength" | "wod" | "run") {
+    setPhilOpen(true);
+    setCmdParsing(true);
+    const date = assignStartDate || format(new Date(), "yyyy-MM-dd");
+    try {
+      const endpoint = type === "wod" ? "/api/parse-wod-session" : type === "run" ? "/api/parse-run-session" : "/api/parse-session";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: brief }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (type === "wod" && data.options && data.options.length > 1) {
+        addPhilMsg(`Got some WOD options for ${format(parseISO(date), "EEE d MMM")} — tap to add one:`, {
+          action: { type: "pick_wod", options: data.options, date },
+        });
+      } else {
+        const session = data.options?.[0] ?? data;
+        const exercises: any[] = session.exercises ?? [];
+        const preview = exercises.slice(0, 3)
+          .map((ex: any) => `• ${ex.name}${ex.sets && ex.reps ? ` ${ex.sets}×${ex.reps}` : ex.sets ? ` ${ex.sets} sets` : ""}`)
+          .join("\n");
+        const suffix = exercises.length > 3 ? `\n+${exercises.length - 3} more` : "";
+        addPhilMsg(
+          `Here's your ${type === "run" ? "run" : "session"} — ${session.name ?? "Session"}:\n\n${preview}${suffix}`,
+          { action: { type: "save_session", session, sessionType: type, date } }
+        );
+      }
+    } catch {
+      addPhilMsg("Couldn't generate that session. Give me a bit more detail and try again.");
+    } finally {
+      setCmdParsing(false);
+    }
+  }
+
+  // ── Build a full programme with Phil thinking stream — no modal ────────────
+  async function handleGenerateProgrammeWithThinking(brief: string, startDate: string) {
+    setPhilOpen(true);
+    setCmdParsing(true);
+
+    const envSuffix = runEnv.length > 0 ? ` Running environment: ${runEnv.join(", ")}.` : "";
+    const fullBrief = brief + envSuffix;
+    const body = { description: fullBrief, startDate, strengthStyle: strengthStyle ?? "straight", clientId };
+
+    // ① Fire generation immediately (long-running) — don't await yet
+    let generationResult: any = null;
+    let generationError: string | null = null;
+    const genPromise = (async () => {
+      try {
+        const res = await fetch("/api/generate-programme", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, weekOnly: false }),
+        });
+        if (res.status === 429) { generationError = "limit"; return; }
+        if (!res.ok) throw new Error(await res.text());
+        generationResult = await res.json();
+      } catch (e: any) {
+        generationError = e?.message ?? "failed";
+      }
+    })();
+
+    // ② Fetch thinking messages in parallel — typically faster than generation
+    let thinkingMessages: string[] = [];
+    try {
+      const tr = await fetch("/api/programme-thinking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planSummary: fullBrief }),
+      });
+      const td = await tr.json();
+      thinkingMessages = Array.isArray(td.messages) ? td.messages : [];
+    } catch {
+      thinkingMessages = ["Working through your goals.", "Setting up the weekly structure.", "Balancing load and recovery.", "Adding progressions."];
+    }
+
+    // ③ Show thinking messages one by one (max 6s window)
+    const thinkingStart = Date.now();
+    for (const msg of thinkingMessages) {
+      if (Date.now() - thinkingStart > 6000) break;
+      addPhilMsg(msg);
+      await new Promise<void>(resolve => setTimeout(resolve, 800));
+    }
+
+    // ④ Ensure generation is complete before updating calendar
+    await genPromise;
+
+    if (generationError === "limit") {
+      addPhilMsg("You've hit your monthly generation limit. Drop your coach a message to unlock more.");
+      setCmdParsing(false);
+      return;
+    }
+    if (generationError || !generationResult) {
+      addPhilMsg("Something went wrong building the programme. Try again or rephrase the brief.");
+      setCmdParsing(false);
+      return;
+    }
+
+    // ⑤ Final message — then land on calendar
+    addPhilMsg("Right. Let's go.");
+    await new Promise<void>(resolve => setTimeout(resolve, 600));
+
+    try {
+      const allSessions = expandWeeks(generationResult.sessions ?? [], 4);
+      const saveRes = await fetch("/api/programmes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: generationResult.title ?? "Custom Programme",
+          sessions: allSessions,
+          clientId,
+          blockLength: 4,
+          ...(generationResult.sessionsPerWeek != null ? { sessionsPerWeek: generationResult.sessionsPerWeek } : {}),
+        }),
+      });
+      if (!saveRes.ok) throw new Error("save_failed");
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      navigateToWeekOf(startDate);
+      addPhilMsg(`Done — "${generationResult.title}" is live on your calendar. 4 weeks, deload in week 4.`);
+    } catch {
+      addPhilMsg("Programme generated but I couldn't save it — try again.");
+    } finally {
+      setCmdParsing(false);
+    }
+  }
+
   const handleBuildFromParse = () => {
     if (!coachParseResult) return;
     const brief = coachParseResult.suggestedBrief ?? originalCoachInput;
     const isSession = coachParseResult.requestType === "session";
+    const inferredStyle = coachParseResult.parsedConstraints?.progressionStyle ?? "straight";
     setCoachParseResult(null);
     setCoachFollowUpInput("");
+    setStrengthStyle(inferredStyle);
 
     if (isSession) {
       const inferredType = inferSessionTypeFromBrief(brief);
-      // Pre-fill the session form
-      setQuickAddDesc(brief);
-      setQuickAddType(inferredType);
-      setQuickAddName("");
-      setQuickAddError("");
-      setAiMode("session");
-      setParsedAiSession(null);
-      setQuickAddWodOptions(null);
-      setAssignDialogOpen(true);
-      // Auto-generate immediately using overrides to bypass stale state
-      void handleAiSession({ desc: brief, type: inferredType });
+      void handleBuildSessionFromPhil(brief, inferredType);
     } else {
-      // Programme flow — pre-fill description + pre-select progression style, then let user review + click Generate
-      const today = format(new Date(), "yyyy-MM-dd");
-      const inferredStyle = coachParseResult.parsedConstraints?.progressionStyle ?? "straight";
-      setDescribeText(brief);
-      setAiMode("programme");
-      setBuildMode("describe");
-      setGeneratedPreview(null);
-      setFromScratchTitle("");
-      setStrengthStyle(inferredStyle);
-      setAssignStartDate(today);
-      setAssignDialogOpen(true);
-      // Do NOT auto-generate — user must review the pre-selected progression style then click Generate
+      const startDate = getNextMonday();
+      void handleGenerateProgrammeWithThinking(brief, startDate);
     }
   };
 
@@ -4092,15 +4233,47 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                       <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
                     )}
                     <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
-                      <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>
+                      {msg.text && <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>}
+                      {/* Build-this button when Phil has gathered enough plan context */}
                       {msg.coachParseData?.hasEnough && (
                         <Button
                           size="sm"
                           className="mt-2 h-7 px-3 text-xs w-full"
+                          disabled={cmdParsing}
                           onClick={() => { setCoachParseResult(msg.coachParseData!); handleBuildFromParse(); }}
                         >
                           Build this
                         </Button>
+                      )}
+                      {/* Save a single generated session */}
+                      {msg.action?.type === "save_session" && (
+                        <Button
+                          size="sm"
+                          className="mt-2 h-7 px-3 text-xs w-full"
+                          disabled={!!savingAiSession}
+                          onClick={() => void saveSessionDirectly((msg.action as any).session, (msg.action as any).date)}
+                        >
+                          {savingAiSession ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                          Save to calendar — {format(parseISO((msg.action as any).date), "EEE d MMM")}
+                        </Button>
+                      )}
+                      {/* WOD option picker */}
+                      {msg.action?.type === "pick_wod" && (
+                        <div className="mt-2 space-y-1.5">
+                          {(msg.action as any).options.map((opt: any, i: number) => (
+                            <button
+                              key={i}
+                              className="w-full text-left rounded-lg border bg-background px-2.5 py-2 text-xs hover:border-primary/40 transition-colors disabled:opacity-50"
+                              disabled={!!savingAiSession}
+                              onClick={() => void saveSessionDirectly(opt, (msg.action as any).date)}
+                            >
+                              <span className="font-semibold text-primary/70 mr-1.5">
+                                {opt.format === "emom" ? "EMOM" : opt.format === "amrap" ? "AMRAP" : opt.format === "for_time" ? "For Time" : "WOD"}
+                              </span>
+                              <span>{opt.name || `Option ${i + 1}`}</span>
+                            </button>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -4275,8 +4448,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         </DialogContent>
       </Dialog>
 
-      {/* Build Your Plan Dialog */}
-      <Dialog open={assignDialogOpen} onOpenChange={open => { setAssignDialogOpen(open); if (!open) { setGeneratedPreview(null); setGenerationLimitError(false); setQuickAddError(""); setParsedAiSession(null); setQuickAddWodOptions(null); setSavingAiSession(null); setRunEnv([]); } }}>
+      {/* Build Your Plan Dialog — removed; Phil handles all plan/session building conversationally */}
+      {false && <Dialog open={false} onOpenChange={() => {}}>
         <DialogContent className="max-w-md max-h-[92dvh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -4753,7 +4926,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </DialogFooter>
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog>}
 
       {/* Quick-add single session dialog */}
       <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); setParsedQuickSession(null); setQuickAddWodOptions(null); setSavingQuickSession(null); } }}>

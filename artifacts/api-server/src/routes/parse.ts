@@ -7,6 +7,15 @@ import { eq, gte, and, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { addDays, parseISO, format } from "date-fns";
 
+// ── Safe JSON parser — strips AI markdown fences before parsing ─────────────
+function safeParseAIJson(raw: string): any {
+  const cleaned = raw
+    .replace(/```json\n?/gi, "")
+    .replace(/```\n?/gi, "")
+    .trim();
+  return JSON.parse(cleaned);
+}
+
 // ── Model routing ──────────────────────────────────────────────────────────
 // Use gpt-5.2 for complex multi-constraint programmes; gpt-4o for simple ones.
 function selectModel(description: string): string {
@@ -885,7 +894,7 @@ Generate EXACTLY 1 week of sessions. All day numbers must be between 1 and 7 (in
     const raw = completion.choices[0]?.message?.content ?? "{}";
     let parsed: { title: string; sessions: any[] };
     try {
-      parsed = JSON.parse(raw);
+      parsed = safeParseAIJson(raw);
     } catch {
       req.log.warn({ raw }, "Failed to parse generate-programme LLM response");
       res.status(500).json({ error: "AI returned invalid JSON — try rephrasing your description" });
@@ -974,7 +983,7 @@ CRITICAL RULES:
     const raw = completion.choices[0]?.message?.content ?? "{}";
     let result: { sessions?: any[]; message?: string };
     try {
-      result = JSON.parse(raw);
+      result = safeParseAIJson(raw);
     } catch {
       res.status(500).json({ error: "AI returned invalid JSON" });
       return;
