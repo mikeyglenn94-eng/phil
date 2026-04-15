@@ -117,7 +117,7 @@ router.get("/admin/athlete-linking", adminOnly, async (_req, res): Promise<void>
   res.json(result);
 });
 
-// POST /api/admin/athlete-linking/:clientId/create-login — create user and link to client
+// POST /api/admin/athlete-linking/:clientId/create-login — create user (or link existing) to client
 router.post("/admin/athlete-linking/:clientId/create-login", adminOnly, async (req, res): Promise<void> => {
   const clientId = parseInt(req.params.clientId, 10);
   if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
@@ -133,26 +133,36 @@ router.post("/admin/athlete-linking/:clientId/create-login", adminOnly, async (r
   const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, clientId));
   if (!client) { res.status(404).json({ error: "Client not found" }); return; }
 
+  const normalisedEmail = email.toLowerCase().trim();
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
-  try {
-    const [user] = await db.insert(usersTable).values({
-      email: email.toLowerCase().trim(),
-      passwordHash: hash,
-      roles: ["athlete"],
-      clientId,
-    }).returning();
-    sendAdminSignupAlert({ email: user.email, role: "athlete (linked to existing profile)", timestamp: new Date() });
-    res.status(201).json({ userId: user.id, email: user.email, clientId, status: "login_created" });
-  } catch (e: any) {
-    const pgCode = e.code ?? e.cause?.code;
-    const pgDetail = e.detail ?? e.cause?.detail ?? e.cause?.message ?? e.message;
-    console.error("[create-login] DB insert failed:", { pgCode, pgDetail, clientId, email });
-    if (pgCode === "23505") {
-      res.status(409).json({ error: "A user with this email already exists" });
-    } else {
-      res.status(500).json({ error: "Failed to create login", detail: pgDetail });
+
+  // Check if a user with this email already exists
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, normalisedEmail));
+
+  if (existing) {
+    if (existing.clientId !== null && existing.clientId !== clientId) {
+      res.status(409).json({ error: "This email is already linked to a different client profile" });
+      return;
     }
+    // User exists but is unlinked (or already linked to this client) — link + reset password
+    const [updated] = await db.update(usersTable)
+      .set({ clientId, passwordHash: hash, updatedAt: new Date() })
+      .where(eq(usersTable.id, existing.id))
+      .returning();
+    sendAdminSignupAlert({ email: updated.email, role: "athlete (existing account linked)", timestamp: new Date() });
+    res.status(200).json({ userId: updated.id, email: updated.email, clientId, status: "login_linked" });
+    return;
   }
+
+  // No existing user — create fresh
+  const [user] = await db.insert(usersTable).values({
+    email: normalisedEmail,
+    passwordHash: hash,
+    roles: ["athlete"],
+    clientId,
+  }).returning();
+  sendAdminSignupAlert({ email: user.email, role: "athlete (linked to existing profile)", timestamp: new Date() });
+  res.status(201).json({ userId: user.id, email: user.email, clientId, status: "login_created" });
 });
 
 // PATCH /api/admin/athlete-linking/:clientId/update-login — update email or password for linked user
