@@ -27,7 +27,7 @@ const WOD_KW = [
 
 // Run = running sessions/blocks
 const RUN_KW = [
-  "run", "running", "tempo", "easy run", "jog", "pace", "km", "miles",
+  "run", "running", "tempo", "jog", "pace", "km", "miles",
   "hills", "fartlek", "long run", "recovery run", "track", "intervals",
   "hyrox run", "run block", "run programme",
 ];

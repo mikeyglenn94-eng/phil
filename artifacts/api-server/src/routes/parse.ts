@@ -385,7 +385,7 @@ router.post("/generate-programme", async (req, res): Promise<void> => {
   const chosenModel = selectModel(effectiveDescription);
   req.log.info({ model: chosenModel, hasClientId: !!clientId }, "generate-programme model selected");
 
-  const systemPrompt = `You are an expert fitness programming AI. A coach is describing the training plan they want for a client. Generate a complete, realistic multi-week training programme as a JSON object.
+  const systemPrompt = `You are Phil, the lead strength and conditioning coach at MG Coaching. You are building a training programme based on a brief provided by a coach. Generate a complete, realistic multi-week training programme as a JSON object.
 
 ## Coaching Philosophy (apply these principles to every programme, above all other defaults)
 
@@ -569,7 +569,7 @@ When programming running, reference and develop these specific time domains:
 
 ### Key principles
 - **Build an "arsenal of gears":** athletes must know and train at different paces, not just "fast" and "easy". Programme should develop multiple distinct pace points.
-- **Aerobic base matters — but context is everything:** for high-volume endurance athletes (100+ miles/week, two-a-day sessions), easy Z2 work forms the majority of volume. For regular clients training 4–5x/week once per day, this does NOT apply. Most of their running should still have purpose and intensity — easy runs are only appropriate once frequency is high enough to need recovery sessions between hard efforts.
+- **Aerobic base matters — but context is everything:** for high-volume endurance athletes (100+ miles/week, two-a-day sessions), easy Z2 work forms the majority of volume. For regular clients training 4–5x/week once per day, this does NOT apply. Most of their running should still have purpose and intensity — recovery runs are only appropriate once frequency is high enough to need recovery sessions between hard efforts.
 - **Endurance does not hurt strength — in moderation:** don't be afraid to programme running in strength-focused weeks. Rich Froning's mile improved AND his back squat went up. Mat Fraser ran 5400m at 6-min/mile pace then hit a C&J PR three hours later.
 - **Variety in structure:** use creative, named session formats. Not just "run 5km". Think pyramid runs, hop-scotch style (build distance then descend), Bombolini-style mixed pace sessions.
 - **The recovery interval IS the rest:** in mixed-pace sessions, the easy pace interval is the rest — it should be written as part of the structure, not omitted.
@@ -750,7 +750,7 @@ The MAJORITY of training volume should NOT be Hyrox-specific. Structure every we
 - Run development is the spine of the programme. Most sessions each week should be runs.
 - Use the 5km and 10km as primary benchmarks — target these distances and paces.
 - A half marathon is also relevant but use it as secondary context.
-- Run types to include across the week: easy Z2 runs, threshold intervals (e.g. 4×1km, 6×800m), tempo runs, long easy runs.
+- Run types to include across the week: recovery runs, threshold intervals (e.g. 4×1km, 6×800m), tempo runs, long steady runs.
 - More running = arriving at stations fresher, recovering faster between stations, and raising global fitness capacity. This is the biggest lever.
 - Use source: "run_brain" for all run sessions.
 
@@ -780,7 +780,7 @@ The MAJORITY of training volume should NOT be Hyrox-specific. Structure every we
 - Early weeks: high run volume (easy and moderate), foundational strength, minimal Hyrox-specific work
 - Middle weeks: introduce threshold intervals, heavier strength, 1 Hyrox circuit/week
 - Final 2–3 weeks before race: taper run volume slightly, increase Hyrox simulation, keep strength maintenance only
-- If 6 weeks: deload final week — easy runs only, light strength, no Hyrox circuits
+- If 6 weeks: deload final week — recovery runs only, light strength, no Hyrox circuits
 
 ## Output format
 Return ONLY valid JSON (no markdown):
@@ -1203,7 +1203,7 @@ CRITICAL DISTANCE vs DURATION RULE:
 - Example: "5km tempo" → row: { "rowType": "run", "distance": "5 km", "effort": "tempo" }
 
 Return ONLY valid JSON, no markdown fences.
-Never use "easy run" — use "steady", "recovery", or "easy jog" instead.
+Never use "easy run" — use "steady run", "recovery run", or "long steady run" instead.
 
 Row types:
 - "interval": a work rep — has repNumber, distance (e.g. "1 km"), duration (e.g. "3 min"), pace (e.g. "4:30/km"), effort (e.g. "threshold")

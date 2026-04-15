@@ -14,12 +14,12 @@ interface RunWorkout {
 }
 
 const runWorkouts: RunWorkout[] = [
-  { id: "run_001", name: "30 Min Easy Run", type: "easy", duration: 30, distanceKm: null, structure: "30 minutes easy continuous running", tags: ["easy", "aerobic", "continuous"], terrain: ["flat"], intensity: "easy" },
-  { id: "run_002", name: "45 Min Easy Run", type: "easy", duration: 45, distanceKm: null, structure: "45 minutes easy continuous running", tags: ["easy", "aerobic", "continuous"], terrain: ["flat"], intensity: "easy" },
-  { id: "run_003", name: "60 Min Easy Run", type: "easy", duration: 60, distanceKm: null, structure: "60 minutes easy continuous running", tags: ["easy", "aerobic", "continuous", "long"], terrain: ["flat"], intensity: "easy" },
-  { id: "run_004", name: "5 km Easy Run", type: "easy", duration: null, distanceKm: 5, structure: "5 km easy continuous running", tags: ["easy", "distance", "aerobic"], terrain: ["flat"], intensity: "easy" },
-  { id: "run_005", name: "8 km Easy Run", type: "easy", duration: null, distanceKm: 8, structure: "8 km easy continuous running", tags: ["easy", "distance", "aerobic"], terrain: ["flat"], intensity: "easy" },
-  { id: "run_006", name: "10 km Easy Run", type: "easy", duration: null, distanceKm: 10, structure: "10 km easy continuous running", tags: ["easy", "distance", "aerobic", "long"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_001", name: "30 Min Recovery Run", type: "easy", duration: 30, distanceKm: null, structure: "30 minutes easy continuous recovery running", tags: ["recovery", "aerobic", "continuous"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_002", name: "45 Min Recovery Run", type: "easy", duration: 45, distanceKm: null, structure: "45 minutes easy continuous recovery running", tags: ["recovery", "aerobic", "continuous"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_003", name: "60 Min Recovery Run", type: "easy", duration: 60, distanceKm: null, structure: "60 minutes easy continuous recovery running", tags: ["recovery", "aerobic", "continuous", "long"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_004", name: "5 km Recovery Run", type: "easy", duration: null, distanceKm: 5, structure: "5 km easy continuous recovery running", tags: ["recovery", "distance", "aerobic"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_005", name: "8 km Recovery Run", type: "easy", duration: null, distanceKm: 8, structure: "8 km easy continuous recovery running", tags: ["recovery", "distance", "aerobic"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_006", name: "10 km Recovery Run", type: "easy", duration: null, distanceKm: 10, structure: "10 km easy continuous recovery running", tags: ["recovery", "distance", "aerobic", "long"], terrain: ["flat"], intensity: "easy" },
   { id: "run_007", name: "6 x 400 m Intervals", type: "intervals", duration: null, distanceKm: null, structure: "6 x 400 m hard with 200 m easy jog recovery", tags: ["intervals", "speed", "track"], terrain: ["flat", "track"], intensity: "hard" },
   { id: "run_008", name: "8 x 400 m Intervals", type: "intervals", duration: null, distanceKm: null, structure: "8 x 400 m hard with 200 m easy jog recovery", tags: ["intervals", "speed", "track"], terrain: ["flat", "track"], intensity: "hard" },
   { id: "run_009", name: "5 x 800 m Intervals", type: "intervals", duration: null, distanceKm: null, structure: "5 x 800 m at 5k effort with 2 minute jog recovery", tags: ["intervals", "speed", "track"], terrain: ["flat", "track"], intensity: "hard" },
@@ -53,7 +53,7 @@ const runWorkouts: RunWorkout[] = [
   { id: "run_037", name: "Track 600s", type: "intervals", duration: null, distanceKm: null, structure: "6 x 600 m at 3k to 5k effort with 200 m jog recovery", tags: ["intervals", "track", "speed"], terrain: ["track", "flat"], intensity: "hard" },
   { id: "run_038", name: "Marathon Tempo Blocks", type: "tempo", duration: null, distanceKm: null, structure: "3 x 15 minutes at marathon effort with 5 minutes easy between", tags: ["tempo", "steady", "broken"], terrain: ["flat"], intensity: "moderate" },
   { id: "run_039", name: "20 Min Steady Hills", type: "hills", duration: 20, distanceKm: null, structure: "20 minutes continuous rolling hills at steady effort", tags: ["hills", "steady", "continuous"], terrain: ["hill", "rolling"], intensity: "moderate" },
-  { id: "run_040", name: "Easy Run with Strides", type: "easy", duration: 40, distanceKm: null, structure: "40 minutes easy plus 6 x 20 second strides with full walk recovery", tags: ["easy", "strides", "aerobic"], terrain: ["flat"], intensity: "easy" },
+  { id: "run_040", name: "Recovery Run with Strides", type: "easy", duration: 40, distanceKm: null, structure: "40 minutes easy recovery running plus 6 x 20 second strides with full walk recovery", tags: ["recovery", "strides", "aerobic"], terrain: ["flat"], intensity: "easy" },
   { id: "run_041", name: "Recovery 25", type: "recovery", duration: 25, distanceKm: null, structure: "25 minutes very easy recovery run", tags: ["recovery", "easy", "continuous"], terrain: ["flat"], intensity: "easy" },
   { id: "run_042", name: "Recovery 35", type: "recovery", duration: 35, distanceKm: null, structure: "35 minutes very easy recovery run", tags: ["recovery", "easy", "continuous"], terrain: ["flat"], intensity: "easy" },
   { id: "run_043", name: "Tempo 5 km", type: "tempo", duration: null, distanceKm: 5, structure: "5 km continuous at comfortably hard tempo effort", tags: ["tempo", "distance", "continuous"], terrain: ["flat"], intensity: "moderate_hard" },

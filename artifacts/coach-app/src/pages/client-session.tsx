@@ -85,6 +85,14 @@ function calcEquivalentPace(
   return secondsToPace(sec * TRAIL_FACTORS[difficulty]);
 }
 
+// Safely display a reps value — guards against "NaN" strings stored by old
+// progression logic that ran parseInt on non-numeric rep ranges.
+function safeReps(r: any): string {
+  if (r == null) return "";
+  const s = String(r);
+  return (s === "NaN" || s === "null" || s === "undefined") ? "" : s;
+}
+
 // Extract a clean exercise name from spoken swap commands
 function extractSwapName(raw: string): string {
   const lower = raw.toLowerCase().trim();
@@ -2295,7 +2303,7 @@ export default function ClientSession() {
               <div className="flex flex-wrap gap-1.5 mb-2 ml-8">
                 {ex.perSetReps && ex.perSetReps.length > 0
                   ? <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.perSetReps.join("/")} reps</span>
-                  : ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
+                  : ex.sets && safeReps(ex.reps) && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {safeReps(ex.reps)}</span>}
                 {!ex.perSetRpe?.length && ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
                 {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
               </div>
@@ -2422,8 +2430,8 @@ export default function ClientSession() {
                         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Reps done</span>
                         {ex.perSetReps && ex.perSetReps.length > 0 ? (
                           <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">varies per set</span>
-                        ) : ex.reps ? (
-                          <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">target: {ex.reps}</span>
+                        ) : safeReps(ex.reps) ? (
+                          <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">target: {safeReps(ex.reps)}</span>
                         ) : null}
                       </div>
                     </div>
@@ -2454,7 +2462,7 @@ export default function ClientSession() {
                           <div className="relative">
                             <Input
                               type="number" inputMode="numeric" step="1" min="0"
-                              placeholder={perSetTarget || ex.reps || "—"}
+                              placeholder={perSetTarget != null ? String(perSetTarget) : safeReps(ex.reps) || "—"}
                               value={log.reps ?? ""}
                               onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
                               className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
@@ -2485,7 +2493,7 @@ export default function ClientSession() {
                   <textarea
                     value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
                     onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
-                    placeholder="Leave a comment for your coach…"
+                    placeholder="Leave a note for Phil…"
                     rows={2}
                     disabled={commentListeningFor === ex.id}
                     className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
@@ -2546,7 +2554,7 @@ export default function ClientSession() {
               <div className="flex flex-wrap gap-1.5 mb-2 ml-8">
                 {ex.perSetReps && ex.perSetReps.length > 0
                   ? <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.perSetReps.join("/")} reps</span>
-                  : ex.sets && ex.reps && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {ex.reps}</span>}
+                  : ex.sets && safeReps(ex.reps) && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Repeat className="w-3 h-3" />{ex.sets} × {safeReps(ex.reps)}</span>}
                 {!ex.perSetRpe?.length && ex.rpe && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Zap className="w-3 h-3" />RPE {ex.rpe}</span>}
                 {ex.rest && <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full font-medium"><Clock className="w-3 h-3" />Rest {ex.rest}</span>}
               </div>
@@ -2586,7 +2594,7 @@ export default function ClientSession() {
                           />
                           <Input
                             type="number" inputMode="numeric" step="1" min="0"
-                            placeholder={ex.reps || "—"}
+                            placeholder={safeReps(ex.reps) || "—"}
                             value={log.reps ?? ""}
                             onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
                             className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
@@ -2611,7 +2619,7 @@ export default function ClientSession() {
                   <textarea
                     value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
                     onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
-                    placeholder="Leave a comment for your coach…"
+                    placeholder="Leave a note for Phil…"
                     rows={2}
                     disabled={commentListeningFor === ex.id}
                     className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
@@ -2744,18 +2752,17 @@ export default function ClientSession() {
           <Share2 className="w-4 h-4" /> Share workout
         </button>
 
-        {/* WhatsApp Coach */}
+        {/* Email Coach */}
         <div className="pt-4 pb-2 flex justify-center">
           <a
-            href="https://wa.me/447928712251"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2.5 bg-[#25D366] hover:bg-[#20bb5a] text-white font-semibold rounded-2xl px-6 py-3.5 text-sm shadow-md hover:shadow-lg transition-all"
+            href="mailto:hello@mikeyglenncoaching.com"
+            className="inline-flex items-center gap-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-2xl px-6 py-3.5 text-sm shadow-md hover:shadow-lg transition-all"
           >
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" xmlns="http://www.w3.org/2000/svg">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-current stroke-2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <rect width="20" height="16" x="2" y="4" rx="2"/>
+              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
             </svg>
-            WhatsApp Your Coach
+            Email Your Coach
           </a>
         </div>
       </div>

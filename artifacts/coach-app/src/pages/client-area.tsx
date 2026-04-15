@@ -299,9 +299,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const params = new URLSearchParams(search);
     const t = params.get("tab");
-    if (t === "training") return "training";
+    if (t === "dashboard") return "dashboard";
     if (t === "nutrition") return "nutrition";
-    return "dashboard";
+    return "training";
   });
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
@@ -2694,16 +2694,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </div>
             <h1 className="font-display font-bold text-lg truncate">{client.name}</h1>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={openGoalsDialog}
-            className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-            title="Set daily macro & calorie goals"
-          >
-            <Target className="w-3.5 h-3.5" />
-            Goals
-          </Button>
           {mode === "coach" && (
             <>
               <Button
@@ -2779,6 +2769,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       {/* Nutrition Tab */}
       {!isTeamMode && activeTab === "nutrition" && (
         <div className="nutrition-screen px-6 py-6 max-w-2xl mx-auto">
+
+          {/* ── Nutrition Goals ───────────────────────────────────── */}
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Nutrition goals</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openGoalsDialog}
+              className="gap-1.5 text-xs h-7 px-2.5 rounded-lg"
+              title="Set daily macro & calorie goals"
+            >
+              <Target className="w-3 h-3" />
+              Set Goals
+            </Button>
+          </div>
 
           {/* ── Tracking Mode ─────────────────────────────────────── */}
           <div className="mb-4">
@@ -3541,7 +3546,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             {/* Quick action chips — shown when idle */}
             {!cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && !coachInlineResponse && !coachParseResult && (
               <div className="flex flex-wrap gap-1.5">
-                {(["Build a plan", "Build a session", "Adjust schedule", "Review my training"] as const).map(chip => (
+                {(["Build my plan", "Add a session", "What should I work on?", "Review my week"] as const).map(chip => (
                   <button
                     key={chip}
                     onClick={() => setCmdInput(chip)}
@@ -3564,7 +3569,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   if (coachParseResult) { setCoachParseResult(null); setCoachFollowUpInput(""); }
                 }}
                 onKeyDown={e => { if (e.key === "Enter") void handleCoachInput(); }}
-                placeholder="Ask your coach — plan, adjust, review or progress your training…"
+                placeholder="Ask Phil — plan, adjust, progress or review your training…"
                 disabled={cmdListening || cmdParsing}
                 className="flex-1 text-sm bg-muted/30 border rounded-xl px-3.5 py-2 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 focus:bg-background transition-colors"
               />
@@ -4316,7 +4321,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                           quickAddType === "wod"
                             ? "e.g. 30 min AMRAP: 10 burpees, 15 box jumps, 20 wall balls. I have a 24kg KB."
                             : quickAddType === "run"
-                            ? "e.g. 45 min easy run, 4×500m with 90s rest, 5km time trial"
+                            ? "e.g. 45 min steady run, 4×500m with 90s rest, 5km time trial"
                             : "e.g. I have 30 mins, 22.5kg dumbbells, and can run 500m laps. Build me a full-body circuit."
                         }
                         value={quickAddListening ? (quickAddInterim || quickAddDesc) : quickAddDesc}
@@ -4792,7 +4797,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   quickAddType === "wod"
                     ? "e.g. 30 min amrap, 15 press ups, 1km bike erg, 500m run\n\nor: EMOM 12 — min 1: 12 cal bike, min 2: 15 wall balls\nor: 5 rounds for time: 400m run, 20 burpees"
                   : quickAddType === "run"
-                    ? "e.g. 45 min easy run\n\nor: 5 × 1km at tempo pace, 90s jog recovery\nor: 8km steady state, hilly route\nor: 6 × 200m hill sprints"
+                    ? "e.g. 45 min steady run\n\nor: 5 × 1km at tempo pace, 90s jog recovery\nor: 8km steady state, hilly route\nor: 6 × 200m hill sprints"
                   : "Bench press 4x8\nSquat 3x5 @RPE 8\nRDL 3x10\nLateral raises 3x15\n\n…or speak naturally"
                 }
                 rows={6}

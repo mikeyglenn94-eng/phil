@@ -1,0 +1,91 @@
+Command 1 — Critical bug fixes (run first)
+Fix the following bugs before anything else:
+
+NaN in session detail — sets showing "4 × NaN", rep targets showing "NaN" across all set rows. This is caused by a parsing error where repsMin or repsMax is undefined when building the set rows. Find where set rows are rendered in the session detail component and add a fallback: if repsMin or repsMax is undefined or NaN, display the raw reps value. If all three are undefined, display "—" not "NaN"
+"Easy run" appearing on calendar — search the entire codebase for any instance of the string "easy run" (case insensitive) in AI prompts, session templates, library content, and generated session names. Replace every instance with "recovery run"
+Calendar day cell too sensitive — tapping a day while scrolling accidentally opens day view. Fix by distinguishing tap from scroll:
+
+tslet pointerMoved = false;
+onPointerDown={() => { pointerMoved = false; }}
+onPointerMove={() => { pointerMoved = true; }}
+onPointerUp={() => { if (!pointerMoved) openDay(); }}
+
+Toast notifications staying too long — reduce all success/confirmation toast duration to 2000ms. Destructive confirmations (delete) can stay at 3000ms. Nothing longer than that.
+
+
+Command 2 — Introduce Phil
+Introduce Phil as the AI coach persona across the entire athlete-facing experience.
+System prompt — add to all AI calls in the athlete-facing app:
+
+"You are Phil, an AI personal coach. Your personality is based on an experienced, tough-love coach who has seen it all. You are direct, a little sarcastic, but genuinely invested in the athlete's success. You never give empty praise — if someone does well you acknowledge it briefly and move on. You talk like a coach, not a chatbot. You never say things like 'Great question!' or 'Certainly!' You get straight to the point. You have strong opinions about training and you share them. You occasionally use dry humour. Your job is to build and adapt training programmes, answer questions about training, and keep athletes accountable. You know everything about strength training, hypertrophy, running, conditioning, and periodisation. Never use the phrase 'easy run' — always say recovery run, steady run, long steady run, or quality session."
+
+Name changes in the UI:
+
+Command bar placeholder text:
+
+When calendar is empty: "What are you training for?"
+When calendar has sessions: "Ask Phil anything about your training..."
+
+
+"Ask your coach" label → "Ask Phil"
+"Leave a comment for your coach" → "Leave a note for Phil"
+"Your feedback will update future sessions" stays as is — this is clear enough
+
+Do not change anything in the coach-facing or admin-facing UI. Phil only appears in the athlete view.
+
+Command 3 — Navigation and UI hierarchy
+The athlete view needs to reflect that the AI and training calendar is the product. Everything else is secondary.
+
+Training is the default landing tab — when an athlete logs in they always land on Training, never Dashboard
+Command bar is the visual hero — increase the size and contrast of the command bar input. It should be the most visually prominent element on the screen, not an afterthought below the chips
+Rewrite the prompt chips in human language:
+
+When calendar is empty, show only two chips:
+
+"I want to get stronger"
+"Build me a training week"
+
+
+When calendar has sessions, show four chips:
+
+"I want to get stronger"
+"I only have 45 minutes today"
+"Change something in my plan"
+"How am I progressing?"
+
+
+Chips should be visually distinct — more contrast, slightly larger, clearly tappable
+
+
+Remove Goals from the main header entirely — it should not appear in the top navigation bar
+Move Goals into the Nutrition tab — add a settings cog icon in the top right of the Nutrition tab. Clicking it opens the existing Goals modal. Remove the macro formula explanation text ("protein × 4 + carbs × 4 + fats × 9") — just validate silently and show a simple error if macros don't add up
+Navigation tab weight — Training tab should be visually the most prominent of the three tabs. Dashboard and Nutrition are supporting features
+
+
+Command 4 — Session screen and post-session
+
+Remove WhatsApp Your Coach button — replace with an email link for beta:
+
+Button text: "Question for your coach?"
+Action: mailto:hello@mikeyglenncoaching.com
+Keep the same position at the bottom of the post-session screen
+Style it as a subtle secondary button, not a prominent green WhatsApp button
+
+
+"Leave a comment for your coach" → "Leave a note for Phil"
+Post-session "Any changes for next time?" section — keep exactly as is, it's good
+
+
+Command 5 — Regression check
+After all of the above is implemented, verify the following have not been broken:
+
+Existing client accounts (Keeley F clientId=2, Mikey G clientId=1) can still log in and see their sessions
+Coach account (hello@mikeyglenncoaching.com) still has full coach dashboard access with no Phil branding showing
+Admin console still works
+Session logging (sets, weights, reps) still saves correctly
+Nutrition logging still works
+Copy with progression still works
+AI programme generation still works
+The "Apply to future sessions" feedback still works
+
+Run this check by logging into each account type before pushing any changes live.
