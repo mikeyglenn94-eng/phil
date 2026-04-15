@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
-  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Trash2,
+  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2,
   Pencil,
 } from "lucide-react";
 import {
@@ -509,6 +509,7 @@ export default function ClientSession() {
   const [shareFile, setShareFile] = useState<File | null>(null);
   const [shareImageLoading, setShareImageLoading] = useState(false);
   const [shareSaved, setShareSaved] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const [shareShowComment, setShareShowComment] = useState(true);
   const [shareGoals, setShareGoals] = useState<any[]>([]);
   const shareWidgetRef = useRef<HTMLDivElement>(null);
@@ -1257,6 +1258,7 @@ export default function ClientSession() {
 
   async function openShareModal() {
     setShareSaved(false);
+    setShareCopied(false);
     setShareShowComment(true);
     setShareFile(null);
     setShareGoals([]);
@@ -1308,6 +1310,36 @@ export default function ClientSession() {
       }, "image/png");
     } catch (err) {
       console.error("html2canvas error", err);
+    } finally {
+      setShareImageLoading(false);
+    }
+  }
+
+  async function handleCopyImage() {
+    if (!shareWidgetRef.current) return;
+    setShareImageLoading(true);
+    try {
+      const canvas = await html2canvas(shareWidgetRef.current, {
+        backgroundColor: null, scale: 2, useCORS: true, allowTaint: true, logging: false,
+      });
+      canvas.toBlob(async blob => {
+        if (!blob) return;
+        const file = new File([blob], "phil-workout.png", { type: "image/png" });
+        setShareFile(file);
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          setShareCopied(true); setTimeout(() => setShareCopied(false), 2500);
+        } catch {
+          // Clipboard blocked — fall back to download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = file.name; a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+          setShareSaved(true); setTimeout(() => setShareSaved(false), 2500);
+        }
+      }, "image/png");
+    } catch (err) {
+      console.error("html2canvas copy error", err);
     } finally {
       setShareImageLoading(false);
     }
@@ -2473,20 +2505,7 @@ export default function ClientSession() {
 
         const shareDateStr = format(parseISO(session.date || format(new Date(), "yyyy-MM-dd")), "EEE d MMM").toUpperCase();
 
-        // Best set by e1RM
         const calcE1rm = (w: number, r: number) => w * (1 + r / 30);
-        let shareBest: { name: string; weight: number; reps: number } | null = null;
-        let shareBestE1rm = 0;
-        let shareTotalVol = 0;
-        shareAllEx.forEach(ex => {
-          (logs[ex.id] || []).forEach(lg => {
-            if (lg.weight && lg.reps) {
-              shareTotalVol += lg.weight * lg.reps;
-              const e = calcE1rm(lg.weight, lg.reps);
-              if (e > shareBestE1rm) { shareBestE1rm = e; shareBest = { name: nameOverrides[ex.id] || ex.name, weight: lg.weight, reps: lg.reps }; }
-            }
-          });
-        });
 
         // Run: logged intervals
         const shareLoggedRuns = runIntervals.filter(r => r.pace?.trim());
@@ -2495,23 +2514,71 @@ export default function ClientSession() {
         // WOD result
         const shareWodVal = (wodResult as any)?.value as string | undefined;
 
-        // Goal strip — pick most relevant
+        // Goal strip — pick most relevant (goals have parsedTargets[] not a flat metric field)
         let shareGoalItem: any = null;
+        let shareGoalParsedTarget: any = null;
         for (const g of shareGoals) {
-          const m = g.metric as string;
-          if (shareIsRun && ["5k","10k","half_marathon","marathon"].includes(m)) { shareGoalItem = g; break; }
-          if (shareIsStrength && ["bench_e1rm","squat_e1rm","deadlift_e1rm"].includes(m)) { shareGoalItem = g; break; }
+          const pts: any[] = g.parsedTargets ?? [];
+          for (const pt of pts) {
+            if (shareIsRun && ["5k","10k","half_marathon","marathon"].includes(pt.metric)) { shareGoalItem = g; shareGoalParsedTarget = pt; break; }
+            if (shareIsStrength && ["bench_e1rm","squat_e1rm","deadlift_e1rm"].includes(pt.metric)) { shareGoalItem = g; shareGoalParsedTarget = pt; break; }
+          }
+          if (shareGoalItem) break;
         }
-        if (!shareGoalItem && shareGoals.length > 0) shareGoalItem = shareGoals[0];
+        if (!shareGoalItem && shareGoals.length > 0) {
+          shareGoalItem = shareGoals[0];
+          shareGoalParsedTarget = (shareGoals[0]?.parsedTargets ?? [])[0] ?? null;
+        }
 
-        // Goal progress %
+        // Goal-anchored best set: prefer the exercise that matches the strength goal
+        const goalLiftKeyword = shareGoalParsedTarget?.metric === "bench_e1rm" ? "bench"
+          : shareGoalParsedTarget?.metric === "squat_e1rm" ? "squat"
+          : shareGoalParsedTarget?.metric === "deadlift_e1rm" ? "deadlift"
+          : null;
+        const goalMatchedExIds = new Set(
+          goalLiftKeyword
+            ? shareAllEx.filter(ex => (nameOverrides[ex.id] || ex.name).toLowerCase().includes(goalLiftKeyword)).map(ex => ex.id)
+            : []
+        );
+
+        // Recompute shareBest — goal-anchored first, then global
+        let shareBestAnchored: { name: string; weight: number; reps: number } | null = null;
+        let shareBestAnchoredE1rm = 0;
+        let shareBestGlobal: { name: string; weight: number; reps: number } | null = null;
+        let shareBestGlobalE1rm = 0;
+        let shareTotalVol = 0;
+        shareAllEx.forEach(ex => {
+          (logs[ex.id] || []).forEach(lg => {
+            if (lg.weight && lg.reps) {
+              shareTotalVol += lg.weight * lg.reps;
+              const e = calcE1rm(lg.weight, lg.reps);
+              if (goalMatchedExIds.has(ex.id) && e > shareBestAnchoredE1rm) {
+                shareBestAnchoredE1rm = e;
+                shareBestAnchored = { name: nameOverrides[ex.id] || ex.name, weight: lg.weight, reps: lg.reps };
+              }
+              if (e > shareBestGlobalE1rm) {
+                shareBestGlobalE1rm = e;
+                shareBestGlobal = { name: nameOverrides[ex.id] || ex.name, weight: lg.weight, reps: lg.reps };
+              }
+            }
+          });
+        });
+        const shareBest = shareBestAnchored ?? shareBestGlobal;
+        const shareBestE1rm = shareBestAnchored ? shareBestAnchoredE1rm : shareBestGlobalE1rm;
+
+        // Goal progress % — use session e1RM vs goal target for strength; hide for run (no baseline here)
         let shareGoalPct = 0;
         let shareGoalLabel = "";
-        if (shareGoalItem) {
-          const current = parseFloat(shareGoalItem.currentValue ?? "0");
-          const target = parseFloat(shareGoalItem.targetValue ?? "0");
-          if (target > 0) shareGoalPct = Math.min(100, Math.round((current / target) * 100));
-          shareGoalLabel = shareGoalItem.metric?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "";
+        let shareShowGoalBar = false;
+        if (shareGoalParsedTarget) {
+          const targetNum = Number(shareGoalParsedTarget.target ?? 0);
+          const metricLabel = String(shareGoalParsedTarget.metric ?? "")
+            .replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+          shareGoalLabel = metricLabel;
+          if (shareIsStrength && shareBestE1rm > 0 && targetNum > 0) {
+            shareGoalPct = Math.min(100, Math.round((shareBestE1rm / targetNum) * 100));
+            shareShowGoalBar = true;
+          }
         }
 
         // Badge colours
@@ -2551,7 +2618,7 @@ export default function ClientSession() {
                 {/* ── Header ── */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <img src="/phil.png" crossOrigin="anonymous" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+                    <img src="/phil.png" crossOrigin="anonymous" style={{ width: 28, height: 28, minWidth: 28, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
                     <span style={{ color: "rgba(255,255,255,0.9)", fontWeight: 600, fontSize: 14, letterSpacing: "-0.01em" }}>Trained with Phil</span>
                   </div>
                   <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, fontWeight: 500 }}>{shareDateStr}</span>
@@ -2637,8 +2704,8 @@ export default function ClientSession() {
                   )}
                 </div>
 
-                {/* ── Goal strip ── */}
-                {shareGoalItem && (
+                {/* ── Goal strip (anchored to bottom of card) ── */}
+                {shareShowGoalBar && (
                   <div style={{ padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.50)", fontWeight: 500 }}>{shareGoalLabel}</span>
@@ -2670,22 +2737,34 @@ export default function ClientSession() {
               </div>
             )}
 
-            {/* Action button */}
-            <div className="px-5 py-4 flex flex-col gap-3 shrink-0">
-              <button
-                onClick={() => void handleSaveImage()}
-                disabled={shareImageLoading}
-                className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-base shadow-md disabled:opacity-50 transition-opacity"
-              >
-                {shareSaved
-                  ? <><Check className="w-5 h-5" /> Saved!</>
-                  : shareImageLoading
-                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Saving…</>
-                  : <><Download className="w-5 h-5" /> Save and add to your story</>
-                }
-              </button>
-              <p className="text-xs text-muted-foreground text-center leading-relaxed">
-                Save the image, open Instagram Stories, add your photo, then tap the sticker button to add this overlay.
+            {/* Action buttons — two equal side-by-side */}
+            <div className="px-5 py-4 flex flex-col gap-2.5 shrink-0">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => void handleSaveImage()}
+                  disabled={shareImageLoading}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm shadow-md disabled:opacity-50 transition-opacity"
+                >
+                  {shareSaved
+                    ? <><Check className="w-4 h-4" /> Saved!</>
+                    : <><Download className="w-4 h-4" /> Save Image</>
+                  }
+                </button>
+                <button
+                  onClick={() => void handleCopyImage()}
+                  disabled={shareImageLoading}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-border bg-muted/40 text-foreground font-semibold text-sm disabled:opacity-50 transition-opacity"
+                >
+                  {shareImageLoading
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Working…</>
+                    : shareCopied
+                    ? <><Check className="w-4 h-4" /> Copied!</>
+                    : <><Copy className="w-4 h-4" /> Copy Image</>
+                  }
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Add to your Instagram or WhatsApp story.
               </p>
             </div>
           </div>

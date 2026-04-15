@@ -1,0 +1,59 @@
+Fix: Share card — Phil image, goal-anchored highlight, buttons
+Fix 1 — Phil image is squished
+Phil is being stretched/squished in the card header. Fix:
+css.phil-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover; /* never stretch */
+  flex-shrink: 0; /* never squish */
+}
+Also fix Phil's full body image in the collapsed chat bar (Image 1) — he's rendering at the wrong size and overlapping content. In the collapsed Phil bar, only show the circular avatar (36px), not the full body illustration. Full body Phil is only for marketing/onboarding use, not UI chrome.
+Fix 2 — Highlight anchors to goal, not highest volume
+Current behaviour: picks the exercise with the highest volume or best e1RM across the whole session regardless of goal.
+Correct behaviour: if the user has a strength goal set, check if the session contains that exercise first. If it does, use it as the highlight. Only fall back to best e1RM if no goal-relevant exercise exists in the session.
+tsfunction getShareHighlight(session, clientGoals) {
+  // Extract goal-relevant exercise names from goals
+  const strengthGoals = clientGoals
+    .filter(g => g.metric && ['bench_e1rm', 'squat_e1rm', 'deadlift_e1rm'].includes(g.metric))
+    .map(g => g.metric.replace('_e1rm', ''));
+
+  // Check if session contains a goal-relevant exercise
+  for (const goalExercise of strengthGoals) {
+    const match = session.exercises.find(ex => 
+      ex.name.toLowerCase().includes(goalExercise.toLowerCase())
+    );
+    if (match) {
+      return getBestSet(match); // use this exercise
+    }
+  }
+
+  // Fallback: best e1RM across all exercises
+  return getBestSetAcrossSession(session);
+}
+So for an account with a bench 130kg goal, a session containing bench press always shows bench as the highlight even if squat volume is higher.
+Fix 3 — Goal progress bar showing 0%
+The progress bar is rendering but showing 0%. This is the same percentage calculation bug from the previous goal progress fix. Ensure the share card uses the same fixed calculation:
+
+Strength: Math.round((currentE1RM / targetKg) * 100)
+Run: Math.round(((baseline - current) / (baseline - target)) * 100)
+If no baseline exists, hide the progress bar entirely rather than showing 0%
+
+Fix 4 — Buttons
+Replace current button layout with two clean equal buttons:
+┌─────────────────┐  ┌─────────────────┐
+│  Save Image     │  │ Copy to         │
+│                 │  │ Clipboard       │
+└─────────────────┘  └─────────────────┘
+
+Two side by side buttons, equal width
+Save Image — downloads the PNG
+Copy to Clipboard — copies image to clipboard for direct paste into Stories
+Remove the instruction text below — replace with a single line: "Add to your Instagram or WhatsApp story"
+Remove "and add to your story" from the Save Image button label — just "Save Image"
+
+Do not change:
+
+Card layout or dark background
+"Trained with Phil" header
+Any session logging logic
