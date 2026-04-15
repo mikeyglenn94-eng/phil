@@ -1,0 +1,68 @@
+Feature: Expanded 1RM tracker with custom exercises and goal percentages
+Part 1 — Expand the 1RM tracker
+Currently the app tracks Squat, Bench, Deadlift. Expand this to a proper 1RM log that supports any exercise.
+Default tracked lifts (shown by default, can be hidden):
+
+Back Squat
+Bench Press
+Deadlift
+Strict Press
+Power Clean
+Clean
+Snatch
+Clean and Jerk
+
+Custom lifts:
+User can add any exercise not in the default list. A simple "+ Add lift" button at the bottom of the 1RM tracker opens a text input: "Exercise name" then saves it to their tracked lifts list. No limit on how many they can add.
+Store in a new clientLifts table:
+sqlclientLifts
+  id, clientId, exerciseName, isDefault (boolean), isHidden (boolean), createdAt
+Users can hide default lifts they don't do (e.g. hide Snatch if they don't olympic lift) — hidden lifts don't show on dashboard but data is preserved.
+Part 2 — 1RM log entries
+Each tracked lift has a history of logged 1RMs:
+sqlclientOneRMs
+  id, clientId, exerciseName, weightKg, loggedAt, source ('manual' | 'calculated' | 'session')
+
+manual — user typed it in directly
+calculated — derived from a logged set via Epley formula
+session — explicitly logged as a 1RM attempt during a session
+
+The tracker shows the most recent value for each lift, with a small history arrow to see previous entries.
+Part 3 — Goal percentage display
+If a user has a goal set for a specific lift (e.g. "bench 130kg"), show the percentage toward that goal next to the current 1RM:
+Bench Press
+Current: 102.5kg     79% of 130kg goal
+─────────────────────────────────────
+History: 100kg, 97.5kg, 95kg
+Percentage = Math.round((current / goalTarget) * 100)
+Only show the percentage if a matching goal exists for that lift. No percentage shown for lifts with no goal.
+Part 4 — Percentage calculator
+Below each lift's current 1RM, show a simple inline percentage calculator:
+Calculate percentages
+60%: 61.5kg   70%: 71.8kg   75%: 76.9kg
+80%: 82kg     85%: 87.1kg   90%: 92.3kg
+These update live whenever the 1RM value changes. This is genuinely useful for athletes doing percentage-based programming — they can check their working weights without leaving the app.
+Show 6 percentages by default: 60, 70, 75, 80, 85, 90. Round to nearest 0.5kg for practical use.
+Part 5 — Where it lives
+The 1RM tracker lives on the Dashboard as an expandable section below the existing performance cards. Collapsed by default showing just the current values, tap to expand and see history + percentage calculator.
+Also accessible from Edit Dashboard — user can manage which lifts are tracked and add custom ones there.
+Part 6 — Phil references 1RMs
+Add current 1RMs to Phil's context:
+tsconst oneRMContext = clientLifts
+  .filter(l => !l.isHidden)
+  .map(l => `${l.exerciseName}: ${l.currentOneRM}kg`)
+  .join(', ');
+Phil uses this when building programmes:
+
+"You're currently snatching 70kg. I'll base the percentages off that."
+
+And when discussing goals:
+
+"You're at 102.5kg on bench. To hit 130kg you're looking at roughly 4-5 months of solid work."
+
+Do not change:
+
+The existing Squat, Bench, Deadlift e1RM calculation from logged sessions
+The fitness score performance trend logic
+Any other dashboard cards
+Any calendar or programme logic
