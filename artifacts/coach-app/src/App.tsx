@@ -80,9 +80,20 @@ function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
       fetch(`${BASE}/api/clients/${user!.clientId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-        .then(r => r.ok ? r.json() : null)
+        .then(r => {
+          if (r.ok) return r.json();
+          // Client not found (e.g. stale token pointing at a deleted client) — clear session
+          if (r.status === 404 || r.status === 403) {
+            logout();
+            setLocation("/");
+          }
+          return null;
+        })
         .then(c => { if (c) selectClient(c); })
-        .catch(() => {});
+        .catch(() => {
+          logout();
+          setLocation("/");
+        });
     }
   }, [user?.clientId, token]);
 
