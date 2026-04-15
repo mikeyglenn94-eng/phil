@@ -4345,7 +4345,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 onClick={() => { setPhilExpanded(true); setPhilUnread(false); setTimeout(() => philInputRef.current?.focus(), 50); }}
                 title="Open Phil"
               >
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
+                <img src="/phil.png" alt="Phil" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
                 {philUnread && (
                   <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-background" />
                 )}
@@ -4376,7 +4376,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               {/* Header */}
               <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
+                  <img src="/phil.png" alt="Phil" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
                   <div>
                     <p className="text-sm font-semibold leading-none">Phil</p>
                     <p className="text-[11px] text-muted-foreground">MG Coaching</p>
@@ -4400,7 +4400,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 {philMessages.map(msg => (
                   <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
                     {msg.sender === "phil" && (
-                      <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
+                      <img src="/phil.png" alt="Phil" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
                     )}
                     <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
                       {msg.text && <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>}
@@ -4450,7 +4450,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 ))}
                 {cmdParsing && (
                   <div className="flex gap-2 justify-start">
-                    <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
+                    <img src="/phil.png" alt="Phil" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
                     <div className="bg-muted rounded-2xl px-3 py-2.5">
                       <div className="flex gap-1 items-center h-4">
                         <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
