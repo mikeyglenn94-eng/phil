@@ -66,7 +66,7 @@ function RequireAuth({ children, roles }: { children: React.ReactNode; roles?: s
 // For the athlete portal: show picker if no auth, or auto-use JWT clientId
 function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
   const { client, selectClient } = useClientContext();
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const [, setLocation] = useLocation();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -86,14 +86,20 @@ function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
     }
   }, [user?.clientId, token]);
 
-  // If user has no linked clientId at all, they shouldn't be here — send coaches to /clients
+  // If user has no linked clientId, redirect based on role.
+  // Athletes: clear the stale token and send to sign-in so the login endpoint can auto-create their client.
+  // Coaches/admins: send to their dashboard.
   useEffect(() => {
-    if (user && !user.clientId && !client) {
-      if (user.roles.includes("coach") || user.roles.includes("admin")) {
-        setLocation("/clients");
-      }
+    if (!user || client || needsForceSelect) return;
+    if (user.clientId) return; // being resolved via needsForceSelect
+    if (user.roles.includes("coach") || user.roles.includes("admin")) {
+      setLocation("/clients");
+    } else {
+      // Athlete with a stale null-clientId token — clear session so login re-creates their client
+      logout();
+      setLocation("/");
     }
-  }, [user, client]);
+  }, [user?.id, client?.id, needsForceSelect]);
 
   // Loading state while fetching the linked client
   if (needsForceSelect) {
