@@ -1,0 +1,103 @@
+Feature: Social sharing card — Strava-style with Phil
+The card design:
+Inspired by Strava's activity cards. Clean, bold, dark background, large readable stats. Designed to look good as an Instagram story or WhatsApp share.
+Card dimensions: 1080x1920px (9:16 story format). Also generates a 1080x1080px square version for feed posts.
+Card layout:
+┌─────────────────────────────┐
+│  [Phil logo small top left] │
+│  Trained with Phil          │
+│                             │
+│  WED 15 APR                 │
+│                             │
+│  [SESSION TYPE BADGE]       │
+│  Session Name               │
+│                             │
+│  ── HIGHLIGHT ──────────    │
+│                             │
+│  [Big bold stat]            │
+│  e.g. 102.5kg               │
+│  Bench Press — 5x5          │
+│                             │
+│  ── GOAL PROGRESS ─────     │
+│  Bench → 130kg              │
+│  ████████░░  79%            │
+│                             │
+│  [Phil standing bottom      │
+│   right, small but visible] │
+└─────────────────────────────┘
+Content rules per session type:
+Strength sessions:
+
+Highlight = best set of the day by estimated 1RM
+Formula: weight × (1 + reps/30) — highest result across all logged sets
+Display: the actual weight and reps logged, e.g. "102.5kg — 5 reps"
+Label: exercise name below the weight
+If nothing logged yet, use the prescribed top set from the session
+
+Run sessions:
+
+Highlight = total distance + average pace if logged, or target pace if not
+Display: "8.4km @ 5:12/km" or "5 × 1km @ HM pace (5:20/km target)"
+If actual pace logged, show actual. If not, show target.
+
+WOD sessions:
+
+Highlight = WOD result if logged (time, rounds, score)
+If not logged, show WOD name and structure summary
+
+Goal progress on card:
+
+Show if the user has at least one goal set
+If multiple goals, show the one most relevant to the session type
+Strength session → show strength goal progress
+Run session → show run goal progress
+Progress bar + percentage + current vs target
+If only an estimate exists (no manually set PB, no logged data): show estimated progress with "est." label — never hide it just because data isn't perfect
+
+Phil on the card:
+
+Use phil.png placed bottom right corner
+Roughly 180px tall at full card size — visible but not dominating
+Slightly overlapping the bottom edge of the card for visual interest
+"Trained with Phil" in small text top left next to the Phil logo favicon
+
+UI fixes for the sharing screen:
+Current issues: card too small, text unreadable, transparent background showing.
+Fix:
+
+Card renders at full width of the sharing screen, properly contained
+Background is solid dark colour, no transparency
+All text minimum 28px at render size — readable when screenshotted
+Two size options shown as tabs: Story (9:16) and Square (1:1)
+Live preview in the sharing screen shows the card at a reasonable preview size — not tiny
+"Save Image" button downloads the correct full resolution version
+"Copy to Clipboard" button copies the image to clipboard so user can paste directly into Instagram story, WhatsApp, etc.
+Both buttons clearly visible at the bottom, full width
+
+Technical implementation:
+Use html2canvas or canvas API to render the card. The card is rendered as an off-screen HTML element at full resolution then captured.
+ts// Render card at full resolution
+const canvas = await html2canvas(cardElement, {
+  width: 1080,
+  height: isStory ? 1920 : 1080,
+  scale: 1,
+  backgroundColor: '#0a0a0a',
+  useCORS: true // needed for Phil image
+});
+
+// Save image
+const link = document.createElement('a');
+link.download = `phil-${sessionName}-${date}.png`;
+link.href = canvas.toDataURL('image/png');
+link.click();
+
+// Copy to clipboard
+const blob = await new Promise(resolve => canvas.toBlob(resolve));
+await navigator.clipboard.write([
+  new ClipboardItem({ 'image/png': blob })
+]);
+Do not change:
+
+The existing Share workout button trigger
+Any session logging logic
+Any other part of the app
