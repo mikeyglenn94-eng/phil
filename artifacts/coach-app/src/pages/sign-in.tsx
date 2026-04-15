@@ -11,7 +11,7 @@ type AuthMode = "signin" | "create";
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 export default function SignIn() {
-  const { login, isAuthenticated, primaryRole, isLoading } = useAuth();
+  const { login, loginWithToken, isAuthenticated, primaryRole, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
@@ -76,7 +76,7 @@ export default function SignIn() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Account creation failed");
-      localStorage.setItem("axis_auth_token", data.token);
+      loginWithToken(data.token, data.user);
       const roles: string[] = data.user?.roles ?? [];
       if (roles.includes("admin")) setLocation("/admin");
       else if (roles.includes("coach")) setLocation("/coach");

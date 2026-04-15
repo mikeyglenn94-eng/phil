@@ -67,12 +67,14 @@ function RequireAuth({ children, roles }: { children: React.ReactNode; roles?: s
 function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
   const { client, selectClient } = useClientContext();
   const { user, token } = useAuth();
+  const [, setLocation] = useLocation();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
   // When the authenticated user has a linked clientId, ALWAYS force-select their own
   // account — this prevents a stale localStorage entry (from a coach or previous session)
   // from showing the wrong client's data to the logged-in athlete.
-  const needsForceSelect = user?.clientId && token && client?.id !== user.clientId;
+  const needsForceSelect = !!(user?.clientId && token && client?.id !== user.clientId);
+
   useEffect(() => {
     if (needsForceSelect) {
       fetch(`${BASE}/api/clients/${user!.clientId}`, {
@@ -84,6 +86,15 @@ function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
     }
   }, [user?.clientId, token]);
 
+  // If user has no linked clientId at all, they shouldn't be here — send coaches to /clients
+  useEffect(() => {
+    if (user && !user.clientId && !client) {
+      if (user.roles.includes("coach") || user.roles.includes("admin")) {
+        setLocation("/clients");
+      }
+    }
+  }, [user, client]);
+
   // Loading state while fetching the linked client
   if (needsForceSelect) {
     return (
@@ -93,7 +104,6 @@ function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // No client selected yet — wait for force-select to resolve
   if (!client) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">

@@ -18,6 +18,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<{ user: AuthUser; roles: Role[] }>;
+  loginWithToken: (token: string, user: AuthUser) => void;
   logout: () => void;
   hasRole: (role: Role) => boolean;
   primaryRole: () => Role | null;
@@ -107,8 +108,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   }, [state.user]);
 
+  const loginWithToken = useCallback((token: string, user: AuthUser) => {
+    setAuth(token, user);
+  }, [setAuth]);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, hasRole, primaryRole }}>
+    <AuthContext.Provider value={{ ...state, login, loginWithToken, logout, hasRole, primaryRole }}>
       {children}
     </AuthContext.Provider>
   );
