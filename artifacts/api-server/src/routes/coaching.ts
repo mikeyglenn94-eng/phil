@@ -236,11 +236,36 @@ ${tabSection}`;
 // Phases: start → severity → choice → done (swaps applied inline).
 
 const INJURY_MAP: Record<string, string[]> = {
-  back: ["deadlift", "romanian deadlift", "rdl", "good morning", "bent over row", "back squat", "barbell row", "barbell deadlift"],
-  knee: ["squat", "lunge", "leg press", "step up", "bulgarian split squat", "running"],
-  shoulder: ["bench press", "overhead press", "ohp", "lateral raise", "upright row", "pull up", "pull-up"],
-  hip: ["squat", "deadlift", "lunge", "hip thrust", "running"],
-  wrist: ["bench press", "overhead press", "front squat", "clean"],
+  back: [
+    "deadlift", "romanian deadlift", "rdl", "good morning",
+    "bent over row", "back squat", "barbell row", "hyperextension",
+    "stiff leg", "sumo deadlift", "rack pull",
+  ],
+  knee: [
+    "squat", "lunge", "leg press", "step up", "bulgarian split squat",
+    "hack squat", "leg extension", "running", "jump", "box jump",
+  ],
+  shoulder: [
+    "bench press", "overhead press", "ohp", "lateral raise",
+    "upright row", "pull up", "chin up", "dip", "arnold press",
+    "front raise", "face pull", "cable fly", "chest fly",
+  ],
+  elbow: [
+    "bench press", "incline bench", "decline bench", "close grip bench",
+    "overhead press", "strict press", "ohp", "dip", "skull crusher",
+    "tricep pushdown", "tricep extension", "push up", "db press",
+    "dumbbell press", "cable pushdown", "french press", "curl",
+    "bicep curl", "hammer curl", "preacher curl", "row", "pull down",
+    "lat pulldown", "seated row", "cable row",
+  ],
+  wrist: [
+    "bench press", "overhead press", "front squat", "clean",
+    "snatch", "curl", "wrist curl", "push up",
+  ],
+  hip: [
+    "squat", "deadlift", "lunge", "hip thrust", "running",
+    "leg press", "step up", "bulgarian split squat",
+  ],
 };
 
 const INJURY_SYSTEM_PROMPT = `You are Phil, the lead coach at MG Coaching. Direct, results-driven, concise.
@@ -255,6 +280,7 @@ Injury substitution principles:
 - Lower back: replace spinal loading with hip-dominant or machine alternatives. Leg press, hip thrust, cable pull-throughs, machine rows.
 - Knee: replace deep knee flexion with partial range or hip-dominant alternatives. Leg press (shallow), hip thrust, Nordic curl, straight leg deadlift.
 - Shoulder: replace overhead/horizontal pressing with cable or machine alternatives at pain-free angles. Cable chest press, landmine press, neutral grip dumbbell press.
+- Elbow/Golfer's elbow: medial epicondylitis is aggravated by gripping, curling, and forearm pronation under load. This includes all pressing movements, rows, curls, and pulling movements. Flag ALL of these in the programme, not just the obvious ones. Recommend the athlete avoids heavy gripping and considers lifting straps for pulling movements if they want to continue. Substitutions: machine-based pressing with neutral grip, resistance band work, lightweight isolation with very slow tempo, or full rest from the affected movements. Always recommend they see a physio for a confirmed case.
 - Hip: replace hip flexion under load. Leg curl, Nordic curl, upper body sessions, bike for cardio.
 - Wrist: replace barbell gripping with neutral grip or machine alternatives. Hammer grip dumbbell press, machine press, trap bar deadlift.`;
 
@@ -283,8 +309,8 @@ router.post("/clients/:clientId/injury-chat", async (req, res): Promise<void> =>
         {
           role: "system",
           content: `Extract the affected body part and/or specific exercise from the user's injury message.
-Return ONLY valid JSON (no markdown): { "bodyPart": "back"|"knee"|"shoulder"|"hip"|"wrist"|null, "specificExercise": string|null }
-bodyPart must be one of the listed values or null. specificExercise is the exercise they named, or null.`,
+Return ONLY valid JSON (no markdown): { "bodyPart": "back"|"knee"|"shoulder"|"elbow"|"hip"|"wrist"|null, "specificExercise": string|null }
+bodyPart must be one of the listed values or null. Use "elbow" for golfer's elbow, tennis elbow, elbow pain, or any elbow-related issue. specificExercise is the exercise they named, or null.`,
         },
         { role: "user", content: message },
       ],
@@ -388,7 +414,20 @@ confirmed = ongoing, weeks, diagnosed, has seen a doctor/physio.`,
 
     if (affectedItems.length === 0) {
       const windowLabel = windowDays === 7 ? "next 7 days" : "next 6 weeks";
-      const reply = `Good news, I can't see any ${bodyPart ? bodyPart + "-loading" : "affected"} exercises in your ${windowLabel}. Your programme is fine as is. Keep me posted if anything flares up.`;
+      let reply: string;
+      if (bodyPart && INJURY_MAP[bodyPart]) {
+        const loadTypes = bodyPart === "elbow"
+          ? "pressing, rowing, curling, or pulling movements"
+          : bodyPart === "knee" ? "squatting, lunging, or leg-dominant movements"
+          : bodyPart === "shoulder" ? "pressing or overhead movements"
+          : bodyPart === "back" ? "spinal-loading or hinge movements"
+          : bodyPart === "hip" ? "hip-dominant or lower body movements"
+          : bodyPart === "wrist" ? "barbell gripping movements"
+          : `${bodyPart}-loading movements`;
+        reply = `Looking at your ${windowLabel} I can't see any direct ${loadTypes}. If something specific is aggravating it, tell me the exercise name and I'll swap it out.`;
+      } else {
+        reply = `Looking at your ${windowLabel} I can't see any exercises that match what you've described. Tell me the specific exercise name that's causing trouble and I'll swap it out.`;
+      }
       res.json({ reply, nextPhase: "done", context: {} });
       return;
     }
@@ -433,19 +472,20 @@ Mark exactly one as recommended: true. No markdown.`,
     // Build Phil's message
     const physioNote = severity === "confirmed" ? " Worth getting eyes on this with a physio if you haven't already." : "";
 
-    // Group affected items by date for the "I can see..." sentence
+    // Group affected items by date for the listing
     const dateGroups: Record<string, string[]> = {};
     for (const item of affectedItems) {
-      const label = format(parseISO(item.date), "EEEE");
+      const label = format(parseISO(item.date), "EEEE do MMM");
       if (!dateGroups[label]) dateGroups[label] = [];
       if (!dateGroups[label].includes(item.exerciseName)) dateGroups[label].push(item.exerciseName);
     }
-    const sessionDesc = Object.entries(dateGroups)
-      .map(([day, exs]) => `${exs.join(" and ")} on ${day}`)
-      .join(", ");
-    const windowLabel = windowDays === 7 ? "next week" : "next 6 weeks";
+    const sessionLines = Object.entries(dateGroups)
+      .map(([day, exs]) => `${day}: ${exs.join(", ")}`)
+      .join("\n");
+    const windowLabel = windowDays === 7 ? "next 7 days" : "next 6 weeks";
+    const bodyPartLabel = bodyPart === "elbow" ? "Golfer's elbow hits anything that loads the forearm and elbow." : "";
 
-    let reply = `In your ${windowLabel} I can see ${sessionDesc}. I'll swap those out.${physioNote}\n\n`;
+    let reply = `${bodyPartLabel ? bodyPartLabel + " " : ""}In your ${windowLabel} I can see:\n${sessionLines}\n\nI'll swap those out.${physioNote}\n\n`;
     for (const s of suggestions) {
       reply += `For ${s.exerciseName}, here are your options:\n`;
       s.options.forEach((o, i) => {

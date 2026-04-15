@@ -1,0 +1,112 @@
+Ha — Phil completely missed the bench press and overhead pressing movements that are obviously there. "Good news, I can't see any affected exercises" is flat out wrong and would destroy trust immediately.
+
+Two problems:
+
+Phil's injury map for elbow/pressing isn't comprehensive enough
+Phil isn't actually scanning the real calendar sessions properly before responding
+Here's the command:
+
+Fix: Injury modification — Phil must accurately scan actual calendar sessions
+
+The bug:
+
+Phil said "I can't see any affected exercises in your next 7 days" when the calendar clearly contains bench press, incline DB bench press, and other pressing movements that directly load the elbow. This means Phil is either not reading the actual session data or his elbow injury map is missing these exercises.
+
+Fix 1 — Expand the injury map
+
+The current elbow/pressing map is incomplete. Replace it:
+
+ts
+const injuryMap = {
+  'back': [
+    'deadlift', 'romanian deadlift', 'rdl', 'good morning', 
+    'bent over row', 'back squat', 'barbell row', 'hyperextension',
+    'stiff leg', 'sumo deadlift', 'rack pull'
+  ],
+  'knee': [
+    'squat', 'lunge', 'leg press', 'step up', 'bulgarian split squat',
+    'hack squat', 'leg extension', 'running', 'jump', 'box jump'
+  ],
+  'shoulder': [
+    'bench press', 'overhead press', 'ohp', 'lateral raise', 
+    'upright row', 'pull up', 'chin up', 'dip', 'arnold press',
+    'front raise', 'face pull', 'cable fly', 'chest fly'
+  ],
+  'elbow': [
+    'bench press', 'incline bench', 'decline bench', 'close grip bench',
+    'overhead press', 'strict press', 'ohp', 'dip', 'skull crusher',
+    'tricep pushdown', 'tricep extension', 'push up', 'db press',
+    'dumbbell press', 'cable pushdown', 'french press', 'curl',
+    'bicep curl', 'hammer curl', 'preacher curl', 'row', 'pull down',
+    'lat pulldown', 'seated row', 'cable row'
+  ],
+  'wrist': [
+    'bench press', 'overhead press', 'front squat', 'clean', 
+    'snatch', 'curl', 'wrist curl', 'push up'
+  ],
+  'hip': [
+    'squat', 'deadlift', 'lunge', 'hip thrust', 'running',
+    'leg press', 'step up', 'bulgarian split squat'
+  ],
+}
+Fix 2 — Phil must read actual session data before responding
+
+When injury intent is detected, Phil must query the actual sessions in the modification window before saying anything about what is or isn't in the programme.
+
+The injury scan must:
+
+Fetch all sessions within the modification window (7 days for niggle, 42 days for confirmed)
+Extract every exercise name from every session in that window
+Check each exercise name against the injury map using case-insensitive partial matching
+Only after completing this scan should Phil respond
+ts
+async function scanSessionsForInjury(clientId, bodyPart, windowDays) {
+  const sessions = await getSessionsInWindow(clientId, windowDays);
+  const affected = [];
+  
+  const relevantKeywords = injuryMap[bodyPart] || [];
+  
+  for (const session of sessions) {
+    for (const exercise of session.exercises) {
+      const nameLC = exercise.name.toLowerCase();
+      const isAffected = relevantKeywords.some(keyword => 
+        nameLC.includes(keyword.toLowerCase())
+      );
+      if (isAffected) {
+        affected.push({
+          sessionDate: session.date,
+          sessionName: session.name,
+          exerciseName: exercise.name
+        });
+      }
+    }
+  }
+  
+  return affected;
+}
+Fix 3 — Phil's response when affected exercises are found
+
+When the scan returns results, Phil lists them specifically:
+
+"Golfer's elbow hits anything that loads the forearm and elbow. In your next 7 days I can see:
+Monday: Paused Bench Press, Flat Cambered Bar Bench Press
+Tuesday: Incline DB Bench Press, Bent Over Row, Bicep Curl
+
+I'd swap the pressing movements for now. Want me to suggest alternatives, or would you rather just pull those sessions back to lighter weights?"
+
+Phil never says "I can't see any affected exercises" unless the scan genuinely returns zero results. If zero results, Phil explains why:
+
+"Looking at your next 7 days I can't see any direct pressing or elbow-loading movements. If something specific is aggravating it tell me the exercise name and I'll swap it out."
+
+Fix 4 — Golfer's elbow specific advice
+
+Add to Phil's system prompt:
+
+"Golfer's elbow (medial epicondylitis) is aggravated by gripping, curling, and forearm pronation under load. This includes all pressing movements, rows, curls, and pulling movements. When someone mentions golfer's elbow, flag ALL of these movement types in their programme, not just the obvious ones. Recommend they avoid heavy gripping and consider lifting straps for pulling movements if they want to continue training. Always suggest they see a physio for a confirmed case."
+
+Do not change:
+
+The conversational flow structure
+The modification window logic
+The equipment constraint check
+Any other injury type handling
