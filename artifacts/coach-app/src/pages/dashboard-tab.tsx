@@ -1593,31 +1593,8 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
             <SheetTitle className="text-left text-base">Customise Dashboard</SheetTitle>
           </SheetHeader>
 
-          <div className="space-y-0 divide-y">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2">Fitness Score</p>
-            <PrefRow label="Show explanation line" checked={prefs.showFitnessExplanation} onToggle={() => toggle("showFitnessExplanation")} />
-
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Cards</p>
-            <PrefRow label="Weekly Win"     checked={prefs.showWeeklyWin}    onToggle={() => toggle("showWeeklyWin")}    />
-            <PrefRow label="Consistency"    checked={prefs.showConsistency}  onToggle={() => toggle("showConsistency")}  />
-
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Nutrition</p>
-            <PrefRow label="Show on dashboard"       checked={prefs.showNutritionCard}       onToggle={() => toggle("showNutritionCard")}       />
-            <PrefRow label="Include in fitness score" checked={prefs.includeNutritionInScore} onToggle={() => toggle("includeNutritionInScore")} disabled={!prefs.showNutritionCard} />
-
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Performance</p>
-            <PrefRow label="Estimated 5K"   checked={prefs.showEstimated5K}  onToggle={() => toggle("showEstimated5K")}  />
-            <PrefRow label="Squat e1RM"     checked={prefs.showSquatE1RM}    onToggle={() => toggle("showSquatE1RM")}    />
-            <PrefRow label="Bench e1RM"     checked={prefs.showBenchE1RM}    onToggle={() => toggle("showBenchE1RM")}    />
-            <PrefRow label="Deadlift e1RM"  checked={prefs.showDeadliftE1RM} onToggle={() => toggle("showDeadliftE1RM")} />
-
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Metrics</p>
-            <PrefRow label="Distance Run"   checked={prefs.showDistanceRun}  onToggle={() => toggle("showDistanceRun")}  />
-            <PrefRow label="Volume Lifted"  checked={prefs.showVolumeLifted} onToggle={() => toggle("showVolumeLifted")} />
-          </div>
-
           {/* ── YOUR GOAL ─────────────────────────────────────── */}
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Your Goal</p>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2">Your Goal</p>
           <p className="text-xs text-muted-foreground mb-3">What are you working toward? Phil will use this to track progress and personalise your programme.</p>
 
           {/* Existing goals */}
@@ -1693,6 +1670,29 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
           {goals.length >= 3 && (
             <p className="text-xs text-muted-foreground mt-1">Maximum 3 goals. Remove one to add another.</p>
           )}
+
+          <div className="space-y-0 divide-y mt-6">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2">Fitness Score</p>
+            <PrefRow label="Show explanation line" checked={prefs.showFitnessExplanation} onToggle={() => toggle("showFitnessExplanation")} />
+
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Cards</p>
+            <PrefRow label="Weekly Win"     checked={prefs.showWeeklyWin}    onToggle={() => toggle("showWeeklyWin")}    />
+            <PrefRow label="Consistency"    checked={prefs.showConsistency}  onToggle={() => toggle("showConsistency")}  />
+
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Nutrition</p>
+            <PrefRow label="Show on dashboard"        checked={prefs.showNutritionCard}       onToggle={() => toggle("showNutritionCard")}       />
+            <PrefRow label="Include in fitness score" checked={prefs.includeNutritionInScore} onToggle={() => toggle("includeNutritionInScore")} disabled={!prefs.showNutritionCard} />
+
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Performance</p>
+            <PrefRow label="Estimated 5K"   checked={prefs.showEstimated5K}  onToggle={() => toggle("showEstimated5K")}  />
+            <PrefRow label="Squat e1RM"     checked={prefs.showSquatE1RM}    onToggle={() => toggle("showSquatE1RM")}    />
+            <PrefRow label="Bench e1RM"     checked={prefs.showBenchE1RM}    onToggle={() => toggle("showBenchE1RM")}    />
+            <PrefRow label="Deadlift e1RM"  checked={prefs.showDeadliftE1RM} onToggle={() => toggle("showDeadliftE1RM")} />
+
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Metrics</p>
+            <PrefRow label="Distance Run"  checked={prefs.showDistanceRun}  onToggle={() => toggle("showDistanceRun")}  />
+            <PrefRow label="Volume Lifted" checked={prefs.showVolumeLifted} onToggle={() => toggle("showVolumeLifted")} />
+          </div>
 
           <Button className="w-full mt-6" onClick={() => setEditOpen(false)}>Done</Button>
         </SheetContent>
