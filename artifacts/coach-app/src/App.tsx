@@ -171,6 +171,20 @@ function CoachLayout() {
   );
 }
 
+function SignOut() {
+  const { logout } = useAuth();
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    logout();
+    setLocation("/");
+  }, []);
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+    </div>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -179,6 +193,7 @@ function App() {
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Switch>
               {/* Public */}
+              <Route path="/sign-out" component={SignOut} />
               <Route path="/" component={SignIn} />
 
               {/* Admin */}
