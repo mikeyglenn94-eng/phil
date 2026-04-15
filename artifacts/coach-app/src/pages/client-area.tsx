@@ -3086,16 +3086,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               </button>
             ))}
           </div>
-          {activeTab !== "training" && (
-            <button
-              type="button"
-              onClick={() => setPhilOpen(v => !v)}
-              title={philOpen ? "Close Phil" : "Ask Phil"}
-              className={`p-2 rounded-xl transition-colors shrink-0 ${philOpen ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
       </div>}
 
@@ -4332,7 +4322,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
       {/* ── Phil Chat Panel — global bottom drawer (all tabs) ────────────────── */}
       {!isTeamMode && (
-        <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${philOpen ? "h-[300px]" : "h-0"}`}>
+        <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${(philOpen || activeTab !== "training") ? "h-[300px]" : "h-0"}`}>
           <div className="h-[300px] flex flex-col">
             {/* Header */}
             <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
@@ -4343,9 +4333,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   <p className="text-[11px] text-muted-foreground">MG Coaching</p>
                 </div>
               </div>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
-                <X className="w-4 h-4" />
-              </Button>
+              {activeTab === "training" && (
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
             {/* Messages */}
             <div ref={philScrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
