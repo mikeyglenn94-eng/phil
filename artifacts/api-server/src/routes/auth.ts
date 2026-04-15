@@ -35,6 +35,16 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
+
+  // If an athlete has no linked client record yet (pre-existing account), auto-create one now
+  let resolvedClientId = user.clientId ?? null;
+  if (!resolvedClientId && user.roles.includes("athlete" as any)) {
+    const nameFromEmail = user.email.split("@")[0].replace(/[._\-+]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const [newClient] = await db.insert(clientsTable).values({ name: nameFromEmail }).returning();
+    resolvedClientId = newClient.id;
+    await db.update(usersTable).set({ clientId: resolvedClientId, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+  }
+
   await db.update(usersTable)
     .set({ lastLoginAt: new Date(), updatedAt: new Date() })
     .where(eq(usersTable.id, user.id));
@@ -43,7 +53,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     userId: user.id,
     email: user.email,
     roles: user.roles as any,
-    clientId: user.clientId ?? null,
+    clientId: resolvedClientId,
   });
   res.json({
     token,
@@ -51,7 +61,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       id: user.id,
       email: user.email,
       roles: user.roles,
-      clientId: user.clientId ?? null,
+      clientId: resolvedClientId,
     },
   });
 });
@@ -79,24 +89,34 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     res.status(409).json({ error: "An account with this email already exists" }); return;
   }
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
+
+  // For athletes, auto-create a client record so they land directly on their calendar
+  let linkedClientId: number | null = null;
+  if (assignedRole === "athlete") {
+    const nameFromEmail = normalised.split("@")[0].replace(/[._\-+]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const [newClient] = await db.insert(clientsTable).values({ name: nameFromEmail }).returning();
+    linkedClientId = newClient.id;
+  }
+
   const [user] = await db.insert(usersTable).values({
     email: normalised,
     passwordHash: hash,
     roles: [assignedRole],
+    clientId: linkedClientId,
   }).returning();
 
   const token = signToken({
     userId: user.id,
     email: user.email,
     roles: user.roles as any,
-    clientId: null,
+    clientId: linkedClientId,
   });
 
   sendAdminSignupAlert({ email: user.email, role: assignedRole, timestamp: new Date() });
 
   res.status(201).json({
     token,
-    user: { id: user.id, email: user.email, roles: user.roles, clientId: null },
+    user: { id: user.id, email: user.email, roles: user.roles, clientId: linkedClientId },
   });
 });
 
