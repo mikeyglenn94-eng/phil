@@ -49,6 +49,12 @@ export interface AnalyticsData {
   runMetrics: {
     estimated5K: { current: string | null; previous: string | null };
   };
+  baselines?: {
+    benchKg: number | null; squatKg: number | null; deadliftKg: number | null;
+    fiveKSeconds: number | null; tenKSeconds: number | null;
+    halfMarathonSeconds: number | null; marathonSeconds: number | null;
+    setManually: boolean;
+  } | null;
 }
 
 // ── Preferences ───────────────────────────────────────────────────
@@ -622,6 +628,23 @@ function secsToMmss(secs: number): string {
   const m = Math.floor(secs / 60), s = Math.round(secs % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
+function secsToHmmss(secs: number): string {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = Math.round(secs % 60);
+  return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+// Accepts: "25:30", "1:55:30", "115:30", "1h45m", "1h45m30s"
+function parseTimeInput(raw: string): number | null {
+  const s = raw.trim();
+  const hms = s.match(/^(\d+):(\d{2}):(\d{2})$/);
+  if (hms) return parseInt(hms[1]) * 3600 + parseInt(hms[2]) * 60 + parseInt(hms[3]);
+  const ms = s.match(/^(\d+):(\d{2})$/);
+  if (ms) return parseInt(ms[1]) * 60 + parseInt(ms[2]);
+  const verbal = s.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+  if (verbal && (verbal[1] || verbal[2] || verbal[3])) {
+    return (parseInt(verbal[1] || "0")) * 3600 + (parseInt(verbal[2] || "0")) * 60 + (parseInt(verbal[3] || "0"));
+  }
+  return null;
+}
 
 type StatDisplay = { label: string; sublabel?: string; primary: string; delta: string | null };
 
@@ -896,6 +919,46 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
     setDeletingGoalId(null);
   }
 
+  // ── PBs (manual baselines) state ──────────────────────────────
+  const [pbForm, setPbForm] = useState({ bench: "", squat: "", deadlift: "", fiveK: "", tenK: "", halfMarathon: "", marathon: "" });
+  const [pbSaving, setPbSaving] = useState(false);
+  const [pbSaved, setPbSaved] = useState(false);
+
+  useEffect(() => {
+    const bl = analytics?.baselines;
+    if (!bl) return;
+    setPbForm({
+      bench:        bl.benchKg       != null ? String(bl.benchKg)             : "",
+      squat:        bl.squatKg       != null ? String(bl.squatKg)             : "",
+      deadlift:     bl.deadliftKg    != null ? String(bl.deadliftKg)          : "",
+      fiveK:        bl.fiveKSeconds        != null ? secsToMmss(bl.fiveKSeconds)        : "",
+      tenK:         bl.tenKSeconds         != null ? secsToMmss(bl.tenKSeconds)         : "",
+      halfMarathon: bl.halfMarathonSeconds != null ? secsToMmss(bl.halfMarathonSeconds) : "",
+      marathon:     bl.marathonSeconds     != null ? secsToHmmss(bl.marathonSeconds)    : "",
+    });
+  }, [analytics?.baselines]);
+
+  async function handleSavePBs() {
+    setPbSaving(true);
+    const body = {
+      benchKg:             pbForm.bench       ? parseFloat(pbForm.bench)          : null,
+      squatKg:             pbForm.squat       ? parseFloat(pbForm.squat)           : null,
+      deadliftKg:          pbForm.deadlift    ? parseFloat(pbForm.deadlift)        : null,
+      fiveKSeconds:        pbForm.fiveK       ? parseTimeInput(pbForm.fiveK)       : null,
+      tenKSeconds:         pbForm.tenK        ? parseTimeInput(pbForm.tenK)        : null,
+      halfMarathonSeconds: pbForm.halfMarathon ? parseTimeInput(pbForm.halfMarathon) : null,
+      marathonSeconds:     pbForm.marathon    ? parseTimeInput(pbForm.marathon)    : null,
+    };
+    await fetch(`/api/clients/${clientId}/baselines`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+    setPbSaving(false);
+    setPbSaved(true);
+    setTimeout(() => setPbSaved(false), 2500);
+  }
+
   // Fetch nutrition logs for last 7 days when card is enabled
   useEffect(() => {
     if (!prefs.showNutritionCard) return;
@@ -1143,70 +1206,130 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
       {(() => {
         if (goalsLoading || goals.length === 0) return null;
 
-        const progressItems: {
-          icon: string; label: string; targetStr: string;
-          current: number | null; target: number; unit: string;
-          currentLabel: string; targetDate: string | null; pct: number;
-          weeksEst: number | null; tight: boolean;
-        }[] = [];
+        const bl = analytics?.baselines;
+
+        type ProgressItem = {
+          key: string; icon: string; label: string; targetStr: string; targetDate: string | null;
+        } & (
+          | { hasData: true; pct: number; currentLabel: string; subLabel: string; weeksEst: number | null; tight: boolean }
+          | { hasData: false; nudge: string }
+        );
+
+        const items: ProgressItem[] = [];
 
         for (const goal of goals) {
           if (!goal.parsedTargets) continue;
           for (const t of goal.parsedTargets) {
             const targetNum = Number(t.target);
+            const targetDate = goal.targetDate;
+            const weeksToTarget = targetDate ? Math.floor((new Date(targetDate).getTime() - Date.now()) / 604800000) : null;
 
-            if (t.metric === "bench_e1rm") {
-              const curr = analytics?.strengthMetrics.bench.current ?? null;
-              const prev = analytics?.strengthMetrics.bench.previous ?? null;
-              if (curr === null) continue;
+            // ── Strength goals ──────────────────────────────────────────
+            if (t.metric === "bench_e1rm" || t.metric === "squat_e1rm" || t.metric === "deadlift_e1rm") {
+              const smKey = t.metric === "bench_e1rm" ? "bench" : t.metric === "squat_e1rm" ? "squat" : "deadlift" as const;
+              const sm = analytics?.strengthMetrics[smKey];
+              const loggedCurr = sm?.current ?? null;
+              const loggedPrev = sm?.previous ?? null;
+              const manualCurr = t.metric === "bench_e1rm" ? (bl?.benchKg ?? null)
+                : t.metric === "squat_e1rm" ? (bl?.squatKg ?? null) : (bl?.deadliftKg ?? null);
+              const curr = loggedCurr ?? manualCurr;
+              const liftLabels = { bench_e1rm: "Bench Press", squat_e1rm: "Squat", deadlift_e1rm: "Deadlift" };
+              const liftShort  = { bench_e1rm: "bench", squat_e1rm: "squat", deadlift_e1rm: "deadlift" };
+              const label = liftLabels[t.metric];
+
+              if (curr === null) {
+                items.push({ key: `${t.metric}_${goal.id}`, icon: "🏋️", label, targetStr: `${targetNum}kg`, targetDate, hasData: false, nudge: `Add your current ${label.toLowerCase()} PB in Edit Dashboard` });
+                continue;
+              }
+
               const pct = Math.min(Math.round((curr / targetNum) * 100), 100);
-              const weeklyGain = prev !== null ? (curr - prev) / 4 : null;
+              const weeklyGain = loggedCurr !== null && loggedPrev !== null ? (loggedCurr - loggedPrev) / 4 : null;
               const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((targetNum - curr) / weeklyGain) : null;
-              const tight = goal.targetDate && weeksEst !== null ? weeksEst > Math.floor((new Date(goal.targetDate).getTime() - Date.now()) / 604800000) : false;
-              progressItems.push({ icon: "🏋️", label: "Bench Press", targetStr: `${targetNum}kg`, current: curr, target: targetNum, unit: "kg", currentLabel: `${curr}kg`, targetDate: goal.targetDate, pct, weeksEst, tight });
+              const tight = weeksToTarget !== null && weeksEst !== null ? weeksEst > weeksToTarget : false;
+
+              let subLabel: string;
+              if (loggedCurr !== null && loggedPrev !== null) {
+                const delta = Math.round(loggedCurr - loggedPrev);
+                if (delta > 0)      subLabel = `Up ${delta}kg in the last 4 weeks`;
+                else if (delta < 0) subLabel = `Down ${Math.abs(delta)}kg in the last 4 weeks`;
+                else                subLabel = "Holding steady. Keep logging to track gains.";
+              } else if (loggedCurr !== null) {
+                subLabel = `Log more ${liftShort[t.metric]} sessions to estimate rate.`;
+              } else {
+                subLabel = `Based on your PB. Log ${liftShort[t.metric]} sessions to track progress.`;
+              }
+
+              items.push({ key: `${t.metric}_${goal.id}`, icon: "🏋️", label, targetStr: `${targetNum}kg`, targetDate, hasData: true, pct, currentLabel: `${curr}kg`, subLabel, weeksEst, tight });
             }
-            if (t.metric === "squat_e1rm") {
-              const curr = analytics?.strengthMetrics.squat.current ?? null;
-              const prev = analytics?.strengthMetrics.squat.previous ?? null;
-              if (curr === null) continue;
-              const pct = Math.min(Math.round((curr / targetNum) * 100), 100);
-              const weeklyGain = prev !== null ? (curr - prev) / 4 : null;
-              const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((targetNum - curr) / weeklyGain) : null;
-              const tight = goal.targetDate && weeksEst !== null ? weeksEst > Math.floor((new Date(goal.targetDate).getTime() - Date.now()) / 604800000) : false;
-              progressItems.push({ icon: "🏋️", label: "Squat", targetStr: `${targetNum}kg`, current: curr, target: targetNum, unit: "kg", currentLabel: `${curr}kg`, targetDate: goal.targetDate, pct, weeksEst, tight });
-            }
-            if (t.metric === "deadlift_e1rm") {
-              const curr = analytics?.strengthMetrics.deadlift.current ?? null;
-              const prev = analytics?.strengthMetrics.deadlift.previous ?? null;
-              if (curr === null) continue;
-              const pct = Math.min(Math.round((curr / targetNum) * 100), 100);
-              const weeklyGain = prev !== null ? (curr - prev) / 4 : null;
-              const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((targetNum - curr) / weeklyGain) : null;
-              const tight = goal.targetDate && weeksEst !== null ? weeksEst > Math.floor((new Date(goal.targetDate).getTime() - Date.now()) / 604800000) : false;
-              progressItems.push({ icon: "🏋️", label: "Deadlift", targetStr: `${targetNum}kg`, current: curr, target: targetNum, unit: "kg", currentLabel: `${curr}kg`, targetDate: goal.targetDate, pct, weeksEst, tight });
-            }
-            if (t.metric === "5k" || t.metric === "half_marathon" || t.metric === "10k") {
-              const currStr = analytics?.runMetrics.estimated5K.current ?? null;
-              const prevStr = analytics?.runMetrics.estimated5K.previous ?? null;
-              if (!currStr) continue;
-              const currSecs = paceToSeconds(currStr) ? paceToSeconds(currStr)! * (t.metric === "half_marathon" ? 26.2 : t.metric === "10k" ? 2 : 1) : null;
+
+            // ── Run goals ────────────────────────────────────────────────
+            if (t.metric === "5k" || t.metric === "10k" || t.metric === "half_marathon" || t.metric === "marathon") {
+              const mLabels = { "5k": "5K", "10k": "10K", "half_marathon": "Half Marathon", "marathon": "Marathon" };
+              const label = mLabels[t.metric];
               const targetSecs = targetNum * 60;
-              if (currSecs === null) continue;
-              const pct = Math.min(Math.round((targetSecs / currSecs) * 100), 100);
-              const prevSecs = prevStr ? (paceToSeconds(prevStr) ? paceToSeconds(prevStr)! * (t.metric === "half_marathon" ? 26.2 : t.metric === "10k" ? 2 : 1) : null) : null;
-              const weeklyGain = prevSecs !== null ? (prevSecs - currSecs) / 4 : null;
-              const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((currSecs - targetSecs) / weeklyGain) : null;
-              const tight = goal.targetDate && weeksEst !== null ? weeksEst > Math.floor((new Date(goal.targetDate).getTime() - Date.now()) / 604800000) : false;
-              const mLabel = t.metric === "half_marathon" ? "Half Marathon" : t.metric === "10k" ? "10K" : "5K";
-              const tLabel = `${Math.floor(targetNum / 60)}:${String(targetNum % 60).padStart(2, "0")}`;
-              const cMins = Math.floor(currSecs / 60), cSecs = Math.round(currSecs % 60);
-              const cLabel = `${cMins}:${String(cSecs).padStart(2, "0")}`;
-              progressItems.push({ icon: "🏃", label: mLabel, targetStr: tLabel, current: currSecs, target: targetSecs, unit: "min", currentLabel: `est. ${cLabel}`, targetDate: goal.targetDate, pct, weeksEst, tight });
+              const tLabel = t.metric === "marathon" ? secsToHmmss(targetSecs) : secsToMmss(targetSecs);
+
+              let currSecs: number | null = null;
+              let hasLogged = false;
+              let loggedPrevSecs: number | null = null;
+
+              if (t.metric === "5k") {
+                const loggedStr = analytics?.runMetrics.estimated5K.current ?? null;
+                const prevStr   = analytics?.runMetrics.estimated5K.previous ?? null;
+                if (loggedStr) { const s = paceToSeconds(loggedStr); if (s) { currSecs = s; hasLogged = true; } }
+                if (prevStr) { const s = paceToSeconds(prevStr); if (s) loggedPrevSecs = s; }
+                if (currSecs === null && bl?.fiveKSeconds) currSecs = bl.fiveKSeconds;
+              } else if (t.metric === "10k") {
+                if (bl?.tenKSeconds) currSecs = bl.tenKSeconds;
+              } else if (t.metric === "half_marathon") {
+                if (bl?.halfMarathonSeconds) currSecs = bl.halfMarathonSeconds;
+              } else if (t.metric === "marathon") {
+                if (bl?.marathonSeconds) currSecs = bl.marathonSeconds;
+              }
+
+              if (currSecs === null) {
+                items.push({ key: `${t.metric}_${goal.id}`, icon: "🏃", label, targetStr: tLabel, targetDate, hasData: false, nudge: `Add your current ${label} time in Edit Dashboard` });
+                continue;
+              }
+
+              const baselineSecs = (t.metric === "5k" && bl?.fiveKSeconds) ? bl.fiveKSeconds
+                : (t.metric === "10k" && bl?.tenKSeconds) ? bl.tenKSeconds
+                : (t.metric === "half_marathon" && bl?.halfMarathonSeconds) ? bl.halfMarathonSeconds
+                : (t.metric === "marathon" && bl?.marathonSeconds) ? bl.marathonSeconds
+                : (loggedPrevSecs ?? currSecs);
+
+              let pct = 0;
+              if (currSecs <= targetSecs) {
+                pct = 100;
+              } else if (baselineSecs > targetSecs) {
+                pct = Math.max(0, Math.min(100, Math.round(((baselineSecs - currSecs) / (baselineSecs - targetSecs)) * 100)));
+              }
+
+              const cLabel = t.metric === "marathon" ? secsToHmmss(currSecs) : secsToMmss(currSecs);
+
+              let subLabel: string;
+              if (hasLogged && loggedPrevSecs !== null) {
+                const diffSecs = loggedPrevSecs - currSecs;
+                if (diffSecs > 60) {
+                  const minsDown = Math.floor(diffSecs / 60);
+                  subLabel = `Est. current: ${cLabel}. Down ${minsDown} min${minsDown !== 1 ? "s" : ""} in the last 4 weeks.`;
+                } else if (diffSecs > 5) {
+                  subLabel = `Est. current: ${cLabel}. Down ${diffSecs}s in the last 4 weeks.`;
+                } else {
+                  subLabel = `Est. current: ${cLabel}. Log more runs to track progress.`;
+                }
+              } else if (hasLogged) {
+                subLabel = `Est. current: ${cLabel}. Log more runs to estimate pace.`;
+              } else {
+                subLabel = "Based on your PB. Log runs of 3km+ to track progress.";
+              }
+
+              items.push({ key: `${t.metric}_${goal.id}`, icon: "🏃", label, targetStr: tLabel, targetDate, hasData: true, pct, currentLabel: hasLogged ? `est. ${cLabel}` : cLabel, subLabel, weeksEst: null, tight: false });
             }
           }
         }
 
-        if (progressItems.length === 0) return null;
+        if (items.length === 0) return null;
 
         return (
           <div className="bg-card border rounded-2xl px-5 py-4">
@@ -1215,39 +1338,42 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
               <Target className="w-4 h-4 text-muted-foreground/40" />
             </div>
             <div className="space-y-4">
-              {progressItems.map((item, i) => (
-                <div key={i}>
+              {items.map(item => (
+                <div key={item.key}>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-semibold">
-                      {item.icon} {item.label} → {item.targetStr}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground font-medium">{item.pct}%</span>
+                    <span className="text-sm font-semibold">{item.icon} {item.label} → {item.targetStr}</span>
+                    {item.hasData && <span className="text-[11px] text-muted-foreground font-medium">{item.pct}%</span>}
                   </div>
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xs text-muted-foreground w-16 shrink-0">{item.currentLabel}</span>
-                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${item.pct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    {item.weeksEst !== null ? (
-                      <>
-                        At current rate: ~{item.weeksEst} weeks
-                        {item.targetDate && (
-                          <span className={item.tight ? " text-amber-500" : ""}>
-                            {" "}[{new Date(item.targetDate + "T00:00:00").toLocaleString("default", { month: "short", year: "numeric" })} target{item.tight ? " ⚠️ tight" : ""}]
-                          </span>
+                  {item.hasData ? (
+                    <>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs text-muted-foreground w-16 shrink-0">{item.currentLabel}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${item.pct}%` }} />
+                        </div>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {item.subLabel}
+                        {item.weeksEst !== null && (
+                          <>
+                            {" "}At current rate: ~{item.weeksEst} weeks.
+                            {item.targetDate && (
+                              <span className={item.tight ? " text-amber-500" : ""}>
+                                {" "}[{new Date(item.targetDate + "T00:00:00").toLocaleString("default", { month: "short", year: "numeric" })} target{item.tight ? " tight" : ""}]
+                              </span>
+                            )}
+                          </>
                         )}
-                      </>
-                    ) : item.current !== null ? (
-                      "Log more sessions to estimate pace"
-                    ) : (
-                      "Log more sessions to track progress"
-                    )}
-                  </div>
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {item.nudge}.{" "}
+                      <button className="text-primary hover:underline underline-offset-2" onClick={() => setEditOpen(true)}>
+                        Open Edit Dashboard
+                      </button>
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -1670,6 +1796,46 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
           {goals.length >= 3 && (
             <p className="text-xs text-muted-foreground mt-1">Maximum 3 goals. Remove one to add another.</p>
           )}
+
+          {/* ── YOUR CURRENT PBs ──────────────────────────────────── */}
+          <div className="mt-6 mb-1">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2">Your Current PBs</p>
+            <p className="text-xs text-muted-foreground mb-3">Enter your current personal bests. Phil will use these to track progress from day one and reference them when building programmes.</p>
+            <div className="space-y-2">
+              {([
+                { label: "Bench Press (kg)",      key: "bench",        type: "number", placeholder: "e.g. 80",    step: "0.5" },
+                { label: "Squat (kg)",             key: "squat",        type: "number", placeholder: "e.g. 100",   step: "0.5" },
+                { label: "Deadlift (kg)",          key: "deadlift",     type: "number", placeholder: "e.g. 120",   step: "0.5" },
+                { label: "Estimated 5K (mm:ss)",   key: "fiveK",        type: "text",   placeholder: "e.g. 25:30" },
+                { label: "Estimated 10K (mm:ss)",  key: "tenK",         type: "text",   placeholder: "e.g. 53:00" },
+                { label: "Half Marathon (mm:ss)",  key: "halfMarathon", type: "text",   placeholder: "e.g. 115:30" },
+                { label: "Marathon (h:mm:ss)",     key: "marathon",     type: "text",   placeholder: "e.g. 4:15:00" },
+              ] as const).map(f => (
+                <div key={f.key} className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground shrink-0 w-[152px]">{f.label}</span>
+                  <Input
+                    type={f.type}
+                    placeholder={f.placeholder}
+                    value={pbForm[f.key]}
+                    onChange={e => setPbForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    className="text-sm flex-1 h-8"
+                    min={f.type === "number" ? "0" : undefined}
+                    step={(f as any).step}
+                  />
+                </div>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full mt-3 gap-1.5"
+              disabled={pbSaving}
+              onClick={() => void handleSavePBs()}
+            >
+              {pbSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : pbSaved ? <Check className="w-3.5 h-3.5 text-green-500" /> : null}
+              {pbSaved ? "Saved" : "Save PBs"}
+            </Button>
+          </div>
 
           <div className="space-y-0 divide-y mt-6">
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2">Fitness Score</p>

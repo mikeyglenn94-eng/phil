@@ -1,0 +1,91 @@
+Feature: Manual PB entry + fix goal progress card
+Part 1 — Manual PB entry in Edit Dashboard
+Add a new section to the Edit Dashboard panel called YOUR CURRENT PBs sitting between YOUR GOAL and FITNESS SCORE sections.
+YOUR CURRENT PBs
+─────────────────────────────────────
+Bench Press (kg)        [number input]
+Squat (kg)              [number input]  
+Deadlift (kg)           [number input]
+Estimated 5K (mm:ss)    [time input]
+Estimated 10K (mm:ss)   [time input]
+Half Marathon (mm:ss)   [time input]
+Marathon (h:mm:ss)      [time input]
+
+All fields optional — only show in goal progress if filled in
+Save to a new clientBaselines table:
+
+sqlclientBaselines
+  id, clientId, benchKg, squatKg, deadliftKg, 
+  fiveKSeconds, tenKSeconds, halfMarathonSeconds, 
+  marathonSeconds, setAt, setManually (boolean)
+
+setManually = true when entered here
+setManually = false when calculated from logged sessions
+Logged session data always takes priority over manual entry once it exists — manual PBs are the starting point only
+When a user logs a session that produces a higher e1RM or better run time than their manual baseline, automatically update the baseline and set setManually = false
+
+Time inputs should accept natural formats — "1:45:30", "105:30", "1h45m" — and store as total seconds internally.
+Part 2 — Fix goal progress card
+Percentage calculation:
+
+Strength: Math.round((current / target) * 100) — simple ratio, capped at 100%
+Run times: Math.round(((baseline - current) / (baseline - target)) * 100) — % of gap closed, capped at 100%, minimum 0%
+If current is worse than baseline somehow, show 0%
+
+Data source priority:
+
+Logged session data (e1RM from sets, run estimates from logged runs)
+Manual PB entry from Edit Dashboard
+If neither exists: hide the progress bar, show "Add your current PB in Edit Dashboard to track progress" with a link that opens the panel
+
+Sub-label copy by metric type:
+Strength goals:
+
+Enough data (4+ sessions): "Up Xkg in the last 4 weeks"
+Manual baseline, no logged sessions yet: "Based on your PB. Log bench sessions to track progress."
+No data at all: "Add your current bench PB in Edit Dashboard"
+
+Run goals:
+
+Enough data: "Est. current: X:XX. Down X mins in the last 4 weeks."
+Manual baseline, no logged runs yet: "Based on your PB. Log runs of 3km+ to track progress."
+No data at all: "Add your current time in Edit Dashboard"
+
+Body composition goals:
+
+Show current vs target if weight is being tracked
+Otherwise: "Log your weight to track this"
+
+Never use:
+
+The word "pace" for strength goals
+Run time terminology for strength goals
+Raw seconds for any displayed time value
+Percentages above 100%
+
+Part 3 — Hook manual PBs into fitness score from day one
+When calculating the performance trend component of the fitness score, use manual baselines as the starting point if no logged session data exists yet:
+tsconst currentBench = loggedBenchE1RM ?? manualBaselines.benchKg ?? null;
+const currentSquat = loggedSquatE1RM ?? manualBaselines.squatKg ?? null;
+const currentDeadlift = loggedDeadliftE1RM ?? manualBaselines.deadliftKg ?? null;
+const currentFiveK = loggedFiveKEstimate ?? manualBaselines.fiveKSeconds ?? null;
+If only manual baselines exist with no logged sessions, the performance trend score starts at 50 (neutral) rather than penalising the user for having no data.
+Part 4 — Phil references manual PBs
+Add manual baselines to Phil's context:
+tsconst baselineContext = `
+Current PBs (${baselines.setManually ? 'manually entered' : 'from logged sessions'}):
+${baselines.benchKg ? `Bench: ${baselines.benchKg}kg` : ''}
+${baselines.squatKg ? `Squat: ${baselines.squatKg}kg` : ''}
+${baselines.deadliftKg ? `Deadlift: ${baselines.deadliftKg}kg` : ''}
+${baselines.halfMarathonSeconds ? `Half Marathon: ${formatTime(baselines.halfMarathonSeconds)}` : ''}
+`.trim();
+Phil uses this when building programmes and discussing goals:
+
+"You're currently benching 80kg and want to hit 130kg. That's a significant jump. We're going to need at least 6 months of consistent work."
+"Your half marathon PB is 1:42. Getting to 1:30 is doable in about 16 weeks if we build your aerobic base properly."
+
+Do not change:
+
+Any existing logged session calculation logic
+The fitness score formula structure
+Any calendar or programme logic

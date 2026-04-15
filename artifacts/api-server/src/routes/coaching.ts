@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { openai } from "@workspace/integrations-openai-ai-server";
-import { db, clientGoalsTable } from "@workspace/db";
+import { db, clientGoalsTable, clientBaselinesTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -93,8 +93,18 @@ router.post("/clients/:clientId/phil-chat", async (req, res) => {
     return;
   }
 
+  const fmtMmss = (secs: number) => {
+    const m = Math.floor(secs / 60), s = Math.round(secs % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+  const fmtHmmss = (secs: number) => {
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = Math.round(secs % 60);
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
   // Fetch client goals for context
   let goalContext = "";
+  let baselineContext = "";
   if (!isNaN(clientId)) {
     try {
       const goals = await db.select().from(clientGoalsTable).where(eq(clientGoalsTable.clientId, clientId));
@@ -102,6 +112,26 @@ router.post("/clients/:clientId/phil-chat", async (req, res) => {
         goalContext = "\n\nClient's current goals:\n" + goals.map(g =>
           `- ${g.description}${g.targetDate ? ` (target: ${g.targetDate})` : ""} [${g.priority}]`
         ).join("\n");
+      }
+    } catch { /* non-fatal */ }
+    try {
+      const [bl] = await db.select().from(clientBaselinesTable).where(eq(clientBaselinesTable.clientId, clientId));
+      if (bl) {
+        const parseN = (v: unknown) => { const n = parseFloat(String(v)); return isNaN(n) ? null : n; };
+        const parts: string[] = [];
+        const bench    = parseN(bl.benchKg);
+        const squat    = parseN(bl.squatKg);
+        const deadlift = parseN(bl.deadliftKg);
+        if (bench    != null) parts.push(`Bench: ${bench}kg`);
+        if (squat    != null) parts.push(`Squat: ${squat}kg`);
+        if (deadlift != null) parts.push(`Deadlift: ${deadlift}kg`);
+        if (bl.fiveKSeconds)        parts.push(`5K: ${fmtMmss(bl.fiveKSeconds)}`);
+        if (bl.tenKSeconds)         parts.push(`10K: ${fmtMmss(bl.tenKSeconds)}`);
+        if (bl.halfMarathonSeconds) parts.push(`Half Marathon: ${fmtMmss(bl.halfMarathonSeconds)}`);
+        if (bl.marathonSeconds)     parts.push(`Marathon: ${fmtHmmss(bl.marathonSeconds)}`);
+        if (parts.length > 0) {
+          baselineContext = `\n\nClient's current PBs (${bl.setManually ? "manually entered" : "from logged sessions"}):\n${parts.join("\n")}`;
+        }
       }
     } catch { /* non-fatal */ }
   }
@@ -157,7 +187,7 @@ If the client states a vague goal, ask ONE focused clarifying question.
 Reference the client's goals when relevant.
 Never generate a full programme here.
 Never expose technical error language.
-Never use em dashes in any response. Use a full stop, a comma, or rewrite the sentence instead.${goalContext}
+Never use em dashes in any response. Use a full stop, a comma, or rewrite the sentence instead.${goalContext}${baselineContext}
 
 ${tabSection}`;
 

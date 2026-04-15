@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, clientsTable, nutritionEntriesTable, programmesTable, clientGoalsTable, usersTable } from "@workspace/db";
+import { db, clientsTable, nutritionEntriesTable, programmesTable, clientGoalsTable, usersTable, clientBaselinesTable } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import type { Session } from "@workspace/db";
 import bcrypt from "bcryptjs";
@@ -193,6 +193,70 @@ router.patch("/clients/:clientId/onboarding", async (req, res): Promise<void> =>
   const [client] = await db.update(clientsTable).set(update as any).where(eq(clientsTable.id, id)).returning();
   if (!client) { res.status(404).json({ error: "Client not found" }); return; }
   res.json(toPublicClient(client));
+});
+
+// ── Baselines ─────────────────────────────────────────────────────────────────
+
+// Get current baselines for a client
+router.get("/clients/:clientId/baselines", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  const [row] = await db.select().from(clientBaselinesTable).where(eq(clientBaselinesTable.clientId, clientId));
+  res.json(row ?? null);
+});
+
+// Upsert baselines for a client (manual entry — setManually = true)
+router.put("/clients/:clientId/baselines", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+
+  const {
+    benchKg, squatKg, deadliftKg,
+    fiveKSeconds, tenKSeconds, halfMarathonSeconds, marathonSeconds,
+  } = req.body as {
+    benchKg?: number | null; squatKg?: number | null; deadliftKg?: number | null;
+    fiveKSeconds?: number | null; tenKSeconds?: number | null;
+    halfMarathonSeconds?: number | null; marathonSeconds?: number | null;
+  };
+
+  const toNumeric = (v: number | null | undefined) =>
+    v != null && !isNaN(v) && v > 0 ? String(v) : null;
+  const toInt = (v: number | null | undefined) =>
+    v != null && !isNaN(v) && v > 0 ? Math.round(v) : null;
+
+  const vals = {
+    clientId,
+    benchKg:             toNumeric(benchKg),
+    squatKg:             toNumeric(squatKg),
+    deadliftKg:          toNumeric(deadliftKg),
+    fiveKSeconds:        toInt(fiveKSeconds),
+    tenKSeconds:         toInt(tenKSeconds),
+    halfMarathonSeconds: toInt(halfMarathonSeconds),
+    marathonSeconds:     toInt(marathonSeconds),
+    setManually:         true as const,
+    setAt:               new Date(),
+  };
+
+  await db
+    .insert(clientBaselinesTable)
+    .values(vals)
+    .onConflictDoUpdate({
+      target: clientBaselinesTable.clientId,
+      set: {
+        benchKg:             vals.benchKg,
+        squatKg:             vals.squatKg,
+        deadliftKg:          vals.deadliftKg,
+        fiveKSeconds:        vals.fiveKSeconds,
+        tenKSeconds:         vals.tenKSeconds,
+        halfMarathonSeconds: vals.halfMarathonSeconds,
+        marathonSeconds:     vals.marathonSeconds,
+        setManually:         true,
+        setAt:               new Date(),
+      },
+    });
+
+  const [updated] = await db.select().from(clientBaselinesTable).where(eq(clientBaselinesTable.clientId, clientId));
+  res.json(updated);
 });
 
 // List nutrition entries for a client (optionally filtered by date)

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, programmesTable, clientGoalsTable } from "@workspace/db";
+import { db, programmesTable, clientGoalsTable, clientBaselinesTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -581,11 +581,51 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
   const clientGoals = await db.select().from(clientGoalsTable).where(eq(clientGoalsTable.clientId, clientId));
   const goalWeights = goalWeightsFromTargets(clientGoals);
 
+  // Fetch manual baselines — used as fallback when no logged session data exists yet
+  const baselinesRows = await db.select().from(clientBaselinesTable).where(eq(clientBaselinesTable.clientId, clientId));
+  const manualBaselines = baselinesRows[0] ?? null;
+
+  const parseNumeric = (v: string | number | null | undefined): number | null => {
+    if (v == null) return null;
+    const n = typeof v === "number" ? v : parseFloat(String(v));
+    return isNaN(n) ? null : n;
+  };
+
+  // Use manual baselines as fallback for performance trend when no logged sessions yet
+  const effectiveCurrStrength = {
+    squat:    strengthCurr.squat    ?? parseNumeric(manualBaselines?.squatKg),
+    bench:    strengthCurr.bench    ?? parseNumeric(manualBaselines?.benchKg),
+    deadlift: strengthCurr.deadlift ?? parseNumeric(manualBaselines?.deadliftKg),
+  };
+  const effectiveCurrEst5K = est5KCurr ?? (manualBaselines?.fiveKSeconds != null ? formatMMSS(manualBaselines.fiveKSeconds) : null);
+
   const perfTrend = computePerfTrendScore(
-    { ...strengthCurr, est5K: est5KCurr },
+    { ...effectiveCurrStrength, est5K: effectiveCurrEst5K },
     { ...strengthPrev, est5K: est5KPrev },
     goalWeights
   );
+
+  // Auto-reconcile: if logged data beats manual baselines, update them (fire-and-forget)
+  if (manualBaselines) {
+    const updates: Record<string, unknown> = {};
+    const storedBench    = parseNumeric(manualBaselines.benchKg);
+    const storedSquat    = parseNumeric(manualBaselines.squatKg);
+    const storedDeadlift = parseNumeric(manualBaselines.deadliftKg);
+    if (strengthCurr.bench    != null && (storedBench    == null || strengthCurr.bench    > storedBench))    updates.benchKg    = String(strengthCurr.bench);
+    if (strengthCurr.squat    != null && (storedSquat    == null || strengthCurr.squat    > storedSquat))    updates.squatKg    = String(strengthCurr.squat);
+    if (strengthCurr.deadlift != null && (storedDeadlift == null || strengthCurr.deadlift > storedDeadlift)) updates.deadliftKg = String(strengthCurr.deadlift);
+    if (est5KCurr) {
+      const est5KSecs = paceToSeconds(est5KCurr);
+      if (est5KSecs && (manualBaselines.fiveKSeconds == null || est5KSecs < manualBaselines.fiveKSeconds)) {
+        updates.fiveKSeconds = est5KSecs;
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      updates.setManually = false;
+      updates.setAt = new Date();
+      db.update(clientBaselinesTable).set(updates).where(eq(clientBaselinesTable.clientId, clientId)).catch(() => {});
+    }
+  }
 
   const rawScores = recentWeeks.map(wk => {
     const b = bucketMap.get(wk) ?? { weekStart: wk, planned: 0, completed: 0, hasLift: false, hasRun: false, totalVolume: 0, totalDistance: 0 };
@@ -677,6 +717,16 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
     runMetrics: {
       estimated5K: { current: est5KCurr, previous: est5KPrev },
     },
+    baselines: manualBaselines ? {
+      benchKg:             parseNumeric(manualBaselines.benchKg),
+      squatKg:             parseNumeric(manualBaselines.squatKg),
+      deadliftKg:          parseNumeric(manualBaselines.deadliftKg),
+      fiveKSeconds:        manualBaselines.fiveKSeconds,
+      tenKSeconds:         manualBaselines.tenKSeconds,
+      halfMarathonSeconds: manualBaselines.halfMarathonSeconds,
+      marathonSeconds:     manualBaselines.marathonSeconds,
+      setManually:         manualBaselines.setManually,
+    } : null,
   });
 });
 

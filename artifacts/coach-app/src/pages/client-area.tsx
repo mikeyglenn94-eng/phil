@@ -801,14 +801,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     };
   }
   const [philOpen, setPhilOpen] = useState(false);
+  const [philExpanded, setPhilExpanded] = useState(false);
+  const [philUnread, setPhilUnread] = useState(false);
   const [philMessages, setPhilMessages] = useState<PhilMessage[]>([]);
   const [philPanelInput, setPhilPanelInput] = useState("");
   const philScrollRef = useRef<HTMLDivElement>(null);
   const philInputRef = useRef<HTMLInputElement>(null);
   const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
 
-  const addPhilMsg = (text: string, extra?: Partial<PhilMessage>) =>
+  const addPhilMsg = (text: string, extra?: Partial<PhilMessage>) => {
     setPhilMessages(prev => [...prev, { id: crypto.randomUUID(), sender: "phil", text, ts: new Date(), ...extra }]);
+    setPhilUnread(prev => prev || !philExpanded);
+  };
 
   const addUserMsg = (text: string) =>
     setPhilMessages(prev => [...prev, { id: crypto.randomUUID(), sender: "user", text, ts: new Date() }]);
@@ -851,9 +855,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       headers: { Authorization: token ? `Bearer ${token}` : "" },
     }).catch(() => {});
 
-    // Navigate to dashboard and open Phil
+    // Navigate to dashboard and expand Phil
     setActiveTab("dashboard");
     setPhilOpen(true);
+    setPhilExpanded(true);
+    setPhilUnread(false);
 
     // Send 3 messages sequentially
     const t1 = setTimeout(() => {
@@ -1861,6 +1867,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     const input = philPanelInput.trim();
     if (!input) return;
     setPhilPanelInput("");
+    setPhilExpanded(true);
+    setPhilUnread(false);
 
     // On Training (or team mode): use existing routing logic unchanged
     if (activeTab === "training" || isTeamMode) {
@@ -4322,114 +4330,161 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
       {/* ── Phil Chat Panel — global bottom drawer (all tabs) ────────────────── */}
       {!isTeamMode && (
-        <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${(philOpen || activeTab !== "training") ? "h-[300px]" : "h-0"}`}>
-          <div className="h-[300px] flex flex-col">
-            {/* Header */}
-            <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
-                <div>
-                  <p className="text-sm font-semibold leading-none">Phil</p>
-                  <p className="text-[11px] text-muted-foreground">MG Coaching</p>
-                </div>
-              </div>
-              {activeTab === "training" && (
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              )}
+        <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${
+          activeTab === "training"
+            ? (philOpen ? "h-[300px]" : "h-0")
+            : (philExpanded ? "h-[300px]" : "h-14")
+        }`}>
+
+          {/* ── Slim bar (non-training, collapsed) ── */}
+          {activeTab !== "training" && !philExpanded && (
+            <div className="h-14 flex items-center gap-2.5 px-3">
+              <button
+                type="button"
+                className="relative shrink-0"
+                onClick={() => { setPhilExpanded(true); setPhilUnread(false); setTimeout(() => philInputRef.current?.focus(), 50); }}
+                title="Open Phil"
+              >
+                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
+                {philUnread && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-background" />
+                )}
+              </button>
+              <input
+                ref={philInputRef}
+                value={philPanelInput}
+                onChange={e => setPhilPanelInput(e.target.value)}
+                onFocus={() => { setPhilExpanded(true); setPhilUnread(false); }}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
+                placeholder="Message Phil…"
+                className="flex-1 min-w-0 h-9 rounded-xl border bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+              />
+              <Button
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={() => void handlePhilPanelSubmit()}
+                disabled={!philPanelInput.trim() || cmdParsing}
+              >
+                <Send className="w-3.5 h-3.5" />
+              </Button>
             </div>
-            {/* Messages */}
-            <div ref={philScrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
-              {philMessages.length === 0 && !cmdParsing && (
-                <p className="text-xs text-muted-foreground text-center mt-6">Ask Phil anything.</p>
-              )}
-              {philMessages.map(msg => (
-                <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                  {msg.sender === "phil" && (
-                    <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
-                  )}
-                  <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
-                    {msg.text && <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>}
-                    {/* Build-this button when Phil has gathered enough plan context */}
-                    {msg.coachParseData?.hasEnough && (
-                      <Button
-                        size="sm"
-                        className="mt-2 h-7 px-3 text-xs w-full"
-                        disabled={cmdParsing}
-                        onClick={() => { setCoachParseResult(msg.coachParseData!); handleBuildFromParse(); }}
-                      >
-                        Build this
-                      </Button>
-                    )}
-                    {/* Save a single generated session */}
-                    {msg.action?.type === "save_session" && (
-                      <Button
-                        size="sm"
-                        className="mt-2 h-7 px-3 text-xs w-full"
-                        disabled={!!savingAiSession}
-                        onClick={() => void saveSessionDirectly((msg.action as any).session, (msg.action as any).date)}
-                      >
-                        {savingAiSession ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-                        Save to calendar. {format(parseISO((msg.action as any).date), "EEE d MMM")}
-                      </Button>
-                    )}
-                    {/* WOD option picker */}
-                    {msg.action?.type === "pick_wod" && (
-                      <div className="mt-2 space-y-1.5">
-                        {(msg.action as any).options.map((opt: any, i: number) => (
-                          <button
-                            key={i}
-                            className="w-full text-left rounded-lg border bg-background px-2.5 py-2 text-xs hover:border-primary/40 transition-colors disabled:opacity-50"
-                            disabled={!!savingAiSession}
-                            onClick={() => void saveSessionDirectly(opt, (msg.action as any).date)}
-                          >
-                            <span className="font-semibold text-primary/70 mr-1.5">
-                              {opt.format === "emom" ? "EMOM" : opt.format === "amrap" ? "AMRAP" : opt.format === "for_time" ? "For Time" : "WOD"}
-                            </span>
-                            <span>{opt.name || `Option ${i + 1}`}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+          )}
+
+          {/* ── Expanded panel (non-training expanded, or training open) ── */}
+          {(philExpanded || activeTab === "training") && (
+            <div className="h-[300px] flex flex-col">
+              {/* Header */}
+              <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
+                  <div>
+                    <p className="text-sm font-semibold leading-none">Phil</p>
+                    <p className="text-[11px] text-muted-foreground">MG Coaching</p>
                   </div>
                 </div>
-              ))}
-              {cmdParsing && (
-                <div className="flex gap-2 justify-start">
-                  <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
-                  <div className="bg-muted rounded-2xl px-3 py-2.5">
-                    <div className="flex gap-1 items-center h-4">
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+                {activeTab === "training" ? (
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)} title="Close">
+                    <X className="w-4 h-4" />
+                  </Button>
+                ) : (
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilExpanded(false)} title="Minimise">
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              {/* Messages */}
+              <div ref={philScrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
+                {philMessages.length === 0 && !cmdParsing && (
+                  <p className="text-xs text-muted-foreground text-center mt-6">Ask Phil anything.</p>
+                )}
+                {philMessages.map(msg => (
+                  <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.sender === "phil" && (
+                      <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
+                    )}
+                    <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                      {msg.text && <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>}
+                      {/* Build-this button when Phil has gathered enough plan context */}
+                      {msg.coachParseData?.hasEnough && (
+                        <Button
+                          size="sm"
+                          className="mt-2 h-7 px-3 text-xs w-full"
+                          disabled={cmdParsing}
+                          onClick={() => { setCoachParseResult(msg.coachParseData!); handleBuildFromParse(); }}
+                        >
+                          Build this
+                        </Button>
+                      )}
+                      {/* Save a single generated session */}
+                      {msg.action?.type === "save_session" && (
+                        <Button
+                          size="sm"
+                          className="mt-2 h-7 px-3 text-xs w-full"
+                          disabled={!!savingAiSession}
+                          onClick={() => void saveSessionDirectly((msg.action as any).session, (msg.action as any).date)}
+                        >
+                          {savingAiSession ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                          Save to calendar. {format(parseISO((msg.action as any).date), "EEE d MMM")}
+                        </Button>
+                      )}
+                      {/* WOD option picker */}
+                      {msg.action?.type === "pick_wod" && (
+                        <div className="mt-2 space-y-1.5">
+                          {(msg.action as any).options.map((opt: any, i: number) => (
+                            <button
+                              key={i}
+                              className="w-full text-left rounded-lg border bg-background px-2.5 py-2 text-xs hover:border-primary/40 transition-colors disabled:opacity-50"
+                              disabled={!!savingAiSession}
+                              onClick={() => void saveSessionDirectly(opt, (msg.action as any).date)}
+                            >
+                              <span className="font-semibold text-primary/70 mr-1.5">
+                                {opt.format === "emom" ? "EMOM" : opt.format === "amrap" ? "AMRAP" : opt.format === "for_time" ? "For Time" : "WOD"}
+                              </span>
+                              <span>{opt.name || `Option ${i + 1}`}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
+                ))}
+                {cmdParsing && (
+                  <div className="flex gap-2 justify-start">
+                    <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
+                    <div className="bg-muted rounded-2xl px-3 py-2.5">
+                      <div className="flex gap-1 items-center h-4">
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Input */}
+              <div className="shrink-0 px-3 py-2.5 border-t">
+                <div className="flex gap-2">
+                  <input
+                    ref={philInputRef}
+                    value={philPanelInput}
+                    onChange={e => setPhilPanelInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
+                    placeholder="Message Phil…"
+                    className="flex-1 min-w-0 h-8 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <Button
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => void handlePhilPanelSubmit()}
+                    disabled={!philPanelInput.trim() || cmdParsing}
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
-              )}
-            </div>
-            {/* Input */}
-            <div className="shrink-0 px-3 py-2.5 border-t">
-              <div className="flex gap-2">
-                <input
-                  ref={philInputRef}
-                  value={philPanelInput}
-                  onChange={e => setPhilPanelInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
-                  placeholder="Message Phil…"
-                  className="flex-1 min-w-0 h-8 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <Button
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => void handlePhilPanelSubmit()}
-                  disabled={!philPanelInput.trim() || cmdParsing}
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </Button>
               </div>
             </div>
-          </div>
+          )}
+
         </div>
       )}
 
