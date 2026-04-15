@@ -596,6 +596,8 @@ interface Props {
   calorieTarget?: number | null;
   proteinTarget?: number | null;
   nutritionMode?: "calories" | "protein_only";
+  hasSessionData?: boolean;
+  onOpenCustomise?: () => void;
 }
 
 // ── Share helpers ─────────────────────────────────────────────────
@@ -829,7 +831,7 @@ async function generateProgressCard(
 
 // ── Main component ────────────────────────────────────────────────
 
-export default function DashboardTab({ analytics, isLoading, clientId, calorieTarget, proteinTarget, nutritionMode = "calories" }: Props) {
+export default function DashboardTab({ analytics, isLoading, clientId, calorieTarget, proteinTarget, nutritionMode = "calories", hasSessionData = true, onOpenCustomise }: Props) {
   const [prefs, setPrefs] = useState<DashboardPrefs>(() => loadPrefs(clientId));
   const [editOpen, setEditOpen] = useState(false);
   const [nutritionLogs, setNutritionLogs] = useState<RawNutritionEntry[]>([]);
@@ -1087,6 +1089,17 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
   const whyMovedSummary    = getWhyItMovedSummary(noSessions, fitnessScore.explanation);
   const weeklyWinText      = getWeeklyWinDisplay(weeklyWin, noSessions);
   const consistencyContent = getConsistencyContent(adherence, lastWeekData?.sessionCount ?? 0);
+
+  if (!hasSessionData) {
+    return (
+      <div className="max-w-lg mx-auto px-4 pt-5 pb-24 flex flex-col items-center justify-center min-h-[300px] text-center space-y-3">
+        <p className="text-base text-muted-foreground leading-relaxed">
+          Your dashboard will come alive once you start training.<br />
+          Head to Training to build your first programme.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-5 pb-24 space-y-5">

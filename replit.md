@@ -24,17 +24,23 @@ Coaches can create teams, add clients as members, build shared programmes (calen
 
 ## Phil Chat Panel
 
-A persistent AI coaching panel that lives alongside the training calendar:
+Phil is the global AI coach present across all tabs (Dashboard, Training, Nutrition, IRL):
 
-- **Toggle**: Sparkles (✨) button at the right end of the "Ask Phil" command bar input row
-- **Layout**: 380px right panel on desktop (flex-row alongside calendar); fixed bottom sheet on mobile (65vh)
-- **Conversation history**: All exchanges shown as chat bubbles — user messages right-aligned (primary colour), Phil responses left-aligned (muted) with a "P" avatar
-- **Typing indicator**: Three bouncing dots shown while waiting for AI response
-- **Message routing**: All AI responses (plan/session briefs, review answers, calendar commands) flow into Phil panel instead of inline blocks
-- **Build action**: When `coachParseData.hasEnough` is true, a "Build this" button appears on Phil's message to trigger plan/session generation
-- **State**: `philOpen`, `philMessages[]`, `philPanelInput`, `philScrollRef` in `client-area.tsx`
-- **History injection**: Last 6 messages passed as `history[]` to both `/api/coach-parse` and `/api/clients/:id/coaching`
-- **Panel input**: Secondary input at panel bottom for follow-up; routes through `handlePhilPanelSubmit` → `handleCoachInput(overrideInput)`
+- **Global layout**: Phil panel is a `shrink-0` bottom drawer rendered after all tab content in `client-area.tsx`, outside the tab conditionals. Outer container is `flex-1 flex flex-col overflow-hidden`.
+- **Toggle on Training tab**: A speech-bubble icon button in the training toolbar; `philOpen` state controls visibility.
+- **Toggle on other tabs (Dashboard, Nutrition, IRL)**: A Phil speech-bubble button in the tab bar row.
+- **Welcome tour**: On first visit (`hasSeenWelcome = false` in `usersTable`), Phil sends 3 timed welcome messages automatically after 800ms, 2400ms, and 4200ms. After the tour the input auto-focuses. Welcome status fetched from `GET /api/clients/:id/welcome-status`, marked via `PATCH /api/clients/:id/mark-welcome-seen`.
+- **Tab-aware submit**: `handlePhilPanelSubmit` routes differently per tab — dashboard/nutrition tabs call `/api/clients/:id/coaching` with `currentTab` + `dashboardContext`/`nutritionContext`; training tab passes through to `handleCoachInput`.
+- **Conversation history**: Chat bubbles — user messages right-aligned (primary), Phil responses left-aligned with "P" avatar.
+- **Typing indicator**: Three bouncing dots while awaiting AI response.
+- **State**: `philOpen`, `philMessages[]`, `philPanelInput`, `philScrollRef`, `philInputRef` in `client-area.tsx`.
+- **History injection**: Last 6 messages passed as `history[]` to `/api/coach-parse` and `/api/clients/:id/coaching`.
+- **Em-dash rule**: ALL Phil messages and UI copy use periods/commas. No em-dashes (—) anywhere. This is enforced in the coaching.ts system prompt and swept from all client-area.tsx UI strings.
+
+### DB: welcome status
+- `hasSeenWelcome: boolean` (default false) added to `usersTable` in `lib/db/src/schema/users.ts`.
+- `GET /api/clients/:clientId/welcome-status` — returns `{ hasSeenWelcome }` (joins users via clients table).
+- `PATCH /api/clients/:clientId/mark-welcome-seen` — sets `hasSeenWelcome = true` for the linked user.
 
 ## Auth Architecture
 

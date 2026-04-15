@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, clientsTable, nutritionEntriesTable, programmesTable, clientGoalsTable } from "@workspace/db";
+import { db, clientsTable, nutritionEntriesTable, programmesTable, clientGoalsTable, usersTable } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import type { Session } from "@workspace/db";
 import bcrypt from "bcryptjs";
@@ -502,6 +502,31 @@ router.delete("/clients/:clientId/training-goals/:id", async (req, res): Promise
   if (isNaN(clientId) || isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(clientGoalsTable).where(and(eq(clientGoalsTable.id, id), eq(clientGoalsTable.clientId, clientId)));
   res.status(204).send();
+});
+
+// ── GET /clients/:clientId/welcome-status ─────────────────────────
+// Returns { hasSeenWelcome } for the user linked to this client.
+
+router.get("/clients/:clientId/welcome-status", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  const [user] = await db.select({ hasSeenWelcome: usersTable.hasSeenWelcome })
+    .from(usersTable)
+    .where(eq(usersTable.clientId, clientId))
+    .limit(1);
+  res.json({ hasSeenWelcome: user?.hasSeenWelcome ?? false });
+});
+
+// ── PATCH /clients/:clientId/mark-welcome-seen ────────────────────
+// Marks the user's hasSeenWelcome flag as true. Idempotent.
+
+router.patch("/clients/:clientId/mark-welcome-seen", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  await db.update(usersTable)
+    .set({ hasSeenWelcome: true })
+    .where(eq(usersTable.clientId, clientId));
+  res.json({ ok: true });
 });
 
 export default router;

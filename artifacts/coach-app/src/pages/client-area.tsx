@@ -479,7 +479,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       setPreviewTweakMessage(data.message ?? "Preview updated.");
       setPreviewTweakInput("");
     } catch {
-      setPreviewTweakMessage("Couldn't apply that change — try rephrasing.");
+      setPreviewTweakMessage("Couldn't apply that change. Try rephrasing.");
     } finally {
       setPreviewTweakLoading(false);
     }
@@ -514,7 +514,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       setStrengthStyle(null);
       setPreviewTweakInput("");
       setPreviewTweakMessage("");
-      toast({ title: "Programme built!", description: `"${generatedPreview.title}" — 4 weeks added to the calendar.` });
+      toast({ title: "Programme built!", description: `"${generatedPreview.title}", 4 weeks added to the calendar.` });
     } catch {
       toast({ title: "Failed to save programme", variant: "destructive" });
     } finally {
@@ -535,7 +535,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
       setAssignDialogOpen(false);
       setFromScratchTitle("");
-      toast({ title: "Programme created!", description: `"${fromScratchTitle.trim()}" is ready — add sessions from the calendar.` });
+      toast({ title: "Programme created!", description: `"${fromScratchTitle.trim()}" is ready. Add sessions from the calendar.` });
     } catch {
       toast({ title: "Failed to create programme", variant: "destructive" });
     } finally {
@@ -641,7 +641,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         }
       }
     } catch {
-      setQuickAddError(quickAddType === "wod" ? "Couldn't design your WOD — please try again." : "Couldn't parse your session — please try again.");
+      setQuickAddError(quickAddType === "wod" ? "Couldn't design your WOD. Please try again." : "Couldn't parse your session. Please try again.");
     } finally {
       setQuickAddParsing(false);
     }
@@ -682,7 +682,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         if (dest === "public") toast({ title: "Added to public library", description: "Visible to all coaches and clients." });
       }, newSession.name);
     } catch {
-      setQuickAddError("Something went wrong — please try again.");
+      setQuickAddError("Something went wrong. Please try again.");
     } finally {
       setSavingQuickSession(null);
     }
@@ -713,7 +713,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         setParsedAiSession(data.options?.[0] ?? data);
       }
     } catch {
-      setQuickAddError(quickAddType === "wod" ? "Couldn't design your WOD — please try again." : "Couldn't parse your session — please try again.");
+      setQuickAddError(quickAddType === "wod" ? "Couldn't design your WOD. Please try again." : "Couldn't parse your session. Please try again.");
     } finally {
       setAiSessionGenerating(false);
     }
@@ -752,7 +752,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         if (dest === "public") toast({ title: "Added to public library", description: "Visible to all coaches and clients." });
       }, parsedAiSession.name);
     } catch {
-      setQuickAddError("Something went wrong — please try again.");
+      setQuickAddError("Something went wrong. Please try again.");
     } finally {
       setSavingAiSession(null);
     }
@@ -804,6 +804,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const [philMessages, setPhilMessages] = useState<PhilMessage[]>([]);
   const [philPanelInput, setPhilPanelInput] = useState("");
   const philScrollRef = useRef<HTMLDivElement>(null);
+  const philInputRef = useRef<HTMLInputElement>(null);
+  const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
 
   const addPhilMsg = (text: string, extra?: Partial<PhilMessage>) =>
     setPhilMessages(prev => [...prev, { id: crypto.randomUUID(), sender: "phil", text, ts: new Date(), ...extra }]);
@@ -822,6 +824,51 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       philScrollRef.current.scrollTop = philScrollRef.current.scrollHeight;
     }
   }, [philMessages]);
+
+  // Fetch welcome status once (client mode only)
+  useEffect(() => {
+    if (!clientId || mode !== "client") { setHasSeenWelcome(true); return; }
+    const token = localStorage.getItem("axis_auth_token");
+    fetch(`/api/clients/${clientId}/welcome-status`, {
+      headers: { Authorization: token ? `Bearer ${token}` : "" },
+    })
+      .then(r => r.ok ? r.json() : { hasSeenWelcome: true })
+      .then(d => setHasSeenWelcome(d.hasSeenWelcome ?? true))
+      .catch(() => setHasSeenWelcome(true));
+  }, [clientId, mode]);
+
+  // Welcome tour: fires once when hasSeenWelcome === false + analytics loaded + zero sessions
+  useEffect(() => {
+    if (hasSeenWelcome !== false) return;
+    if (analyticsLoading || !analytics) return;
+    if (mode !== "client") return;
+
+    // Mark seen immediately so it never fires again
+    setHasSeenWelcome(true);
+    const token = localStorage.getItem("axis_auth_token");
+    fetch(`/api/clients/${clientId}/mark-welcome-seen`, {
+      method: "PATCH",
+      headers: { Authorization: token ? `Bearer ${token}` : "" },
+    }).catch(() => {});
+
+    // Navigate to dashboard and open Phil
+    setActiveTab("dashboard");
+    setPhilOpen(true);
+
+    // Send 3 messages sequentially
+    const t1 = setTimeout(() => {
+      addPhilMsg("Right, welcome. I'm Phil, your coach. I live here across the whole app so you can ask me anything at any time.");
+    }, 500);
+    const t2 = setTimeout(() => {
+      addPhilMsg("Quick lay of the land. Training tab is where your programme lives and where we'll build everything. Nutrition tab tracks what you're eating. This dashboard shows your progress over time as you train.");
+    }, 1500);
+    const t3 = setTimeout(() => {
+      addPhilMsg("That's enough admin. What are you training for? Tell me your goal and I'll build your first month.");
+      setTimeout(() => { philInputRef.current?.focus(); }, 300);
+    }, 2500);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [hasSeenWelcome, analyticsLoading, analytics, clientId, mode]);
 
   // ── Coach parse result (parse-first plan/session flow) ───────────────────
   interface CoachParseResult {
@@ -1341,7 +1388,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setCmdSaving(true);
     try {
       await applySnapshot(pendingCommand.changes.map(c => ({ id: c.programmeId, sessions: c.sessions })));
-      addPhilMsg(`Done — ${pendingCommand.description}.`);
+      addPhilMsg(`Done. ${pendingCommand.description}.`);
       setPendingCommand(null);
       setCmdInput("");
     } catch {
@@ -1417,7 +1464,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             .map((d: string) => DAY_WORDS[d.toLowerCase()] ?? DAY_WORDS[d.toLowerCase().replace(/s$/, "")])
             .filter((d: number | undefined) => d !== undefined);
           if (!targetDays.length) {
-            addPhilMsg("I couldn't work out which days you want — try saying something like \"move to Mon, Wed, Fri\"."); break;
+            addPhilMsg("I couldn't work out which days you want. Try saying something like \"move to Mon, Wed, Fri\"."); break;
           }
           const q = (intent.programmeQuery ?? "").toLowerCase();
           const prog =
@@ -1440,7 +1487,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             .map((d: string) => DAY_WORDS[d.toLowerCase()] ?? DAY_WORDS[d.toLowerCase().replace(/s$/, "")])
             .filter((d: number | undefined) => d !== undefined);
           if (!fromDays.length || fromDays.length !== toDays.length) {
-            addPhilMsg("The from/to day lists need to match up — e.g. \"move Mon/Wed to Tue/Thu\"."); break;
+            addPhilMsg("The from/to day lists need to match up, e.g. \"move Mon/Wed to Tue/Thu\"."); break;
           }
           const changes = dayRemapAll(fromDays, toDays);
           if (!changes.length) {
@@ -1457,7 +1504,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           const { sourceWeekOffset = 0, targetWeeks = 1, setsIncrement = 0, repsMultiplier = 1.0 } = intent;
           const changes = copyWithProgression(sourceWeekOffset, targetWeeks, setsIncrement, repsMultiplier);
           if (!changes.length) {
-            addPhilMsg("No sessions found in the source week — make sure there are sessions in the week you're copying from."); break;
+            addPhilMsg("No sessions found in the source week. Make sure there are sessions in the week you're copying from."); break;
           }
           const parts: string[] = [];
           if (setsIncrement > 0) parts.push(`+${setsIncrement} set${setsIncrement !== 1 ? "s" : ""}/week`);
@@ -1569,7 +1616,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       const newSession = { ...session, id: `session-${Date.now()}`, date };
       await addSessionToClientCalendar(date, newSession, () => {}, newSession.id, () => {
         navigateToWeekOf(date);
-        addPhilMsg(`Done — "${session.name ?? "Session"}" added to ${format(parseISO(date), "EEE d MMM")}.`);
+        addPhilMsg(`Done. "${session.name ?? "Session"}" added to ${format(parseISO(date), "EEE d MMM")}.`);
       }, session.name ?? "Session");
     } catch {
       addPhilMsg("Something went wrong saving the session. Try again.");
@@ -1593,7 +1640,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (type === "wod" && data.options && data.options.length > 1) {
-        addPhilMsg(`Got some WOD options for ${format(parseISO(date), "EEE d MMM")} — tap to add one:`, {
+        addPhilMsg(`Got some WOD options for ${format(parseISO(date), "EEE d MMM")}. Tap to add one:`, {
           action: { type: "pick_wod", options: data.options, date },
         });
       } else {
@@ -1604,7 +1651,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           .join("\n");
         const suffix = exercises.length > 3 ? `\n+${exercises.length - 3} more` : "";
         addPhilMsg(
-          `Here's your ${type === "run" ? "run" : "session"} — ${session.name ?? "Session"}:\n\n${preview}${suffix}`,
+          `Here's your ${type === "run" ? "run" : "session"}, ${session.name ?? "Session"}:\n\n${preview}${suffix}`,
           { action: { type: "save_session", session, sessionType: type, date } }
         );
       }
@@ -1698,9 +1745,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       if (!saveRes.ok) throw new Error("save_failed");
       await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
       navigateToWeekOf(startDate);
-      addPhilMsg(`Done — "${generationResult.title}" is live on your calendar. 4 weeks, deload in week 4.`);
+      addPhilMsg(`Done. "${generationResult.title}" is live on your calendar. 4 weeks, deload in week 4.`);
     } catch {
-      addPhilMsg("Programme generated but I couldn't save it — try again.");
+      addPhilMsg("Programme generated but I couldn't save it. Try again.");
     } finally {
       setCmdParsing(false);
     }
@@ -1779,7 +1826,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       setBrainIntent(null);
       setBrainOpen(true);
       setTimeout(() => void searchBrain(input), 150);
-      addPhilMsg("Opening the library for you — have a browse and tap anything you want to add.");
+      addPhilMsg("Opening the library for you. Have a browse and tap anything you want to add.");
       return;
     }
 
@@ -1796,7 +1843,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           body: JSON.stringify({ question: input, context, history: getRecentHistory() }),
         });
         const data = await res.json();
-        addPhilMsg(data.answer ?? "I couldn't analyse that — try asking something more specific.");
+        addPhilMsg(data.answer ?? "I couldn't analyse that. Try asking something more specific.");
       } catch {
         addPhilMsg("Couldn't reach the coaching service. Check your connection.");
       } finally {
@@ -1814,13 +1861,70 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     const input = philPanelInput.trim();
     if (!input) return;
     setPhilPanelInput("");
-    // If awaiting a follow-up answer from coach-parse, route as follow-up
-    if (coachParseResult && !coachParseResult.hasEnough) {
-      addUserMsg(input);
-      await callCoachParse(originalCoachInput, input);
+
+    // On Training (or team mode): use existing routing logic unchanged
+    if (activeTab === "training" || isTeamMode) {
+      if (coachParseResult && !coachParseResult.hasEnough) {
+        addUserMsg(input);
+        await callCoachParse(originalCoachInput, input);
+        return;
+      }
+      await handleCoachInput(input);
       return;
     }
-    await handleCoachInput(input);
+
+    // On Dashboard / Nutrition: send directly to phil-chat with tab context
+    addUserMsg(input);
+    setCmdParsing(true);
+    try {
+      const token = localStorage.getItem("axis_auth_token");
+      const dashboardContext = activeTab === "dashboard" && analytics ? {
+        fitnessScore: analytics.fitnessScore.current,
+        fitnessScoreChange: analytics.fitnessScore.change,
+        consistency: analytics.adherence.thisWeek,
+        weeklyWin: analytics.weeklyWin,
+        performanceMetrics: {
+          squat: analytics.strengthMetrics.squat.current,
+          bench: analytics.strengthMetrics.bench.current,
+          deadlift: analytics.strengthMetrics.deadlift.current,
+          fiveK: analytics.runMetrics.estimated5K.current,
+        },
+      } : undefined;
+
+      const res = await fetch(`/api/clients/${clientId}/phil-chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+        body: JSON.stringify({
+          message: input,
+          history: getRecentHistory(),
+          currentTab: activeTab,
+          dashboardContext,
+        }),
+      });
+      const data = await res.json();
+      addPhilMsg(data.reply ?? "What would you like to work on today?");
+
+      // Handle tab navigation
+      if (data.navigateTo === "training" || data.navigateTo === "nutrition" || data.navigateTo === "dashboard") {
+        setTimeout(() => setActiveTab(data.navigateTo), 800);
+      }
+
+      // Handle food log action (Nutrition tab)
+      if (data.action?.type === "log_food" && data.action.description) {
+        try {
+          await addMutation.mutateAsync({ clientId, data: { description: data.action.description, date: selectedDate } });
+          queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(clientId, { date: selectedDate }) });
+          refetchWeeklyLogs();
+        } catch { /* non-fatal */ }
+      }
+    } catch {
+      addPhilMsg("Something went wrong. Try again.");
+    } finally {
+      setCmdParsing(false);
+    }
   };
 
   const applyReschedule = async () => {
@@ -2900,9 +3004,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   );
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header — hidden in team mode */}
-      {!isTeamMode && <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
+      {!isTeamMode && <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
         <div className="flex items-center gap-3">
           {mode === "coach" && (
             <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setLocation("/clients")}>
@@ -2964,40 +3068,56 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="tabs mt-4">
-          {([
-            { id: "dashboard", label: "Dashboard", icon: <BarChart3 className="w-3.5 h-3.5" /> },
-            { id: "nutrition",  label: "Nutrition",  icon: <Utensils  className="w-3.5 h-3.5" /> },
-            { id: "training",   label: "Training",   icon: <Dumbbell  className="w-3.5 h-3.5" /> },
-            ...(mode === "client" && isIrlEnabled ? [{ id: "irl" as Tab, label: "IRL Sessions", icon: <MapPin className="w-3.5 h-3.5" /> }] : []),
-          ] as { id: Tab; label: string; icon: React.ReactNode }[]).map(({ id, label, icon }) => (
+        {/* Tabs + Phil toggle */}
+        <div className="flex items-center gap-2 mt-4">
+          <div className="tabs flex-1">
+            {([
+              { id: "dashboard", label: "Dashboard", icon: <BarChart3 className="w-3.5 h-3.5" /> },
+              { id: "nutrition",  label: "Nutrition",  icon: <Utensils  className="w-3.5 h-3.5" /> },
+              { id: "training",   label: "Training",   icon: <Dumbbell  className="w-3.5 h-3.5" /> },
+              ...(mode === "client" && isIrlEnabled ? [{ id: "irl" as Tab, label: "IRL Sessions", icon: <MapPin className="w-3.5 h-3.5" /> }] : []),
+            ] as { id: Tab; label: string; icon: React.ReactNode }[]).map(({ id, label, icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`tab gap-1.5${activeTab === id ? " active" : ""}`}
+              >
+                {icon}{label}
+              </button>
+            ))}
+          </div>
+          {activeTab !== "training" && (
             <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`tab gap-1.5${activeTab === id ? " active" : ""}`}
+              type="button"
+              onClick={() => setPhilOpen(v => !v)}
+              title={philOpen ? "Close Phil" : "Ask Phil"}
+              className={`p-2 rounded-xl transition-colors shrink-0 ${philOpen ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
             >
-              {icon}{label}
+              <Sparkles className="w-3.5 h-3.5" />
             </button>
-          ))}
+          )}
         </div>
       </div>}
 
       {/* Dashboard Tab */}
       {!isTeamMode && activeTab === "dashboard" && (
-        <DashboardTab
-          analytics={analytics}
-          isLoading={analyticsLoading}
-          clientId={clientId}
-          calorieTarget={client?.dailyCalorieGoal ?? null}
-          proteinTarget={client?.dailyProteinGoal ?? null}
-          nutritionMode={nutritionTrackingMode}
-        />
+        <div className="flex-1 overflow-y-auto">
+          <DashboardTab
+            analytics={analytics}
+            isLoading={analyticsLoading}
+            clientId={clientId}
+            calorieTarget={client?.dailyCalorieGoal ?? null}
+            proteinTarget={client?.dailyProteinGoal ?? null}
+            nutritionMode={nutritionTrackingMode}
+            hasSessionData={!analytics || analytics.sessions.length > 0}
+          />
+        </div>
       )}
 
 
       {/* Nutrition Tab */}
       {!isTeamMode && activeTab === "nutrition" && (
+        <div className="flex-1 overflow-y-auto">
         <div className="nutrition-screen px-6 py-6 max-w-2xl mx-auto">
 
           {/* ── Nutrition Goals ───────────────────────────────────── */}
@@ -3214,7 +3334,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                             style={{ width: `${Math.min(pct * 100, 100)}%` }} />
                         </div>
                         <p className="mt-1.5 text-[11px] text-muted-foreground">
-                          {hasEntries ? `${logged.toFixed(0)}g logged of ${proGoal}g target` : "Nothing logged yet — full allowance remaining"}
+                          {hasEntries ? `${logged.toFixed(0)}g logged of ${proGoal}g target` : "Nothing logged yet, full allowance remaining"}
                         </p>
                       </>
                     );
@@ -3275,7 +3395,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                         ))}
                       </div>
                       {(entries?.length ?? 0) === 0 && (
-                        <p className="meal-help-text text-center mt-3">Nothing logged yet — full allowance remaining</p>
+                        <p className="meal-help-text text-center mt-3">Nothing logged yet, full allowance remaining</p>
                       )}
                     </div>
                   );
@@ -3318,7 +3438,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   onChange={e => setFoodInput(e.target.value)}
                   placeholder={
                     labelImages.length > 0
-                      ? 'Add a note (optional) — e.g. "2 servings" or "half a pack"'
+                      ? 'Add a note (optional), e.g. "2 servings" or "half a pack"'
                       : listening
                       ? "Listening…"
                       : 'e.g. "200g chicken breast, 100g basmati rice, 1 tbsp olive oil"'
@@ -3369,11 +3489,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               </button>
               {showGuide && (
                 <div className="p-3 bg-primary/5 border border-primary/15 rounded-xl text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
-                  <p className="font-semibold text-foreground/70 mb-1">Always describe your quantity in <span className="text-primary">servings or grams</span> — even grams gives a better estimate than nothing:</p>
+                  <p className="font-semibold text-foreground/70 mb-1">Always describe your quantity in <span className="text-primary">servings or grams</span>. Even grams gives a better estimate than nothing:</p>
                   <p>✅ <span className="text-foreground/80">200g chicken breast, 120g cooked white rice, 1 tbsp olive oil</span></p>
                   <p>✅ <span className="text-foreground/80">3 large scrambled eggs, 2 slices wholegrain toast, 10g butter</span></p>
                   <p>✅ <span className="text-foreground/80">McDonald's Big Mac and medium fries</span></p>
-                  <p>✅ <span className="text-foreground/80">Protein shake — 1 scoop MyProtein Impact Whey, 300ml whole milk</span></p>
+                  <p>✅ <span className="text-foreground/80">Protein shake, 1 scoop MyProtein Impact Whey, 300ml whole milk</span></p>
                   <p className="pt-1 border-t border-primary/10">📷 <strong>Scanning a label?</strong> Add a note like <em>"4 bags"</em> or <em>"120g"</em> so the AI knows your portion. Without a quantity it assumes 1 serving.</p>
                   <p className="border-t border-primary/10 pt-1">The AI shows what it assumed so you can spot any errors.</p>
                 </div>
@@ -3520,7 +3640,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   <span className="block">This will simplify nutrition tracking to protein only.</span>
                   <span className="block">Calories, carbs, and fats will no longer be shown as active targets on this screen.</span>
                   <span className="block">Your nutrition score will be based on protein logging only.</span>
-                  <span className="block text-[11px] opacity-70">Your existing nutrition history is not deleted — only the active display and scoring changes.</span>
+                  <span className="block text-[11px] opacity-70">Your existing nutrition history is not deleted. Only the active display and scoring changes.</span>
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter className="flex flex-col gap-2 sm:flex-row pt-2">
@@ -3530,11 +3650,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </DialogContent>
           </Dialog>
         </div>
+        </div>
       )}
 
       {/* IRL Sessions Tab */}
       {!isTeamMode && activeTab === "irl" && mode === "client" && isIrlEnabled && (
-        <div className="flex flex-col h-full overflow-y-auto px-4 py-5 space-y-4">
+        <div className="flex-1 flex flex-col overflow-y-auto px-4 py-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-base">IRL Sessions</h2>
@@ -3639,7 +3760,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                 const r = await fetch(`/api/irl-bookings/${booking.id}/cancel`, { method: "POST", headers: getIrlHeaders() });
                                 const d = await r.json();
                                 if (!r.ok) toast({ title: "Error", description: d.error, variant: "destructive" });
-                                else { toast({ title: "Cancelled", description: d.creditRefunded ? "Credit refunded." : "No refund — cancelled within 24h." }); await fetchIrlData(); }
+                                else { toast({ title: "Cancelled", description: d.creditRefunded ? "Credit refunded." : "No refund, cancelled within 24h." }); await fetchIrlData(); }
                                 setCancellingBookingId(null);
                               }}>Confirm cancel</Button>
                               <Button size="sm" variant="ghost" className="text-xs" onClick={() => setCancellingBookingId(null)}>Keep</Button>
@@ -3692,7 +3813,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
       {/* Training Tab */}
       {(isTeamMode || activeTab === "training") && (
-        <div className="relative flex flex-col h-full overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* Calendar toolbar */}
           <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
@@ -3795,7 +3916,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 value={cmdListening ? (cmdInterim || cmdInput) : cmdInput}
                 onChange={e => setCmdInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") void handleCoachInput(); }}
-                placeholder="Ask Phil — plan, adjust, progress or review your training…"
+                placeholder="Ask Phil: plan, adjust, progress or review your training…"
                 disabled={cmdListening || cmdParsing}
                 className="flex-1 text-sm bg-muted/30 border rounded-xl px-3.5 py-2 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 focus:bg-background transition-colors"
               />
@@ -3868,7 +3989,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             {pendingCommand && (
               <div className="flex items-center justify-between gap-2 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
                 <p className="text-xs text-violet-900 leading-snug flex-1">
-                  <strong>{pendingCommand.description}</strong> — affects {pendingCommand.changes.length} programme{pendingCommand.changes.length !== 1 ? "s" : ""}. Confirm?
+                  <strong>{pendingCommand.description}</strong>. Affects {pendingCommand.changes.length} programme{pendingCommand.changes.length !== 1 ? "s" : ""}. Confirm?
                 </p>
                 <div className="flex gap-1.5 shrink-0">
                   <Button size="sm" className="h-6 px-2 text-xs bg-violet-600 hover:bg-violet-700 text-white" onClick={applyCommand} disabled={cmdSaving}>
@@ -4206,114 +4327,117 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </div>
           </div>
 
-          {/* ── Phil Chat Panel — bottom drawer ───────────────────────────── */}
-          <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${philOpen ? "h-[300px]" : "h-0"}`}>
-            <div className="h-[300px] flex flex-col">
-              {/* Header */}
-              <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
-                  <div>
-                    <p className="text-sm font-semibold leading-none">Phil</p>
-                    <p className="text-[11px] text-muted-foreground">MG Coaching</p>
-                  </div>
+        </div>
+      )}
+
+      {/* ── Phil Chat Panel — global bottom drawer (all tabs) ────────────────── */}
+      {!isTeamMode && (
+        <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${philOpen ? "h-[300px]" : "h-0"}`}>
+          <div className="h-[300px] flex flex-col">
+            {/* Header */}
+            <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
+                <div>
+                  <p className="text-sm font-semibold leading-none">Phil</p>
+                  <p className="text-[11px] text-muted-foreground">MG Coaching</p>
                 </div>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
-                  <X className="w-4 h-4" />
-                </Button>
               </div>
-              {/* Messages */}
-              <div ref={philScrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
-                {philMessages.length === 0 && !cmdParsing && (
-                  <p className="text-xs text-muted-foreground text-center mt-6">Ask Phil anything about training, plans, or scheduling.</p>
-                )}
-                {philMessages.map(msg => (
-                  <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                    {msg.sender === "phil" && (
-                      <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
-                    )}
-                    <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
-                      {msg.text && <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>}
-                      {/* Build-this button when Phil has gathered enough plan context */}
-                      {msg.coachParseData?.hasEnough && (
-                        <Button
-                          size="sm"
-                          className="mt-2 h-7 px-3 text-xs w-full"
-                          disabled={cmdParsing}
-                          onClick={() => { setCoachParseResult(msg.coachParseData!); handleBuildFromParse(); }}
-                        >
-                          Build this
-                        </Button>
-                      )}
-                      {/* Save a single generated session */}
-                      {msg.action?.type === "save_session" && (
-                        <Button
-                          size="sm"
-                          className="mt-2 h-7 px-3 text-xs w-full"
-                          disabled={!!savingAiSession}
-                          onClick={() => void saveSessionDirectly((msg.action as any).session, (msg.action as any).date)}
-                        >
-                          {savingAiSession ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-                          Save to calendar — {format(parseISO((msg.action as any).date), "EEE d MMM")}
-                        </Button>
-                      )}
-                      {/* WOD option picker */}
-                      {msg.action?.type === "pick_wod" && (
-                        <div className="mt-2 space-y-1.5">
-                          {(msg.action as any).options.map((opt: any, i: number) => (
-                            <button
-                              key={i}
-                              className="w-full text-left rounded-lg border bg-background px-2.5 py-2 text-xs hover:border-primary/40 transition-colors disabled:opacity-50"
-                              disabled={!!savingAiSession}
-                              onClick={() => void saveSessionDirectly(opt, (msg.action as any).date)}
-                            >
-                              <span className="font-semibold text-primary/70 mr-1.5">
-                                {opt.format === "emom" ? "EMOM" : opt.format === "amrap" ? "AMRAP" : opt.format === "for_time" ? "For Time" : "WOD"}
-                              </span>
-                              <span>{opt.name || `Option ${i + 1}`}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {cmdParsing && (
-                  <div className="flex gap-2 justify-start">
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            {/* Messages */}
+            <div ref={philScrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
+              {philMessages.length === 0 && !cmdParsing && (
+                <p className="text-xs text-muted-foreground text-center mt-6">Ask Phil anything.</p>
+              )}
+              {philMessages.map(msg => (
+                <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                  {msg.sender === "phil" && (
                     <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
-                    <div className="bg-muted rounded-2xl px-3 py-2.5">
-                      <div className="flex gap-1 items-center h-4">
-                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
-                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
-                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+                  )}
+                  <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                    {msg.text && <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>}
+                    {/* Build-this button when Phil has gathered enough plan context */}
+                    {msg.coachParseData?.hasEnough && (
+                      <Button
+                        size="sm"
+                        className="mt-2 h-7 px-3 text-xs w-full"
+                        disabled={cmdParsing}
+                        onClick={() => { setCoachParseResult(msg.coachParseData!); handleBuildFromParse(); }}
+                      >
+                        Build this
+                      </Button>
+                    )}
+                    {/* Save a single generated session */}
+                    {msg.action?.type === "save_session" && (
+                      <Button
+                        size="sm"
+                        className="mt-2 h-7 px-3 text-xs w-full"
+                        disabled={!!savingAiSession}
+                        onClick={() => void saveSessionDirectly((msg.action as any).session, (msg.action as any).date)}
+                      >
+                        {savingAiSession ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                        Save to calendar. {format(parseISO((msg.action as any).date), "EEE d MMM")}
+                      </Button>
+                    )}
+                    {/* WOD option picker */}
+                    {msg.action?.type === "pick_wod" && (
+                      <div className="mt-2 space-y-1.5">
+                        {(msg.action as any).options.map((opt: any, i: number) => (
+                          <button
+                            key={i}
+                            className="w-full text-left rounded-lg border bg-background px-2.5 py-2 text-xs hover:border-primary/40 transition-colors disabled:opacity-50"
+                            disabled={!!savingAiSession}
+                            onClick={() => void saveSessionDirectly(opt, (msg.action as any).date)}
+                          >
+                            <span className="font-semibold text-primary/70 mr-1.5">
+                              {opt.format === "emom" ? "EMOM" : opt.format === "amrap" ? "AMRAP" : opt.format === "for_time" ? "For Time" : "WOD"}
+                            </span>
+                            <span>{opt.name || `Option ${i + 1}`}</span>
+                          </button>
+                        ))}
                       </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {cmdParsing && (
+                <div className="flex gap-2 justify-start">
+                  <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
+                  <div className="bg-muted rounded-2xl px-3 py-2.5">
+                    <div className="flex gap-1 items-center h-4">
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
                     </div>
                   </div>
-                )}
-              </div>
-              {/* Input */}
-              <div className="shrink-0 px-3 py-2.5 border-t">
-                <div className="flex gap-2">
-                  <input
-                    value={philPanelInput}
-                    onChange={e => setPhilPanelInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
-                    placeholder="Message Phil…"
-                    className="flex-1 min-w-0 h-8 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <Button
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    onClick={() => void handlePhilPanelSubmit()}
-                    disabled={!philPanelInput.trim() || cmdParsing}
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </Button>
                 </div>
+              )}
+            </div>
+            {/* Input */}
+            <div className="shrink-0 px-3 py-2.5 border-t">
+              <div className="flex gap-2">
+                <input
+                  ref={philInputRef}
+                  value={philPanelInput}
+                  onChange={e => setPhilPanelInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
+                  placeholder="Message Phil…"
+                  className="flex-1 min-w-0 h-8 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Button
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => void handlePhilPanelSubmit()}
+                  disabled={!philPanelInput.trim() || cmdParsing}
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </Button>
               </div>
             </div>
           </div>
-
         </div>
       )}
 
@@ -4614,7 +4738,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     <div className="relative">
                       <textarea
                         className={`w-full min-h-[110px] rounded-xl border bg-background px-3 py-2.5 pr-10 text-sm resize-none focus:outline-none focus:ring-2 placeholder:text-muted-foreground transition-all ${describeListening ? "ring-2 ring-red-400/50 border-red-300" : "focus:ring-primary/40"}`}
-                        placeholder="e.g. 3 days strength per week (upper/lower split), 1 run and 1 WOD — 6 week block. Training in a commercial gym. Max 6 weeks. Include the environment (garage gym, CrossFit box, commercial gym) so the AI picks the right kit."
+                        placeholder="e.g. 3 days strength per week (upper/lower split), 1 run and 1 WOD, 6 week block. Training in a commercial gym. Max 6 weeks. Include the environment (garage gym, CrossFit box, commercial gym) so the AI picks the right kit."
                         value={describeListening ? (describeText + (describeInterim ? " " + describeInterim : "")) : describeText}
                         onChange={e => { if (!describeListening) setDescribeText(e.target.value); }}
                         autoFocus={!describeListening}
@@ -4647,7 +4771,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                           className={`rounded-xl border px-3 py-3 text-left text-sm transition-all ${strengthStyle === "straight" ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/50"}`}
                         >
                           <p className="font-semibold">Strict Progression</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Same exercises every week — progress through load, reps &amp; sets. Best for most people.</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Same exercises every week. Progress through load, reps and sets. Best for most people.</p>
                         </button>
                         <button
                           type="button"
@@ -4684,7 +4808,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                         ))}
                       </div>
                       {runEnv.includes("treadmill") && (
-                        <p className="text-[11px] text-muted-foreground">Treadmill selected — intervals and quality sessions will be built for treadmill use.</p>
+                        <p className="text-[11px] text-muted-foreground">Treadmill selected. Intervals and quality sessions will be built for treadmill use.</p>
                       )}
                     </div>
                   )}
@@ -4747,7 +4871,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                         <button
                           key={chip}
                           type="button"
-                          onClick={() => setPreviewTweakInput(chip + " — ")}
+                          onClick={() => setPreviewTweakInput(chip + ": ")}
                           className="text-xs px-2.5 py-1 rounded-full border bg-muted/30 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                         >
                           {chip}
@@ -4933,7 +5057,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         <DialogContent className="max-w-sm flex flex-col max-h-[92dvh] overflow-hidden p-0">
           <div className="px-6 pt-6 pb-3 shrink-0">
             <DialogHeader>
-              <DialogTitle>Add Session — {quickAddDate ? format(parseISO(quickAddDate), "EEE d MMM") : ""}</DialogTitle>
+              <DialogTitle>Add Session: {quickAddDate ? format(parseISO(quickAddDate), "EEE d MMM") : ""}</DialogTitle>
               <DialogDescription>
                 {quickAddType === "wod" ? "Describe your WOD in any format. The AI will structure it."
                   : quickAddType === "run" ? "Describe your run. The AI will structure it."
@@ -4991,7 +5115,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 onChange={e => setQuickAddDesc(e.target.value)}
                 placeholder={
                   quickAddType === "wod"
-                    ? "e.g. 30 min amrap, 15 press ups, 1km bike erg, 500m run\n\nor: EMOM 12 — min 1: 12 cal bike, min 2: 15 wall balls\nor: 5 rounds for time: 400m run, 20 burpees"
+                    ? "e.g. 30 min amrap, 15 press ups, 1km bike erg, 500m run\n\nor: EMOM 12 (min 1: 12 cal bike, min 2: 15 wall balls)\nor: 5 rounds for time: 400m run, 20 burpees"
                   : quickAddType === "run"
                     ? "e.g. 45 min steady run\n\nor: 5 × 1km at tempo pace, 90s jog recovery\nor: 8km steady state, hilly route\nor: 6 × 200m hill sprints"
                   : "Bench press 4x8\nSquat 3x5 @RPE 8\nRDL 3x10\nLateral raises 3x15\n\n…or speak naturally"
@@ -5109,7 +5233,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       <Dialog open={goalsOpen} onOpenChange={setGoalsOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Daily Goals — {client?.name}</DialogTitle>
+            <DialogTitle>Daily Goals: {client?.name}</DialogTitle>
             <DialogDescription>
               Set target macros. Macro calories must not exceed the calorie goal<br/>
               (protein × 4 + carbs × 4 + fats × 9).
@@ -5276,7 +5400,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           {wodBrainTab === "cycles" && (
             <div className="space-y-4 pt-1">
               <p className="text-xs text-muted-foreground">
-                A cycle is a <strong>multi-week progressive programme</strong> — one session per week, each with a different duration or load. Inserting a cycle adds all sessions at once.
+                A cycle is a <strong>multi-week progressive programme</strong>. One session per week, each with a different duration or load. Inserting a cycle adds all sessions at once.
               </p>
               <div className="flex gap-2">
                 <Input
@@ -5432,7 +5556,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-1">
-            <p className="text-sm text-muted-foreground">Search for a squat cycle — describe the style, duration, or difficulty.</p>
+            <p className="text-sm text-muted-foreground">Search for a squat cycle. Describe the style, duration, or difficulty.</p>
 
             {/* Search input */}
             <div className="relative flex items-center gap-2">
