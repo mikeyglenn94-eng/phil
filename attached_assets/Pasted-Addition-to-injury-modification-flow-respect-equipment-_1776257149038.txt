@@ -1,0 +1,50 @@
+Addition to injury modification flow: respect equipment constraints
+When Phil suggests injury substitutions, he must check the user's equipment profile before generating options.
+Add to the substitution logic:
+tsasync function getInjurySubstitutions(exercise, bodyPart, equipmentProfile) {
+  const prompt = `
+    The user needs a substitution for ${exercise} due to a ${bodyPart} issue.
+    
+    Their available equipment: ${equipmentProfile || 'full commercial gym'}
+    
+    Suggest exactly 3 alternatives that:
+    1. Do not aggravate the ${bodyPart}
+    2. Can be performed with their available equipment only
+    3. Train a similar muscle group or movement pattern
+    
+    For each suggestion provide:
+    - Exercise name
+    - One sentence why it works for this injury
+    - One sentence why it works with their equipment
+    
+    Mark your top recommendation clearly.
+    Never suggest equipment they do not have access to.
+  `;
+}
+Equipment profile priority:
+
+If user has a stored equipment profile (set in My Stats / Edit Dashboard during home gym setup) — use that
+If user selected "Full gym" — assume all commercial equipment available
+If user selected "Bodyweight only" — bodyweight and floor-based alternatives only
+If no profile exists — default to full gym but Phil asks first: "Are you at a commercial gym or do you have limited equipment at home?"
+
+Examples of how this changes substitutions:
+Home gym user with barbell and dumbbells only, bad back:
+
+Leg press NOT suggested (no machine)
+Instead: dumbbell Romanian deadlift at reduced range, dumbbell hip thrust, Nordic curl
+
+Bodyweight only user, bad knee:
+
+No machine alternatives
+Instead: partial range bodyweight squat, glute bridge, straight leg raise
+
+Full gym user, bad back:
+
+Full range of machine options available as before
+
+Add to Phil's system prompt:
+
+"When suggesting injury substitutions, always check the user's equipment profile first. Never recommend a machine, cable, or piece of equipment the user has not listed. If you are unsure what equipment they have, ask before suggesting. A home gym user being told to use a leg press when they only have a barbell is useless advice."
+
+Do not change anything else in the injury modification flow.

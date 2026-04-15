@@ -1,0 +1,81 @@
+Feature: Phil injury modification flow
+When a user mentions pain, soreness, injury, or discomfort in the command bar or Phil chat, Phil enters injury modification mode. This is a conversational flow that results in real calendar changes.
+Part 1 — Intent detection
+Add injury/pain intent to the classifier. Triggered by keywords including: "sore", "hurting", "pain", "injury", "injured", "flaring up", "niggle", "tweaked", "strain", "bad back", "bad knee", "bad shoulder", "can't do", "aggravating", "inflammation".
+Route to Phil injury flow, not the calendar command parser.
+Part 2 — Phil's response flow
+Step 1 — Clarify severity
+Phil asks one question to determine whether this is a niggle or a confirmed injury:
+
+"Noted. Is this a niggle that came on recently, or something that's been going on for a while or diagnosed?"
+
+Two paths from the answer:
+
+Niggle / recent / not sure → modify next 7 days only, leave rest of programme untouched
+Confirmed / ongoing / weeks → modify the current block (up to 6 weeks ahead), leave rest of programme untouched. Also add: "Worth getting eyes on this with a physio if you haven't already."
+
+Step 2 — Identify affected exercises
+If the user named a specific exercise ("goblet squats are aggravating it") Phil uses that.
+If the user named a body part or movement ("my back is flaring up") Phil identifies which exercises in the affected period load that area:
+tsconst injuryMap = {
+  'back': ['deadlift', 'romanian deadlift', 'good morning', 'bent over row', 'back squat', 'barbell row'],
+  'knee': ['squat', 'lunge', 'leg press', 'step up', 'bulgarian split squat', 'running'],
+  'shoulder': ['bench press', 'overhead press', 'lateral raise', 'upright row', 'pull up'],
+  'hip': ['squat', 'deadlift', 'lunge', 'hip thrust', 'running'],
+  'wrist': ['bench press', 'overhead press', 'front squat', 'clean'],
+}
+Phil tells the user what he found:
+
+"In your next week I can see deadlifts on Monday and Romanian deadlifts on Thursday. I'll swap those out. Want me to remove goblet squats too or are those okay?"
+
+Step 3 — Suggest replacements
+For each affected exercise, Phil suggests 2-3 alternatives with a recommendation and a one-line reason:
+
+"For deadlifts while your back settles, here are your options:
+
+Leg press — keeps quad and glute load without spinal compression. My pick.
+Hip thrust — maintains posterior chain work, much lower back stress.
+Nordic curl — hamstring focus, zero spinal load.
+I'd go with leg press to keep the intensity up. Want me to use that?"
+
+
+User can accept Phil's recommendation, pick a different option, or suggest their own alternative.
+Step 4 — Apply changes
+Once confirmed, Phil makes the calendar changes:
+
+Swaps affected exercises in every session within the modification window
+Uses clearExerciseResults on any swapped exercises — fresh prescription, no logged data carried over
+Does NOT touch sessions outside the modification window
+Does NOT change sets, reps, or any other prescription — only the exercise name changes
+
+Phil confirms what he did:
+
+"Done. Swapped deadlifts for leg press on Monday and Thursday this week. Everything else stays the same. Hope it settles down."
+
+Part 3 — Phil's injury knowledge in system prompt
+Add to Phil's system prompt:
+
+"You have strong knowledge of exercise substitutions for common injuries and niggles. When modifying for injury, always prioritise keeping training load as similar as possible while removing the aggravating movement. Prefer substitutions that train the same muscle group through a different movement pattern or reduced range of motion. Never suggest someone push through pain. Always recommend seeing a physio for anything that sounds like a confirmed or ongoing injury, but do so once, briefly, not repeatedly. Keep the tone matter-of-fact, not alarmist. You are not a medical professional and never diagnose anything."
+
+
+"Injury substitution principles:
+Lower back: replace spinal loading movements with hip-dominant or machine alternatives that allow neutral spine. Leg press, hip thrust, cable pull-throughs, machine rows.
+Knee: replace deep knee flexion with partial range or hip-dominant alternatives. Leg press at shallow depth, hip thrust, Nordic curl, straight leg deadlift.
+Shoulder: replace overhead and horizontal pressing with cable or machine alternatives at pain-free angles. Cable chest press, landmine press, neutral grip dumbbell press.
+Hip: replace hip flexion under load with alternatives. Leg curl, Nordic curl, upper body sessions, bike for cardio.
+Wrist: replace barbell gripping movements with neutral grip or machine alternatives. Hammer grip dumbbell press, machine press, trap bar deadlift."
+
+Part 4 — Modification window rules
+tsconst modificationWindow = {
+  niggle: 7, // days from today
+  confirmed: 42 // days from today (6 weeks)
+};
+Only sessions with a date within the window are modified. Sessions outside are completely untouched — Phil does not pre-emptively remove exercises from future weeks. If the user wants to extend the modification period they ask Phil again.
+Part 5 — No persistent injury memory
+Phil does not remember the injury beyond the current session. The programme past the modification window is unchanged. If the user's back is still sore next week, they tell Phil again and he adjusts again. This keeps the logic simple and avoids Phil making assumptions about ongoing conditions.
+Do not change:
+
+Any existing calendar or programme logic
+The copy with progression logic
+The intent classifier for non-injury commands
+Any coach or admin UI

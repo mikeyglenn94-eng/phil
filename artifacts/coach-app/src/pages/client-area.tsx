@@ -809,6 +809,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const philInputRef = useRef<HTMLInputElement>(null);
   const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
 
+  // ── Injury flow state ─────────────────────────────────────────────────────
+  interface InjuryFlowState { phase: "severity" | "choice"; context: Record<string, any>; }
+  const [injuryFlow, setInjuryFlow] = useState<InjuryFlowState | null>(null);
+
   const addPhilMsg = (text: string, extra?: Partial<PhilMessage>) => {
     setPhilMessages(prev => [...prev, { id: crypto.randomUUID(), sender: "phil", text, ts: new Date(), ...extra }]);
     setPhilUnread(prev => prev || !philExpanded);
@@ -1799,6 +1803,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
     const intent = classifyCoachIntent(input);
 
+    // ── Injury intent: intercept before other routing ─────────────────────────
+    if (INJURY_KEYWORDS.some(kw => input.toLowerCase().includes(kw))) {
+      await handleInjuryChat(input);
+      return;
+    }
+
     // ── Plan / Session: parse-first → Phil chat response ─────────────────────
     if (intent === "plan") {
       setOriginalCoachInput(input);
@@ -1862,13 +1872,65 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     await handleRescheduleCmd();
   };
 
-  // ── Phil panel secondary input submit ────────────────────────────────────
+  // ── Injury modification flow ──────────────────────────────────────────────────
+  const INJURY_KEYWORDS = [
+    "sore", "hurting", "pain", "injury", "injured", "flaring", "flare up", "flared",
+    "niggle", "tweaked", "tweak", "strain", "strained", "bad back", "bad knee",
+    "bad shoulder", "bad hip", "can't do", "cant do", "aggravating", "aggravates",
+    "inflammation", "inflamed", "tight", "tightness",
+  ];
+
+  const handleInjuryChat = async (input: string) => {
+    const token = localStorage.getItem("axis_auth_token");
+    const phase = injuryFlow?.phase ?? "start";
+    const context = injuryFlow?.context ?? {};
+    setCmdParsing(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/injury-chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+        body: JSON.stringify({ phase: injuryFlow ? phase : "start", message: input, context }),
+      });
+      const data = await res.json();
+      const reply: string = data.reply ?? "Something went wrong. Try again.";
+      addPhilMsg(reply);
+
+      if (data.nextPhase === "severity") {
+        setInjuryFlow({ phase: "severity", context: data.context ?? {} });
+      } else if (data.nextPhase === "choice") {
+        setInjuryFlow({ phase: "choice", context: data.context ?? {} });
+      } else {
+        // done — clear flow and refresh programmes
+        setInjuryFlow(null);
+        if (data.nextPhase === "done" && data.context?.confirmedSwaps?.length > 0) {
+          await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        }
+      }
+    } catch {
+      addPhilMsg("Something went wrong. Try again.");
+      setInjuryFlow(null);
+    } finally {
+      setCmdParsing(false);
+    }
+  };
+
   const handlePhilPanelSubmit = async () => {
     const input = philPanelInput.trim();
     if (!input) return;
     setPhilPanelInput("");
     setPhilExpanded(true);
     setPhilUnread(false);
+
+    // Injury flow: intercept if active or if injury keywords detected
+    const hasInjuryKeyword = !injuryFlow && INJURY_KEYWORDS.some(kw => input.toLowerCase().includes(kw));
+    if (injuryFlow || hasInjuryKeyword) {
+      addUserMsg(input);
+      await handleInjuryChat(input);
+      return;
+    }
 
     // On Training (or team mode): use existing routing logic unchanged
     if (activeTab === "training" || isTeamMode) {
