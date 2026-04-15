@@ -3527,6 +3527,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
           {/* ── Ask your coach ─────────────────────────────────────── */}
           <div className="shrink-0 px-4 pt-3 pb-2 border-b bg-background flex flex-col gap-2">
+            {/* Empty-calendar nudge — shown only when no sessions exist and bar is idle */}
+            {(() => {
+              const isBarIdle = !cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && !coachInlineResponse && !coachParseResult;
+              const totalSessions = (clientProgrammes ?? []).flatMap(p => p.sessions as Session[]).length;
+              if (!isBarIdle || totalSessions > 0) return null;
+              return (
+                <p className="text-xs text-muted-foreground/60 text-center pb-0.5">
+                  Your training calendar is empty. Tell me what you're training for and I'll build your first month.
+                </p>
+              );
+            })()}
             {/* Quick action chips — shown when idle */}
             {!cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && !coachInlineResponse && !coachParseResult && (
               <div className="flex flex-wrap gap-1.5">
