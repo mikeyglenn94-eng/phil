@@ -11,7 +11,6 @@ import AdminConsole from "@/pages/admin-console";
 import SessionEditor from "./pages/session-editor";
 import ClientHome from "./pages/client-home";
 import ClientSession from "./pages/client-session";
-import ClientPicker from "./pages/client-picker";
 import ClientsList from "./pages/clients-list";
 import ClientArea from "./pages/client-area";
 import CoachClientCalendar from "./pages/coach-client-calendar";
@@ -94,8 +93,14 @@ function ClientPortalWrapper({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // No auth link to a client — show picker (legacy flow, also usable by coaches accessing /client)
-  if (!client) return <ClientPicker />;
+  // No client selected yet — wait for force-select to resolve
+  if (!client) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-5 h-5 rounded-full border-2 border-foreground/20 border-t-foreground/60 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden">
