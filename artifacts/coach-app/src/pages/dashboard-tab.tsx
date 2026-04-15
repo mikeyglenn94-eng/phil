@@ -324,7 +324,7 @@ function computeScoreDrivers(analytics: AnalyticsData, thisWeekData: AnalyticsDa
   } else if (!estimated5K.previous) {
     rPolarity = "neutral";
     rLabel = "first estimate";
-    rLines.push(`Estimated 5K: ${estimated5K.current}`);
+    rLines.push(`5K: ${estimated5K.current}`);
     rLines.push("No previous estimate to compare yet");
   } else {
     const cs = paceToSeconds(estimated5K.current);
@@ -334,17 +334,17 @@ function computeScoreDrivers(analytics: AnalyticsData, thisWeekData: AnalyticsDa
       if (diff > 10) {
         rPolarity = "positive";
         rLabel = "positive";
-        rLines.push(`Estimated 5K improved by ${diff}s`);
+        rLines.push(`5K improved by ${diff}s`);
         rLines.push(`${estimated5K.previous} → ${estimated5K.current}`);
       } else if (diff < -10) {
         rPolarity = "negative";
         rLabel = "negative";
-        rLines.push(`Estimated 5K slower by ${Math.abs(diff)}s`);
+        rLines.push(`5K slower by ${Math.abs(diff)}s`);
         rLines.push(`${estimated5K.previous} → ${estimated5K.current}`);
       } else {
         rPolarity = "neutral";
         rLabel = "stable";
-        rLines.push(`Estimated 5K unchanged at ~${estimated5K.current}`);
+        rLines.push(`5K unchanged at ~${estimated5K.current}`);
       }
     } else {
       rPolarity = "neutral";
@@ -366,9 +366,9 @@ function computeScoreDrivers(analytics: AnalyticsData, thisWeekData: AnalyticsDa
 
   for (const [name, curr, prev] of lifts) {
     if (curr === null) continue;
-    if (prev === null) { firstLogs.push(`${name}: ${curr}kg e1RM (first record)`); continue; }
-    if (curr > prev)   { gains.push(`${name} e1RM up ${curr - prev}kg to ${curr}kg`); continue; }
-    if (curr < prev)   { losses.push(`${name} e1RM down ${prev - curr}kg to ${curr}kg`); }
+    if (prev === null) { firstLogs.push(`${name}: ${curr}kg (first record)`); continue; }
+    if (curr > prev)   { gains.push(`${name} up ${curr - prev}kg to ${curr}kg`); continue; }
+    if (curr < prev)   { losses.push(`${name} down ${prev - curr}kg to ${curr}kg`); }
   }
 
   let sPolarity: Polarity;
@@ -610,10 +610,10 @@ interface Props {
 
 const SHARE_STAT_OPTIONS = [
   { key: "fitnessScore", label: "Fitness Score" },
-  { key: "squat",        label: "Squat e1RM" },
-  { key: "bench",        label: "Bench e1RM" },
-  { key: "deadlift",     label: "Deadlift e1RM" },
-  { key: "est5K",        label: "Est. 5K" },
+  { key: "squat",        label: "Squat" },
+  { key: "bench",        label: "Bench" },
+  { key: "deadlift",     label: "Deadlift" },
+  { key: "est5K",        label: "5K" },
   { key: "distance",     label: "Distance" },
   { key: "pace",         label: "Pace" },
 ] as const;
@@ -1537,7 +1537,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
 
             {prefs.showEstimated5K && (
               <StatCard
-                title="Est. 5K"
+                title="5K"
                 icon={<Footprints className="w-4 h-4" />}
                 value={runMetrics.estimated5K.current ?? "Add a steady run to estimate"}
                 unavailable={!runMetrics.estimated5K.current}
@@ -1554,7 +1554,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
 
             {prefs.showSquatE1RM && (
               <StatCard
-                title="Squat e1RM"
+                title="Squat"
                 icon={<Dumbbell className="w-4 h-4" />}
                 value={strengthMetrics.squat.current !== null ? `${strengthMetrics.squat.current}kg` : getLiftEmptyState("squat")}
                 unavailable={strengthMetrics.squat.current === null}
@@ -1571,7 +1571,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
 
             {prefs.showBenchE1RM && (
               <StatCard
-                title="Bench e1RM"
+                title="Bench"
                 icon={<Dumbbell className="w-4 h-4" />}
                 value={strengthMetrics.bench.current !== null ? `${strengthMetrics.bench.current}kg` : getLiftEmptyState("bench")}
                 unavailable={strengthMetrics.bench.current === null}
@@ -1588,7 +1588,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
 
             {prefs.showDeadliftE1RM && (
               <StatCard
-                title="Deadlift e1RM"
+                title="Deadlift"
                 icon={<Dumbbell className="w-4 h-4" />}
                 value={strengthMetrics.deadlift.current !== null ? `${strengthMetrics.deadlift.current}kg` : getLiftEmptyState("deadlift")}
                 unavailable={strengthMetrics.deadlift.current === null}
@@ -1806,8 +1806,8 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                 { label: "Bench Press (kg)",      key: "bench",        type: "number", placeholder: "e.g. 80",    step: "0.5" },
                 { label: "Squat (kg)",             key: "squat",        type: "number", placeholder: "e.g. 100",   step: "0.5" },
                 { label: "Deadlift (kg)",          key: "deadlift",     type: "number", placeholder: "e.g. 120",   step: "0.5" },
-                { label: "Estimated 5K (mm:ss)",   key: "fiveK",        type: "text",   placeholder: "e.g. 25:30" },
-                { label: "Estimated 10K (mm:ss)",  key: "tenK",         type: "text",   placeholder: "e.g. 53:00" },
+                { label: "5K (mm:ss)",             key: "fiveK",        type: "text",   placeholder: "e.g. 25:30" },
+                { label: "10K (mm:ss)",            key: "tenK",         type: "text",   placeholder: "e.g. 53:00" },
                 { label: "Half Marathon (mm:ss)",  key: "halfMarathon", type: "text",   placeholder: "e.g. 115:30" },
                 { label: "Marathon (h:mm:ss)",     key: "marathon",     type: "text",   placeholder: "e.g. 4:15:00" },
               ] as const).map(f => (
@@ -1850,10 +1850,10 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
             <PrefRow label="Include in fitness score" checked={prefs.includeNutritionInScore} onToggle={() => toggle("includeNutritionInScore")} disabled={!prefs.showNutritionCard} />
 
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Performance</p>
-            <PrefRow label="Estimated 5K"   checked={prefs.showEstimated5K}  onToggle={() => toggle("showEstimated5K")}  />
-            <PrefRow label="Squat e1RM"     checked={prefs.showSquatE1RM}    onToggle={() => toggle("showSquatE1RM")}    />
-            <PrefRow label="Bench e1RM"     checked={prefs.showBenchE1RM}    onToggle={() => toggle("showBenchE1RM")}    />
-            <PrefRow label="Deadlift e1RM"  checked={prefs.showDeadliftE1RM} onToggle={() => toggle("showDeadliftE1RM")} />
+            <PrefRow label="5K"        checked={prefs.showEstimated5K}  onToggle={() => toggle("showEstimated5K")}  />
+            <PrefRow label="Squat"     checked={prefs.showSquatE1RM}    onToggle={() => toggle("showSquatE1RM")}    />
+            <PrefRow label="Bench"     checked={prefs.showBenchE1RM}    onToggle={() => toggle("showBenchE1RM")}    />
+            <PrefRow label="Deadlift"  checked={prefs.showDeadliftE1RM} onToggle={() => toggle("showDeadliftE1RM")} />
 
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Metrics</p>
             <PrefRow label="Distance Run"  checked={prefs.showDistanceRun}  onToggle={() => toggle("showDistanceRun")}  />

@@ -25,26 +25,26 @@ export function buildAiContext(
 
   const run5k = runMetrics.estimated5K;
   if (run5k.current) {
-    lines.push(`Estimated 5K: ${run5k.current}${run5k.previous ? ` (was ${run5k.previous})` : " (baseline, no prior comparison)"}`);
+    lines.push(`5K: ${run5k.current}${run5k.previous ? ` (was ${run5k.previous})` : " (baseline, no prior comparison)"}`);
   } else {
-    lines.push("Estimated 5K: not enough qualifying running data yet");
+    lines.push("5K: not enough qualifying running data yet");
   }
 
   const { squat, bench, deadlift } = strengthMetrics;
   if (squat.current !== null) {
-    lines.push(`Squat e1RM: ${squat.current}kg${squat.previous !== null ? ` (was ${squat.previous}kg)` : " (first benchmark)"}`);
+    lines.push(`Squat: ${squat.current}kg${squat.previous !== null ? ` (was ${squat.previous}kg)` : " (first benchmark)"}`);
   } else {
-    lines.push("Squat e1RM: no data yet");
+    lines.push("Squat: no data yet");
   }
   if (bench.current !== null) {
-    lines.push(`Bench e1RM: ${bench.current}kg${bench.previous !== null ? ` (was ${bench.previous}kg)` : " (first benchmark)"}`);
+    lines.push(`Bench: ${bench.current}kg${bench.previous !== null ? ` (was ${bench.previous}kg)` : " (first benchmark)"}`);
   } else {
-    lines.push("Bench e1RM: no data yet");
+    lines.push("Bench: no data yet");
   }
   if (deadlift.current !== null) {
-    lines.push(`Deadlift e1RM: ${deadlift.current}kg${deadlift.previous !== null ? ` (was ${deadlift.previous}kg)` : " (first benchmark)"}`);
+    lines.push(`Deadlift: ${deadlift.current}kg${deadlift.previous !== null ? ` (was ${deadlift.previous}kg)` : " (first benchmark)"}`);
   } else {
-    lines.push("Deadlift e1RM: no data yet");
+    lines.push("Deadlift: no data yet");
   }
 
   if (thisWeekData) {
@@ -107,7 +107,7 @@ export function getSuggestedPrompts(
 
   // Running
   if (!runMetrics.estimated5K.current) {
-    prompts.push("How do I get a 5K estimate?");
+    prompts.push("How is my 5K calculated?");
   } else {
     prompts.push("How do I improve my 5K time?");
   }

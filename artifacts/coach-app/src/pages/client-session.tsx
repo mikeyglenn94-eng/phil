@@ -2572,9 +2572,12 @@ export default function ClientSession() {
         let shareShowGoalBar = false;
         if (shareGoalParsedTarget) {
           const targetNum = Number(shareGoalParsedTarget.target ?? 0);
-          const metricLabel = String(shareGoalParsedTarget.metric ?? "")
-            .replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-          shareGoalLabel = metricLabel;
+          const METRIC_DISPLAY: Record<string, string> = {
+            bench_e1rm: "Bench", squat_e1rm: "Squat", deadlift_e1rm: "Deadlift",
+            "5k": "5K", "10k": "10K", half_marathon: "Half Marathon",
+            marathon: "Marathon", bodyweight: "Bodyweight", sessions_per_week: "Sessions/Week",
+          };
+          shareGoalLabel = METRIC_DISPLAY[String(shareGoalParsedTarget.metric ?? "")] ?? String(shareGoalParsedTarget.metric ?? "").replace(/_/g, " ");
           if (shareIsStrength && shareBestE1rm > 0 && targetNum > 0) {
             shareGoalPct = Math.min(100, Math.round((shareBestE1rm / targetNum) * 100));
             shareShowGoalBar = true;
