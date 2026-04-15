@@ -144,10 +144,13 @@ router.post("/admin/athlete-linking/:clientId/create-login", adminOnly, async (r
     sendAdminSignupAlert({ email: user.email, role: "athlete (linked to existing profile)", timestamp: new Date() });
     res.status(201).json({ userId: user.id, email: user.email, clientId, status: "login_created" });
   } catch (e: any) {
-    if (e.code === "23505") {
+    const pgCode = e.code ?? e.cause?.code;
+    const pgDetail = e.detail ?? e.cause?.detail ?? e.cause?.message ?? e.message;
+    console.error("[create-login] DB insert failed:", { pgCode, pgDetail, clientId, email });
+    if (pgCode === "23505") {
       res.status(409).json({ error: "A user with this email already exists" });
     } else {
-      throw e;
+      res.status(500).json({ error: "Failed to create login", detail: pgDetail });
     }
   }
 });
