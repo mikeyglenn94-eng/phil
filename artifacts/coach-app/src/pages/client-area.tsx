@@ -1462,34 +1462,41 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         }
 
         default: {
-          addPhilMsg(
-            intent.message
-              ? intent.message
-              : "I didn't get that one. Try something like \"copy this week into 4 weeks +1 set\" or \"move Mon/Wed/Fri to Tue/Thu/Sun\"."
-          );
+          // Never show raw backend error text — always use a Phil-voiced message
+          addPhilMsg("I didn't catch that as a calendar command. For scheduling, try something like \"copy this week into 4 weeks\" or \"move Mon sessions to Wednesday\". Want to build a programme or session instead? Just tell me what you're working on.");
         }
       }
     } catch {
-      toast({ title: "Failed to parse command", variant: "destructive" });
+      addPhilMsg("Something went wrong processing that command. Try again or rephrase it.");
     } finally {
       setCmdParsing(false);
     }
   };
 
   // ── Unified coach input routing ──────────────────────────────────────────────
-  // Classifies a natural-language input to route it to the right backend flow.
-  // "plan"     → parse-first: call /api/coach-parse, show structured response
-  // "library"  → open the library browser pre-filled and auto-search
-  // "review"   → call coaching endpoint and show inline text answer
-  // "schedule" → default: send to calendar command parser
-  function classifyCoachIntent(input: string): "plan" | "library" | "review" | "schedule" {
-    const lower = input.toLowerCase();
-    // Copy/paste/repeat commands are always calendar (schedule) commands — check before "plan" to avoid
-    // "copy this week" being misclassified because it contains the word "week"
-    if (/\b(copy|paste|repeat|duplicate|clone|reschedule|remap|shift|move sessions)\b/.test(lower)) return "schedule";
-    if (/\b(build|create|generate|plan|make|design|programme|program|session|workout|week)\b/.test(lower)) return "plan";
+  // "plan"          → parse-first: call /api/coach-parse, Phil asks clarifying questions
+  // "library"       → open library browser pre-filled and auto-search
+  // "review"        → coaching endpoint → Phil analysis answer
+  // "conversational"→ lightweight Phil reply (greetings, affirmations, vague chat)
+  // "schedule"      → calendar command parser (copy, move, remap, delete)
+  function classifyCoachIntent(input: string): "plan" | "library" | "review" | "schedule" | "conversational" {
+    const lower = input.toLowerCase().trim();
+    // ① Calendar commands — must check first so "copy this week" doesn't hit "plan"
+    if (/\b(copy|paste|repeat|duplicate|clone|reschedule|remap|shift|move sessions|delete sessions|clear all|delete all)\b/.test(lower)) return "schedule";
+    // ② Library search
     if (/\b(find|search|browse|show me|look for|library|template|from library)\b/.test(lower)) return "library";
+    // ③ Review / analysis
     if (/\b(review|check|is this|balanced|analyse|analyze|explain|what.s missing|what am i missing)\b/.test(lower)) return "review";
+    // ④ Explicit build requests
+    if (/\b(build|create|generate|design|programme|program|session|workout)\b/.test(lower)) return "plan";
+    // ⑤ Goal statements — always route to plan so Phil asks clarifying questions
+    if (/\b(i want|want to|my goal|i need|help me|i.?d like|looking to|training for|training to|get stronger|get fitter|lose weight|lose fat|build muscle|run a|marathon|half marathon|triathlon|hyrox|5k|10k)\b/.test(lower)) return "plan";
+    // ⑥ Generic plan language without explicit build verb
+    if (/\b(plan|make|week|schedule)\b/.test(lower)) return "plan";
+    // ⑦ Greetings / short affirmations — lightweight conversational reply
+    if (/^(hi|hello|hey|thanks|thank you|great|awesome|perfect|sounds good|ok|okay|yes|yep|no|nope|sure|got it|cool|nice)[.!?]?$/.test(lower)) return "conversational";
+    // ⑧ Questions that don't fit other buckets → conversational
+    if (/\b(how do|can you|any advice|what should|should i|when should|is it|am i|what.s the best|how many)\b/.test(lower)) return "conversational";
     return "schedule";
   }
 
@@ -1602,6 +1609,25 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     if (intent === "plan") {
       setOriginalCoachInput(input);
       await callCoachParse(input);
+      return;
+    }
+
+    // ── Conversational: lightweight Phil reply (greetings, short affirmations) ─
+    if (intent === "conversational") {
+      setCmdParsing(true);
+      try {
+        const res = await fetch(`/api/clients/${clientId}/phil-chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: input, history: getRecentHistory() }),
+        });
+        const data = await res.json();
+        addPhilMsg(data.reply ?? "What would you like to work on today?");
+      } catch {
+        addPhilMsg("Something went wrong on my end. Try again or ask me something else.");
+      } finally {
+        setCmdParsing(false);
+      }
       return;
     }
 
@@ -3525,9 +3551,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
       {/* Training Tab */}
       {(isTeamMode || activeTab === "training") && (
-        <div className="relative flex h-full overflow-hidden">
-          {/* Main calendar column */}
-          <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <div className="relative flex flex-col h-full overflow-hidden">
 
           {/* Calendar toolbar */}
           <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
@@ -4041,18 +4065,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </div>
           </div>
 
-          </div>{/* end main calendar column */}
-
-          {/* ── Phil Chat Panel (desktop: 380px right) ───────────────────── */}
-          {philOpen && (
-            <div className="hidden md:flex w-[380px] shrink-0 border-l flex-col bg-background">
+          {/* ── Phil Chat Panel — bottom drawer ───────────────────────────── */}
+          <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${philOpen ? "h-[300px]" : "h-0"}`}>
+            <div className="h-[300px] flex flex-col">
               {/* Header */}
-              <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between bg-muted/30">
+              <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold select-none">P</div>
+                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
                   <div>
                     <p className="text-sm font-semibold leading-none">Phil</p>
-                    <p className="text-xs text-muted-foreground">MG Coaching</p>
+                    <p className="text-[11px] text-muted-foreground">MG Coaching</p>
                   </div>
                 </div>
                 <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
@@ -4060,15 +4082,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 </Button>
               </div>
               {/* Messages */}
-              <div ref={philScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-                {philMessages.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center mt-8">Ask Phil anything about training, plans, or scheduling.</p>
-                ) : philMessages.map(msg => (
+              <div ref={philScrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0">
+                {philMessages.length === 0 && !cmdParsing && (
+                  <p className="text-xs text-muted-foreground text-center mt-6">Ask Phil anything about training, plans, or scheduling.</p>
+                )}
+                {philMessages.map(msg => (
                   <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
                     {msg.sender === "phil" && (
                       <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
                     )}
-                    <div className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                    <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
                       <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>
                       {msg.coachParseData?.hasEnough && (
                         <Button
@@ -4096,94 +4119,27 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 )}
               </div>
               {/* Input */}
-              <div className="shrink-0 px-3 py-3 border-t">
+              <div className="shrink-0 px-3 py-2.5 border-t">
                 <div className="flex gap-2">
                   <input
                     value={philPanelInput}
                     onChange={e => setPhilPanelInput(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
                     placeholder="Message Phil…"
-                    className="flex-1 min-w-0 h-9 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="flex-1 min-w-0 h-8 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <Button
                     size="icon"
-                    className="h-9 w-9 shrink-0"
+                    className="h-8 w-8 shrink-0"
                     onClick={() => void handlePhilPanelSubmit()}
                     disabled={!philPanelInput.trim() || cmdParsing}
                   >
-                    <Send className="w-4 h-4" />
+                    <Send className="w-3.5 h-3.5" />
                   </Button>
                 </div>
               </div>
             </div>
-          )}
-
-          {/* ── Phil bottom sheet (mobile) ───────────────────────────────── */}
-          {philOpen && (
-            <div className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-background border-t rounded-t-2xl shadow-xl flex flex-col" style={{ maxHeight: "65vh" }}>
-              <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
-                  <span className="text-sm font-semibold">Phil</span>
-                </div>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
-                {philMessages.map(msg => (
-                  <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                    {msg.sender === "phil" && (
-                      <div className="w-5 h-5 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[9px] font-bold mt-0.5 select-none">P</div>
-                    )}
-                    <div className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
-                      <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>
-                      {msg.coachParseData?.hasEnough && (
-                        <Button
-                          size="sm"
-                          className="mt-2 h-7 px-3 text-xs w-full"
-                          onClick={() => { setCoachParseResult(msg.coachParseData!); handleBuildFromParse(); setPhilOpen(false); }}
-                        >
-                          Build this
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {cmdParsing && (
-                  <div className="flex gap-2 justify-start">
-                    <div className="w-5 h-5 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[9px] font-bold mt-0.5 select-none">P</div>
-                    <div className="bg-muted rounded-2xl px-3 py-2.5">
-                      <div className="flex gap-1 items-center h-4">
-                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
-                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
-                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="shrink-0 px-3 py-2 border-t">
-                <div className="flex gap-2">
-                  <input
-                    value={philPanelInput}
-                    onChange={e => setPhilPanelInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
-                    placeholder="Message Phil…"
-                    className="flex-1 min-w-0 h-9 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <Button
-                    size="icon"
-                    className="h-9 w-9 shrink-0"
-                    onClick={() => void handlePhilPanelSubmit()}
-                    disabled={!philPanelInput.trim() || cmdParsing}
-                  >
-                    <Send className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
 
         </div>
       )}

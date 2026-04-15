@@ -1,0 +1,44 @@
+Good progress — the panel is there and the chips are better. Two issues:
+
+Phil's response is still the raw error message — "User request is vague and unparseable" is backend error text leaking into the UI. Phil should never say this.
+Panel position — you want it bottom, not right side. Like a chat drawer that slides up from the bottom, similar to how iMessage or WhatsApp feels on mobile.
+
+Here's the command:
+
+Fix: Phil chat panel — move to bottom + fix conversational responses
+Part 1 — Move panel to bottom
+Move the Phil chat panel from the right side to the bottom of the screen. It should:
+
+Slide up from the bottom when activated
+Sit above the calendar, below the command bar — the calendar shrinks to accommodate it, nothing is covered
+Be roughly 300px tall on desktop, expandable
+Full width of the content area
+Phil's messages on the left with avatar, user messages on the right
+Input bar at the bottom of the panel
+Close (×) collapses it back down, calendar returns to full height
+
+Part 2 — Fix Phil's response to "I want to get stronger"
+"User request is vague and unparseable" is a raw backend error being passed directly to the UI as Phil's response. This must never happen. The intent classifier is still routing conversational messages to the calendar parser.
+Fix the intent classifier so that "I want to get stronger" is detected as conversational intent BEFORE it reaches the calendar parser. The fix from the previous command needs to actually be implemented — check that it was applied correctly.
+Phil's response to "I want to get stronger" should be:
+
+"Good goal. Let's make sure I build you the right thing. A few quick questions — how many days a week can you train? And are you in a commercial gym or working with limited equipment at home?"
+
+Phil asks one or two focused questions, waits for the answer, then offers to build the programme. He does not immediately generate anything — he gathers enough context first.
+Phil's conversational flow for goal statements:
+When a user states a goal ("I want to get stronger", "I want to run a half marathon", "I want to lose weight"):
+
+Phil acknowledges the goal in one sentence
+Phil asks 1-2 clarifying questions (days per week, equipment, timeline)
+User answers
+Phil confirms what he's going to build
+Phil generates week 1 preview (per the programme generation flow command)
+
+Phil never skips straight to generating. He always asks at least one question first so the programme is personalised.
+Never let raw error text reach the UI as Phil's response
+Add a catch-all in the Phil response handler:
+tscatch (error) {
+  // Never show raw error text to the user
+  return "Something went wrong on my end. Try again or ask me something else.";
+}
+Any unhandled error from the backend returns a Phil-voice fallback message, never a technical error string.

@@ -80,4 +80,51 @@ The client's current dashboard context is provided in each message.`;
   }
 });
 
+// ── POST /api/clients/:clientId/phil-chat ─────────────────────────────────
+// Handles conversational messages to Phil — greetings, questions, goal statements.
+// Phil responds in-character: direct, practical, coach voice.
+
+router.post("/clients/:clientId/phil-chat", async (req, res) => {
+  const { message, history } = req.body as {
+    message: string;
+    history?: { role: "user" | "assistant"; content: string }[];
+  };
+
+  if (!message?.trim()) {
+    res.status(400).json({ error: "message is required" });
+    return;
+  }
+
+  const systemPrompt = `You are Phil, the lead coach at MG Coaching. You are direct, knowledgeable, and results-driven. You speak like a real coach — concise, slightly opinionated, and practical. You never sound robotic or over-hyped.
+
+You are having a conversation with a client. Keep replies SHORT (1-3 sentences max). Be warm but efficient.
+
+If the client says something like "hi", "thanks", "great" — acknowledge briefly and prompt them to get to work.
+If the client asks a question, answer it directly and practically.
+If the client states a vague goal without enough detail, ask ONE focused clarifying question (don't ask multiple questions at once).
+Never generate a full programme here — just gather context and guide the client to the right action.
+Never say "User request is vague" or expose any technical error language to the client.`;
+
+  const msgs: { role: "user" | "assistant"; content: string }[] = [];
+  if (history?.length) {
+    for (const h of history.slice(-4)) msgs.push(h);
+  }
+  msgs.push({ role: "user", content: message });
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "system", content: systemPrompt }, ...msgs],
+      max_tokens: 120,
+      temperature: 0.6,
+    });
+
+    const reply = completion.choices[0]?.message?.content?.trim() ?? "What would you like to work on today?";
+    res.json({ reply });
+  } catch (err) {
+    console.error("[phil-chat] OpenAI error:", err);
+    res.status(500).json({ error: "Failed to generate response" });
+  }
+});
+
 export default router;
