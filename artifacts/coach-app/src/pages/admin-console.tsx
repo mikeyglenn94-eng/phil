@@ -318,6 +318,24 @@ export default function AdminConsole() {
     }
   };
 
+  const deleteClient = async (clientId: number, clientName: string, hasUser: boolean) => {
+    const msg = hasUser
+      ? `Remove "${clientName}" as a client? Their user account will remain but will no longer have a client profile.`
+      : `Delete "${clientName}"'s client record? This cannot be undone.`;
+    if (!confirm(msg)) return;
+    const r = await fetch(`${BASE}/api/admin/clients/${clientId}`, {
+      method: "DELETE",
+      headers: authHeaders(token),
+    });
+    if (r.ok) {
+      toast({ title: "Client removed" });
+      fetchAthletes();
+    } else {
+      const d = await r.json();
+      toast({ title: "Error", description: d.error, variant: "destructive" });
+    }
+  };
+
   const toggleUserIrlClient = async (userId: number, clientId: number, irlClient: boolean) => {
     const r = await fetch(`${BASE}/api/admin/clients/${clientId}/irl-settings`, {
       method: "PATCH",
@@ -641,6 +659,14 @@ export default function AdminConsole() {
                             className="border-white/20 text-white/70 hover:text-white hover:bg-white/10 text-xs"
                           >
                             {a.userId ? "Edit Login" : "Create Login"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => deleteClient(a.clientId, a.clientName, !!a.userId)}
+                            className="border-red-500/30 text-red-400/70 hover:text-red-300 hover:bg-red-500/10 text-xs"
+                          >
+                            Remove
                           </Button>
                         </div>
                       </div>

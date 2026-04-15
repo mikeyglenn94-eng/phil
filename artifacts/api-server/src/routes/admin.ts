@@ -170,4 +170,26 @@ router.patch("/admin/athlete-linking/:clientId/update-login", adminOnly, async (
   res.json({ ok: true });
 });
 
+// PATCH /api/admin/clients/:clientId/irl-settings — toggle IRL flag + clear portal password
+router.patch("/admin/clients/:clientId/irl-settings", adminOnly, async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  const { irlClient } = req.body as { irlClient: boolean };
+  const updates: Record<string, any> = { irlClient: !!irlClient };
+  if (!irlClient) updates.passwordHash = null;
+  const [client] = await db.update(clientsTable).set(updates as any).where(eq(clientsTable.id, clientId)).returning();
+  if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+  res.json({ ok: true, irlClient: client.irlClient });
+});
+
+// DELETE /api/admin/clients/:clientId — remove client record (unlinks linked user first)
+router.delete("/admin/clients/:clientId", adminOnly, async (req, res): Promise<void> => {
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId)) { res.status(400).json({ error: "Invalid clientId" }); return; }
+  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, clientId));
+  if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+  await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
+  res.json({ ok: true });
+});
+
 export default router;
