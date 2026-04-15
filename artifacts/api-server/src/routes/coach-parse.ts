@@ -175,10 +175,11 @@ planSummary rules:
 - For sessions (not programmes): use "planSummary" to describe the session structure instead (e.g. "45 min", "lower body focus", "compound-first", "5 exercises").`;
 
 router.post("/coach-parse", async (req, res) => {
-  const { input, followUpAnswer, clientContext } = req.body as {
+  const { input, followUpAnswer, clientContext, history } = req.body as {
     input: string;
     followUpAnswer?: string;
     clientContext?: { name?: string; programmes?: string[]; goals?: string };
+    history?: { role: "user" | "assistant"; content: string }[];
   };
 
   if (!input?.trim()) {
@@ -201,12 +202,18 @@ router.post("/coach-parse", async (req, res) => {
     ? `Original request: ${input}\n\nMy answer to your question: ${followUpAnswer}\n\nNow produce a complete response using all information above.`
     : input;
 
+  const msgs: { role: "user" | "assistant"; content: string }[] = [];
+  if (history?.length) {
+    for (const h of history.slice(-6)) msgs.push(h);
+  }
+  msgs.push({ role: "user", content: userContent });
+
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: PARSE_SYSTEM_PROMPT + contextBlock },
-        { role: "user", content: userContent },
+        ...msgs,
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,

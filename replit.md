@@ -22,6 +22,20 @@ Coaches can create teams, add clients as members, build shared programmes (calen
 - `team_sessions` — id, teamId, sessionData (JSONB Session), date, status, publishedAt
 - `client_team_sessions` — id, teamSessionId, clientId, sessionData, originalSessionData (immutable snapshot at publish time)
 
+## Phil Chat Panel
+
+A persistent AI coaching panel that lives alongside the training calendar:
+
+- **Toggle**: Sparkles (✨) button at the right end of the "Ask Phil" command bar input row
+- **Layout**: 380px right panel on desktop (flex-row alongside calendar); fixed bottom sheet on mobile (65vh)
+- **Conversation history**: All exchanges shown as chat bubbles — user messages right-aligned (primary colour), Phil responses left-aligned (muted) with a "P" avatar
+- **Typing indicator**: Three bouncing dots shown while waiting for AI response
+- **Message routing**: All AI responses (plan/session briefs, review answers, calendar commands) flow into Phil panel instead of inline blocks
+- **Build action**: When `coachParseData.hasEnough` is true, a "Build this" button appears on Phil's message to trigger plan/session generation
+- **State**: `philOpen`, `philMessages[]`, `philPanelInput`, `philScrollRef` in `client-area.tsx`
+- **History injection**: Last 6 messages passed as `history[]` to both `/api/coach-parse` and `/api/clients/:id/coaching`
+- **Panel input**: Secondary input at panel bottom for follow-up; routes through `handlePhilPanelSubmit` → `handleCoachInput(overrideInput)`
+
 ## Auth Architecture
 
 - **Entry**: `/` is the branded sign-in page (Athlete/Coach toggle, email + password)

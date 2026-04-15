@@ -1,0 +1,48 @@
+Feature: Phil chat panel — persistent conversation interface
+Replace the current toast/popup system entirely. Phil needs a proper chat interface that looks and behaves like a conversation — similar to ChatGPT or this interface.
+The panel:
+A slide-in panel from the right side of the screen (or bottom on mobile), roughly 380px wide on desktop. It sits alongside the calendar, not over it. Has a header with Phil's name and avatar (use the Phil mascot image). Has a close button (×) to collapse it back.
+The panel opens automatically when:
+
+The user sends any message in the command bar
+Phil needs to respond to anything
+
+The panel stays open until the user closes it. It does not auto-dismiss.
+Inside the panel — chat thread:
+Messages stack up in a conversation thread exactly like a chat app:
+
+User messages appear on the right, in a coloured bubble
+Phil's messages appear on the left, with his small avatar next to them
+Messages persist for the session — scrolling back up shows the full conversation history
+New messages appear at the bottom, panel auto-scrolls down
+
+Message input:
+At the bottom of the panel, a secondary input field so the user can continue the conversation directly inside the panel without going back to the command bar. The command bar at the top still works too — both feed into the same Phil conversation thread.
+Phil's responses in the panel:
+When Phil makes a calendar change, he confirms it in the thread:
+
+"Done. Added a strength session on Monday. Don't skip it."
+"Moved Thursday's session to Friday. You're welcome."
+
+When Phil answers a question or responds conversationally, the full response appears as a chat message in the thread.
+When Phil generates a programme preview, the preview cards appear inline in the chat thread — not as a separate modal.
+Conversation history:
+Store the conversation history in React state for the session. It does not need to persist across sessions for now — a fresh login starts a fresh conversation. This avoids any DB changes.
+Phil's AI calls should include the last 6 messages of conversation history as context so he remembers what was just discussed:
+tsconst recentHistory = conversationHistory.slice(-6).map(msg => ({
+  role: msg.sender === 'user' ? 'user' : 'assistant',
+  content: msg.text
+}));
+Replace all existing toasts and popups for Phil responses:
+
+Red error toast → Phil message in the thread in character
+Success toast for calendar actions → Phil confirmation message in the thread
+"Couldn't understand that command" → Phil conversational response in the thread
+
+The only toasts that remain are purely technical errors (e.g. failed to save to database — these are system errors not Phil responses).
+Do not change:
+
+The command bar at the top — it still works as the primary input
+Any calendar or programme logic
+Any coach or admin facing UI
+The intent classifier logic (already being updated in the previous command)

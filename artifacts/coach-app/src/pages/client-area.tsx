@@ -782,6 +782,37 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const [cmdParsing, setCmdParsing] = useState(false);
   const [coachInlineResponse, setCoachInlineResponse] = useState<string | null>(null);
 
+  // ── Phil Chat Panel ──────────────────────────────────────────────────────
+  interface PhilMessage {
+    id: string;
+    sender: "user" | "phil";
+    text: string;
+    ts: Date;
+    coachParseData?: CoachParseResult;
+  }
+  const [philOpen, setPhilOpen] = useState(false);
+  const [philMessages, setPhilMessages] = useState<PhilMessage[]>([]);
+  const [philPanelInput, setPhilPanelInput] = useState("");
+  const philScrollRef = useRef<HTMLDivElement>(null);
+
+  const addPhilMsg = (text: string, extra?: Partial<PhilMessage>) =>
+    setPhilMessages(prev => [...prev, { id: crypto.randomUUID(), sender: "phil", text, ts: new Date(), ...extra }]);
+
+  const addUserMsg = (text: string) =>
+    setPhilMessages(prev => [...prev, { id: crypto.randomUUID(), sender: "user", text, ts: new Date() }]);
+
+  const getRecentHistory = () =>
+    philMessages.slice(-6).map(m => ({
+      role: (m.sender === "user" ? "user" : "assistant") as "user" | "assistant",
+      content: m.text,
+    }));
+
+  useEffect(() => {
+    if (philScrollRef.current) {
+      philScrollRef.current.scrollTop = philScrollRef.current.scrollHeight;
+    }
+  }, [philMessages]);
+
   // ── Coach parse result (parse-first plan/session flow) ───────────────────
   interface CoachParseResult {
     requestType: "programme" | "session";
@@ -1300,7 +1331,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setCmdSaving(true);
     try {
       await applySnapshot(pendingCommand.changes.map(c => ({ id: c.programmeId, sessions: c.sessions })));
-      toast({ title: "Done!", description: pendingCommand.description });
+      addPhilMsg(`Done — ${pendingCommand.description}.`);
       setPendingCommand(null);
       setCmdInput("");
     } catch {
@@ -1322,7 +1353,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         await deleteProgrammeMutation.mutateAsync({ id: pendingBulkDelete.programmeId });
       }
       await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
-      toast({ title: "Sessions deleted", description: `${pendingBulkDelete.sessionCount} session${pendingBulkDelete.sessionCount !== 1 ? "s" : ""} removed from the calendar.` });
+      const count = pendingBulkDelete.sessionCount;
+      addPhilMsg(`${count} session${count !== 1 ? "s" : ""} removed from the calendar.`);
       setPendingBulkDelete(null);
       setCmdInput("");
     } catch {
@@ -1354,6 +1386,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           if (intent.scope === "all") {
             const totalSessions = clientProgrammes.reduce((acc, p) => acc + (p.sessions?.length ?? 0), 0);
             setPendingBulkDelete({ scope: "all", sessionCount: totalSessions });
+            addPhilMsg(`I'll clear all ${totalSessions} session${totalSessions !== 1 ? "s" : ""} from the calendar. Confirm in the bar below.`);
           } else {
             const q = (intent.programmeQuery ?? "").toLowerCase();
             const prog =
@@ -1361,8 +1394,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               clientProgrammes.find(p => q.split(" ").some((w: string) => w.length > 2 && p.title.toLowerCase().includes(w)));
             if (prog) {
               setPendingBulkDelete({ scope: "programme", programmeId: prog.id, programmeName: prog.title, sessionCount: prog.sessions?.length ?? 0 });
+              addPhilMsg(`I'll delete all ${prog.sessions?.length ?? 0} sessions from "${prog.title}". Confirm in the bar below.`);
             } else {
-              toast({ title: `Programme not found: "${intent.programmeQuery}"`, variant: "destructive" });
+              addPhilMsg(`I couldn't find a programme matching "${intent.programmeQuery}". Try using the exact programme name.`);
             }
           }
           break;
@@ -1373,17 +1407,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             .map((d: string) => DAY_WORDS[d.toLowerCase()] ?? DAY_WORDS[d.toLowerCase().replace(/s$/, "")])
             .filter((d: number | undefined) => d !== undefined);
           if (!targetDays.length) {
-            toast({ title: "Couldn't parse target days", variant: "destructive" }); break;
+            addPhilMsg("I couldn't work out which days you want — try saying something like \"move to Mon, Wed, Fri\"."); break;
           }
           const q = (intent.programmeQuery ?? "").toLowerCase();
           const prog =
             clientProgrammes.find(p => p.title.toLowerCase().includes(q)) ??
             clientProgrammes.find(p => q.split(" ").some((w: string) => w.length > 2 && p.title.toLowerCase().includes(w)));
           if (!prog) {
-            toast({ title: `Programme not found: "${intent.programmeQuery}"`, variant: "destructive" }); break;
+            addPhilMsg(`I couldn't find a programme matching "${intent.programmeQuery}". Try using the exact name.`); break;
           }
           const newSessions = remapSessionDays(prog.sessions as Session[], targetDays);
           setPendingReschedule({ programmeId: prog.id, programmeName: prog.title, sessions: newSessions, dayLabels: targetDays.map(d => DAY_NAMES[d]) });
+          addPhilMsg(`I'll move "${prog.title}" to ${targetDays.map(d => DAY_NAMES[d]).join(" / ")}. Confirm in the bar below.`);
           break;
         }
 
@@ -1395,15 +1430,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             .map((d: string) => DAY_WORDS[d.toLowerCase()] ?? DAY_WORDS[d.toLowerCase().replace(/s$/, "")])
             .filter((d: number | undefined) => d !== undefined);
           if (!fromDays.length || fromDays.length !== toDays.length) {
-            toast({ title: "Couldn't match from/to days — lists must be the same length", variant: "destructive" }); break;
+            addPhilMsg("The from/to day lists need to match up — e.g. \"move Mon/Wed to Tue/Thu\"."); break;
           }
           const changes = dayRemapAll(fromDays, toDays);
           if (!changes.length) {
-            toast({ title: "No sessions found on those days", variant: "destructive" }); break;
+            addPhilMsg("I didn't find any sessions on those days to move."); break;
           }
           const fromLabels = fromDays.map(d => DAY_NAMES[d]).join(" / ");
           const toLabels = toDays.map(d => DAY_NAMES[d]).join(" / ");
           setPendingCommand({ description: `Move all sessions: ${fromLabels} → ${toLabels}`, changes });
+          addPhilMsg(`Moving all ${fromLabels} sessions to ${toLabels}. Confirm in the bar below.`);
           break;
         }
 
@@ -1411,7 +1447,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           const { sourceWeekOffset = 0, targetWeeks = 1, setsIncrement = 0, repsMultiplier = 1.0 } = intent;
           const changes = copyWithProgression(sourceWeekOffset, targetWeeks, setsIncrement, repsMultiplier);
           if (!changes.length) {
-            toast({ title: "No sessions found in the source week", description: "Make sure there are sessions in the week you want to copy from.", variant: "destructive" }); break;
+            addPhilMsg("No sessions found in the source week — make sure there are sessions in the week you're copying from."); break;
           }
           const parts: string[] = [];
           if (setsIncrement > 0) parts.push(`+${setsIncrement} set${setsIncrement !== 1 ? "s" : ""}/week`);
@@ -1419,20 +1455,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           if (repsMultiplier !== 1.0) parts.push(`reps ×${repsMultiplier.toFixed(2).replace(/\.?0+$/, "")}/week`);
           const progression = parts.length ? ` (${parts.join(", ")})` : "";
           const totalNew = changes.reduce((acc, c) => acc + c.sessions.length, 0);
-          setPendingCommand({
-            description: `Copy sessions into ${targetWeeks} week${targetWeeks !== 1 ? "s" : ""} with progressive overload${progression}`,
-            changes,
-          });
-          toast({ title: `Ready to add ${totalNew} sessions`, description: `Confirm below to apply.` });
+          const desc = `Copy sessions into ${targetWeeks} week${targetWeeks !== 1 ? "s" : ""} with progressive overload${progression}`;
+          setPendingCommand({ description: desc, changes });
+          addPhilMsg(`Adding ${totalNew} sessions across ${targetWeeks} week${targetWeeks !== 1 ? "s" : ""}${progression}. Confirm in the bar below.`);
           break;
         }
 
         default: {
-          toast({
-            title: "Couldn't understand that command",
-            description: intent.message ?? 'Try: "copy this week into 4 weeks +1 set −10% reps" or "move Mon/Wed/Fri to Tue/Thu/Sun"',
-            variant: "destructive",
-          });
+          addPhilMsg(
+            intent.message
+              ? intent.message
+              : "I didn't get that one. Try something like \"copy this week into 4 weeks +1 set\" or \"move Mon/Wed/Fri to Tue/Thu/Sun\"."
+          );
         }
       }
     } catch {
@@ -1473,12 +1507,23 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             name: client?.name,
             programmes: (clientProgrammes ?? []).map(p => p.title),
           },
+          history: getRecentHistory(),
         }),
       });
       const data = await res.json();
       setCoachParseResult(data);
+      // Build Phil message text from parse result
+      let philText = data.acknowledgement ?? "";
+      if (data.hasEnough && (data.planSummary as string[] | undefined)?.length) {
+        philText += "\n\nHere's what I'm going to build:\n" +
+          (data.planSummary as string[]).map((l: string) => `• ${l}`).join("\n");
+        if (data.intentNote) philText += `\n\n${data.intentNote}`;
+      } else if (!data.hasEnough && data.followUpQuestion) {
+        philText += `\n\n${data.followUpQuestion}`;
+      }
+      addPhilMsg(philText, { coachParseData: data });
     } catch {
-      toast({ title: "Couldn't reach the coach — try again", variant: "destructive" });
+      addPhilMsg("Couldn't reach the coaching service. Check your connection and try again.");
     } finally {
       setCmdParsing(false);
     }
@@ -1534,23 +1579,28 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   // ── Handle user's answer to a coach follow-up question ──────────────────
   const handleCoachFollowUp = async () => {
     if (!coachFollowUpInput.trim()) return;
+    addUserMsg(coachFollowUpInput.trim());
     await callCoachParse(originalCoachInput, coachFollowUpInput);
     setCoachFollowUpInput("");
   };
 
   // ── Main entry point: dispatch based on intent ───────────────────────────
-  const handleCoachInput = async () => {
-    const input = cmdInput.trim();
+  const handleCoachInput = async (overrideInput?: string) => {
+    const input = (overrideInput !== undefined ? overrideInput : cmdInput).trim();
     if (!input) return;
+
+    // Log user message + open Phil panel
+    addUserMsg(input);
+    setPhilOpen(true);
+    if (overrideInput === undefined) setCmdInput("");
     setCoachInlineResponse(null);
     setCoachParseResult(null);
 
     const intent = classifyCoachIntent(input);
 
-    // ── Plan / Session: parse-first → structured response panel ─────────────
+    // ── Plan / Session: parse-first → Phil chat response ─────────────────────
     if (intent === "plan") {
       setOriginalCoachInput(input);
-      setCmdInput("");
       await callCoachParse(input);
       return;
     }
@@ -1561,12 +1611,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       setBrainResults([]);
       setBrainIntent(null);
       setBrainOpen(true);
-      setCmdInput("");
       setTimeout(() => void searchBrain(input), 150);
+      addPhilMsg("Opening the library for you — have a browse and tap anything you want to add.");
       return;
     }
 
-    // ── Review: coaching endpoint → inline text answer ────────────────────────
+    // ── Review: coaching endpoint → Phil chat message ────────────────────────
     if (intent === "review") {
       setCmdParsing(true);
       try {
@@ -1576,13 +1626,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         const res = await fetch(`/api/clients/${clientId}/coaching`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: input, context }),
+          body: JSON.stringify({ question: input, context, history: getRecentHistory() }),
         });
         const data = await res.json();
-        setCoachInlineResponse(data.answer ?? "I couldn't analyse that — try asking something more specific.");
-        setCmdInput("");
+        addPhilMsg(data.answer ?? "I couldn't analyse that — try asking something more specific.");
       } catch {
-        setCoachInlineResponse("Couldn't reach the coaching service. Check your connection.");
+        addPhilMsg("Couldn't reach the coaching service. Check your connection.");
       } finally {
         setCmdParsing(false);
       }
@@ -1593,12 +1642,26 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     await handleRescheduleCmd();
   };
 
+  // ── Phil panel secondary input submit ────────────────────────────────────
+  const handlePhilPanelSubmit = async () => {
+    const input = philPanelInput.trim();
+    if (!input) return;
+    setPhilPanelInput("");
+    // If awaiting a follow-up answer from coach-parse, route as follow-up
+    if (coachParseResult && !coachParseResult.hasEnough) {
+      addUserMsg(input);
+      await callCoachParse(originalCoachInput, input);
+      return;
+    }
+    await handleCoachInput(input);
+  };
+
   const applyReschedule = async () => {
     if (!pendingReschedule) return;
     setCmdSaving(true);
     try {
       await applySnapshot([{ id: pendingReschedule.programmeId, sessions: pendingReschedule.sessions }]);
-      toast({ title: "Programme rescheduled", description: `${pendingReschedule.programmeName} → ${pendingReschedule.dayLabels.join(" / ")}` });
+      addPhilMsg(`"${pendingReschedule.programmeName}" rescheduled to ${pendingReschedule.dayLabels.join(" / ")}.`);
       setPendingReschedule(null);
       setCmdInput("");
     } catch {
@@ -3462,7 +3525,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
       {/* Training Tab */}
       {(isTeamMode || activeTab === "training") && (
-        <div className="relative flex flex-col h-full overflow-hidden">
+        <div className="relative flex h-full overflow-hidden">
+          {/* Main calendar column */}
+          <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
           {/* Calendar toolbar */}
           <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
@@ -3534,7 +3599,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           <div className="shrink-0 px-4 pt-3 pb-2 border-b bg-background flex flex-col gap-2">
             {/* Empty-calendar nudge — shown only when no sessions exist and bar is idle */}
             {(() => {
-              const isBarIdle = !cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && !coachInlineResponse && !coachParseResult;
+              const isBarIdle = !cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand;
               const totalSessions = (clientProgrammes ?? []).flatMap(p => p.sessions as Session[]).length;
               if (!isBarIdle || totalSessions > 0) return null;
               return (
@@ -3544,7 +3609,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               );
             })()}
             {/* Quick action chips — shown when idle */}
-            {!cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && !coachInlineResponse && !coachParseResult && (
+            {!cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && (
               <div className="flex flex-wrap gap-1.5">
                 {(["Build my plan", "Add a session", "What should I work on?", "Review my week"] as const).map(chip => (
                   <button
@@ -3563,11 +3628,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               <input
                 type="text"
                 value={cmdListening ? (cmdInterim || cmdInput) : cmdInput}
-                onChange={e => {
-                  setCmdInput(e.target.value);
-                  setCoachInlineResponse(null);
-                  if (coachParseResult) { setCoachParseResult(null); setCoachFollowUpInput(""); }
-                }}
+                onChange={e => setCmdInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") void handleCoachInput(); }}
                 placeholder="Ask Phil — plan, adjust, progress or review your training…"
                 disabled={cmdListening || cmdParsing}
@@ -3595,154 +3656,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   : <ChevronRight className="w-3.5 h-3.5" />
                 }
               </Button>
+              <button
+                type="button"
+                onClick={() => setPhilOpen(v => !v)}
+                title={philOpen ? "Close Phil" : "Open Phil chat"}
+                className={`p-2 rounded-xl transition-colors shrink-0 ${philOpen ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            {/* ── Structured coach response (parse-first plan/session flow) ─── */}
-            {coachParseResult && (
-              <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 px-3.5 py-3">
-                {/* Title row: acknowledgement + dismiss */}
-                <div className="flex items-start gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                  <p className="text-[13px] font-semibold text-foreground flex-1 leading-snug">{coachParseResult.acknowledgement}</p>
-                  <button
-                    onClick={() => { setCoachParseResult(null); setCoachFollowUpInput(""); }}
-                    className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Structured plan preview — shown when coach has enough info */}
-                {coachParseResult.hasEnough && !!coachParseResult.planSummary?.length && (
-                  <div className="flex flex-col gap-2 ml-5">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70 font-medium">Here's what I'm going to build</p>
-                    <ul className="flex flex-col gap-1">
-                      {coachParseResult.planSummary.map((line, i) => (
-                        <li key={i} className="flex items-start gap-1.5 text-[12.5px] text-foreground/80">
-                          <span className="text-primary/50 mt-px shrink-0 select-none font-bold">·</span>
-                          <span>{line}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    {coachParseResult.intentNote && (
-                      <p className="text-[11.5px] text-muted-foreground italic mt-0.5">{coachParseResult.intentNote}</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Fallback: assumptions list if no planSummary returned */}
-                {coachParseResult.hasEnough && !coachParseResult.planSummary?.length && !!coachParseResult.assumptions?.length && (
-                  <ul className="ml-5 space-y-0.5">
-                    {coachParseResult.assumptions.map((a, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-[12px] text-muted-foreground">
-                        <span className="text-primary/60 mt-0.5 shrink-0 font-bold">·</span>
-                        <span>{a}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {/* Follow-up question — shown when the coach needs more info */}
-                {!coachParseResult.hasEnough && coachParseResult.followUpQuestion && (
-                  <div className="ml-5 flex flex-col gap-2">
-                    <p className="text-[13px] font-medium text-foreground">{coachParseResult.followUpQuestion}</p>
-                    <input
-                      type="text"
-                      value={coachFollowUpInput}
-                      onChange={e => setCoachFollowUpInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") void handleCoachFollowUp(); }}
-                      placeholder="Your answer…"
-                      autoFocus
-                      className="text-sm bg-background border rounded-lg px-3 py-1.5 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
-                    />
-                  </div>
-                )}
-
-                {/* Action row */}
-                <div className="flex items-center gap-2 ml-5">
-                  {coachParseResult.hasEnough ? (
-                    <>
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs rounded-lg px-3 gap-1.5"
-                        onClick={handleBuildFromParse}
-                      >
-                        <Sparkles className="w-3 h-3" />
-                        {coachParseResult.requestType === "session" ? "Build Session" : "Build Plan"}
-                      </Button>
-                      <button
-                        onClick={() => {
-                          const brief = coachParseResult.suggestedBrief ?? originalCoachInput;
-                          const isSession = coachParseResult.requestType === "session";
-                          if (isSession) {
-                            // For sessions: pre-fill form so user can adjust then manually click Generate
-                            setQuickAddDesc(brief);
-                            setQuickAddType(inferSessionTypeFromBrief(brief));
-                            setQuickAddName("");
-                            setQuickAddError("");
-                            setParsedAiSession(null);
-                            setQuickAddWodOptions(null);
-                          } else {
-                            setDescribeText(brief);
-                          }
-                          setAiMode(isSession ? "session" : "programme");
-                          setBuildMode("describe");
-                          setGeneratedPreview(null);
-                          setAssignDialogOpen(true);
-                          setCoachParseResult(null);
-                          setCoachFollowUpInput("");
-                        }}
-                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Adjust before building
-                      </button>
-                    </>
-                  ) : (
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs rounded-lg px-3"
-                      onClick={() => void handleCoachFollowUp()}
-                      disabled={!coachFollowUpInput.trim() || cmdParsing}
-                    >
-                      {cmdParsing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                      Continue
-                    </Button>
-                  )}
-                  <button
-                    onClick={() => { setCoachParseResult(null); setCoachFollowUpInput(""); }}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Inline coach review response (structured bullet output from coaching endpoint) */}
-            {coachInlineResponse && (
-              <div className="flex items-start gap-2.5 bg-muted/50 border rounded-xl px-3.5 py-3">
-                <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                  {coachInlineResponse.split("\n").map((line, i) => {
-                    const trimmed = line.trim();
-                    if (!trimmed) return <div key={i} className="h-1.5" />;
-                    const isBullet = trimmed.startsWith("- ");
-                    const isHeader = !isBullet && trimmed.endsWith(":");
-                    return (
-                      <div key={i} className={`flex items-start gap-1.5 ${isBullet ? "ml-2" : ""}`}>
-                        {isBullet && <span className="text-primary/60 mt-px shrink-0 select-none">·</span>}
-                        <span className={`text-[13px] leading-snug ${isHeader ? "font-semibold text-foreground" : isBullet ? "text-foreground/85" : "text-foreground"}`}>
-                          {isBullet ? trimmed.slice(2) : trimmed}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button onClick={() => setCoachInlineResponse(null)} className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
             {pendingReschedule && (
               <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 <p className="text-xs text-amber-800 leading-snug flex-1">
@@ -4117,6 +4040,150 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               ))}
             </div>
           </div>
+
+          </div>{/* end main calendar column */}
+
+          {/* ── Phil Chat Panel (desktop: 380px right) ───────────────────── */}
+          {philOpen && (
+            <div className="hidden md:flex w-[380px] shrink-0 border-l flex-col bg-background">
+              {/* Header */}
+              <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold select-none">P</div>
+                  <div>
+                    <p className="text-sm font-semibold leading-none">Phil</p>
+                    <p className="text-xs text-muted-foreground">MG Coaching</p>
+                  </div>
+                </div>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              {/* Messages */}
+              <div ref={philScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                {philMessages.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center mt-8">Ask Phil anything about training, plans, or scheduling.</p>
+                ) : philMessages.map(msg => (
+                  <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.sender === "phil" && (
+                      <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
+                    )}
+                    <div className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                      <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>
+                      {msg.coachParseData?.hasEnough && (
+                        <Button
+                          size="sm"
+                          className="mt-2 h-7 px-3 text-xs w-full"
+                          onClick={() => { setCoachParseResult(msg.coachParseData!); handleBuildFromParse(); }}
+                        >
+                          Build this
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {cmdParsing && (
+                  <div className="flex gap-2 justify-start">
+                    <div className="w-6 h-6 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] font-bold mt-0.5 select-none">P</div>
+                    <div className="bg-muted rounded-2xl px-3 py-2.5">
+                      <div className="flex gap-1 items-center h-4">
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Input */}
+              <div className="shrink-0 px-3 py-3 border-t">
+                <div className="flex gap-2">
+                  <input
+                    value={philPanelInput}
+                    onChange={e => setPhilPanelInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
+                    placeholder="Message Phil…"
+                    className="flex-1 min-w-0 h-9 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <Button
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => void handlePhilPanelSubmit()}
+                    disabled={!philPanelInput.trim() || cmdParsing}
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Phil bottom sheet (mobile) ───────────────────────────────── */}
+          {philOpen && (
+            <div className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-background border-t rounded-t-2xl shadow-xl flex flex-col" style={{ maxHeight: "65vh" }}>
+              <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold select-none">P</div>
+                  <span className="text-sm font-semibold">Phil</span>
+                </div>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+                {philMessages.map(msg => (
+                  <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.sender === "phil" && (
+                      <div className="w-5 h-5 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[9px] font-bold mt-0.5 select-none">P</div>
+                    )}
+                    <div className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                      <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>
+                      {msg.coachParseData?.hasEnough && (
+                        <Button
+                          size="sm"
+                          className="mt-2 h-7 px-3 text-xs w-full"
+                          onClick={() => { setCoachParseResult(msg.coachParseData!); handleBuildFromParse(); setPhilOpen(false); }}
+                        >
+                          Build this
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {cmdParsing && (
+                  <div className="flex gap-2 justify-start">
+                    <div className="w-5 h-5 shrink-0 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[9px] font-bold mt-0.5 select-none">P</div>
+                    <div className="bg-muted rounded-2xl px-3 py-2.5">
+                      <div className="flex gap-1 items-center h-4">
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="shrink-0 px-3 py-2 border-t">
+                <div className="flex gap-2">
+                  <input
+                    value={philPanelInput}
+                    onChange={e => setPhilPanelInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
+                    placeholder="Message Phil…"
+                    className="flex-1 min-w-0 h-9 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <Button
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => void handlePhilPanelSubmit()}
+                    disabled={!philPanelInput.trim() || cmdParsing}
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       )}
