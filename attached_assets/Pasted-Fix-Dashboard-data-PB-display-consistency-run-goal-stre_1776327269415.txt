@@ -1,0 +1,90 @@
+Fix: Dashboard data, PB display, consistency, run goal, strength records consolidation
+Part 1 — Run goal percentage fix
+The current formula uses raw ratio which produces 0% when no improvement has been logged yet. Replace with gap-closed calculation using the most relevant baseline:
+tsfunction getRunGoalPercentage(goal, allTimePB, currentEstimate) {
+  // Use the more recent/relevant baseline
+  // If current estimate exists and is worse than all-time PB, use estimate as baseline
+  // (accounts for injury comebacks, time away from training)
+  const baseline = currentEstimate ?? allTimePB;
+  if (!baseline || !goal.target) return null;
+  
+  // For run times, lower is better
+  // % = gap closed from baseline toward target
+  const totalGap = baseline - goal.target; // e.g. 97:00 - 90:00 = 7 mins
+  const currentGap = (currentEstimate ?? baseline) - goal.target;
+  const pct = Math.round(((totalGap - currentGap) / totalGap) * 100);
+  
+  return Math.max(0, Math.min(100, pct));
+}
+If no improvement has been logged yet, show "Starting point set" instead of 0%. Never show 0% as a percentage — it implies no progress has been made when really it just means they haven't logged enough yet.
+Part 2 — PB display: all-time vs current estimate
+For each performance metric (Squat, Bench, Deadlift, 5K, Half Marathon etc) show two values side by side:
+SQUAT
+All-time PB: 210kg
+Current est: 101kg  😟
+BENCH  
+All-time PB: 53kg
+Current est: 58kg  🟢 Above PB
+Rules:
+
+All-time PB = highest value ever logged manually or from a session (for strength) / fastest time ever (for runs)
+Current estimate = calculated from recent sessions (last 8 weeks) using Epley formula for strength, Riegel for runs
+If current estimate is above all-time PB: show in green with a note "Above PB" — this is a new PB territory, call it out
+If current estimate is below all-time PB: show with 😟 emoji — no text needed, the gap is obvious
+If no all-time PB exists: show only current estimate, label it "Current est."
+If no current estimate exists (not enough recent data): show only all-time PB, label it "All-time PB"
+Remove "Baseline set" label entirely — it means nothing to a user
+
+Part 3 — Consistency count fix
+Investigate why 5/5 is showing when there are 6 sessions in the week. Most likely cause: one session was added manually after the week started and isn't being counted as a "planned" session, only as a completed one.
+Fix the planned session count to include ALL sessions on the calendar for that week regardless of when they were added — not just sessions that existed at the start of the week. A session is planned if it exists on the calendar. A session is completed if it has been logged (at least one set logged, or session marked complete).
+Part 4 — "This week" deficit — show pace vs last week at same point
+Replace the current red deficit display with a contextual comparison:
+Instead of showing the full week deficit (which is misleading on Monday):
+DISTANCE RUN
+23.0 km
+5.9 km  28.9 km last wk
+Show where you were at this same day last week:
+DISTANCE RUN
+23.0 km this week
+By this point last week: 20.1 km  +2.9km ahead
+VOLUME LIFTED
+7.8t this week
+By this point last week: 10.8t  -3.0t behind
+
+Ahead = green
+Behind = red
+"By this point last week" calculated as: sum of all activity up to and including the equivalent day of last week (e.g. if today is Wednesday, compare to Mon+Tue+Wed of last week)
+Never show a full week comparison mid-week — it's always same-day-of-week comparison
+
+Part 5 — Strength Records and Edit Dashboard consolidation
+Remove the separate "Strength Records" section from the dashboard entirely. It duplicates what's in Edit Dashboard.
+Consolidate into one unified system under Edit Dashboard "YOUR CURRENT PBs":
+The PB section in Edit Dashboard becomes the single place to:
+
+View all tracked lifts and their all-time PBs
+Enter or update manual PBs
+Add custom lifts (+ Add lift button)
+Hide lifts you don't care about (toggle per lift)
+See current estimate alongside all-time PB
+
+On the dashboard itself, the PERFORMANCE section shows only the lifts the user has chosen to show (not hidden). Maximum 4 shown by default — user controls which ones via Edit Dashboard. If they hide Deadlift and Snatch, those don't appear. If they add a custom lift and mark it as shown, it appears.
+PERFORMANCE
+[Shows only user's selected lifts, max 4 visible, 
+ controlled entirely from Edit Dashboard]
+The "+ Add lift" and hide/show toggles live only in Edit Dashboard. Not on the dashboard itself.
+Part 6 — Remove repetition between Performance cards and Edit Dashboard PBs
+Currently the same data (Squat, Bench, Deadlift, 5K) appears in both places in different formats. Unify the data source:
+
+One clientLifts table as the source of truth for all lifts
+Dashboard performance cards read from this table
+Edit Dashboard PB inputs write to this table
+All-time PB, current estimate, and manual entry all stored here
+No duplication, no separate tables for the same data
+
+Do not change:
+
+The fitness score calculation
+Any calendar or programme logic
+Phil's context or responses
+Any coach or admin UI

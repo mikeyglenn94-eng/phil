@@ -55,6 +55,8 @@ export interface AnalyticsData {
     halfMarathonSeconds: number | null; marathonSeconds: number | null;
     setManually: boolean;
   } | null;
+  allTimeStrength?: { squat: number | null; bench: number | null; deadlift: number | null } | null;
+  allTimeEst5K?: string | null;
 }
 
 // ── Preferences ───────────────────────────────────────────────────
@@ -483,6 +485,55 @@ function StatCard({
           {delta}
           {sub && <span className="text-[11px] text-muted-foreground">{sub}</span>}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Perf card (all-time PB + current estimate) ───────────────────
+
+function PerfCard({
+  title, icon, allTimePB, currentEst, isRunning = false, className = "",
+}: {
+  title: string; icon: React.ReactNode;
+  allTimePB: string | null; currentEst: string | null;
+  isRunning?: boolean; className?: string;
+}) {
+  const hasBoth = allTimePB !== null && currentEst !== null;
+  let isAbovePB = false;
+  if (hasBoth) {
+    if (isRunning) {
+      const currS = paceToSeconds(currentEst!);
+      const pbS   = paceToSeconds(allTimePB!);
+      isAbovePB = currS !== null && pbS !== null && currS < pbS;
+    } else {
+      const currN = parseFloat(currentEst!);
+      const pbN   = parseFloat(allTimePB!);
+      isAbovePB = !isNaN(currN) && !isNaN(pbN) && currN > pbN;
+    }
+  }
+  return (
+    <div className={`bg-card border rounded-2xl px-4 py-3.5 flex flex-col gap-1.5 ${className}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{title}</span>
+        <span className="text-muted-foreground/50">{icon}</span>
+      </div>
+      {allTimePB !== null && (
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground">All-time PB</span>
+          <span className="text-sm font-semibold tabular-nums">{allTimePB}</span>
+        </div>
+      )}
+      {currentEst !== null && (
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground">Current est.</span>
+          <span className={`text-sm font-semibold tabular-nums ${hasBoth && isAbovePB ? "text-emerald-600" : ""}`}>
+            {currentEst}{hasBoth && (isAbovePB ? " ↑ PB" : " 😟")}
+          </span>
+        </div>
+      )}
+      {allTimePB === null && currentEst === null && (
+        <span className="text-sm text-muted-foreground font-normal">No data yet</span>
       )}
     </div>
   );
@@ -984,7 +1035,6 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
 
   // ── 1RM Tracker state & handlers ──────────────────────────────
   const [clientLifts, setClientLifts] = useState<ClientLiftWithRM[]>([]);
-  const [liftSectionOpen, setLiftSectionOpen] = useState(false);
   const [expandedLiftId, setExpandedLiftId] = useState<number | null>(null);
   const [liftLogInputs, setLiftLogInputs] = useState<Record<number, string>>({});
   const [liftLogSaving, setLiftLogSaving] = useState<Record<number, boolean>>({});
@@ -1215,6 +1265,13 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
   const thisMonthData = byMonth.find(m => m.month === thisMonthStr);
   const lastMonthData = byMonth.find(m => m.month === lastMonthStr);
 
+  // "By this point last week" — sessions from last week up to the same day of the week as today
+  const daysFromMon = dow === 0 ? 6 : dow - 1; // 0=Mon, 6=Sun
+  const lastWeekSameDayStr = new Date(lastWkDate.getTime() + daysFromMon * 86400000).toISOString().slice(0, 10);
+  const lastWeekByNow = (analytics.sessions ?? [])
+    .filter(s => s.date >= lastWkStr && s.date <= lastWeekSameDayStr)
+    .reduce((acc, s) => ({ distance: acc.distance + s.totalDistance, volume: acc.volume + s.totalVolume }), { distance: 0, volume: 0 });
+
   // Nutrition scoring
   const nutritionStats = computeNutritionStats(nutritionLogs, calorieTarget ?? null, nutritionMode, proteinTarget ?? null);
   const hasNutritionData = nutritionLogs.length > 0;
@@ -1299,7 +1356,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
         type ProgressItem = {
           key: string; icon: string; label: string; targetStr: string; targetDate: string | null;
         } & (
-          | { hasData: true; pct: number; currentLabel: string; subLabel: string; weeksEst: number | null; tight: boolean }
+          | { hasData: true; pct: number; noProgress: boolean; currentLabel: string; subLabel: string; weeksEst: number | null; tight: boolean }
           | { hasData: false; nudge: string }
         );
 
@@ -1347,7 +1404,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                 subLabel = `Based on your PB. Log ${liftShort[t.metric]} sessions to track progress.`;
               }
 
-              items.push({ key: `${t.metric}_${goal.id}`, icon: "🏋️", label, targetStr: `${targetNum}kg`, targetDate, hasData: true, pct, currentLabel: `${curr}kg`, subLabel, weeksEst, tight });
+              items.push({ key: `${t.metric}_${goal.id}`, icon: "🏋️", label, targetStr: `${targetNum}kg`, targetDate, hasData: true, pct, noProgress: false, currentLabel: `${curr}kg`, subLabel, weeksEst, tight });
             }
 
             // ── Run goals ────────────────────────────────────────────────
@@ -1392,6 +1449,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
               } else if (baselineSecs > targetSecs) {
                 pct = Math.max(0, Math.min(100, Math.round(((baselineSecs - currSecs) / (baselineSecs - targetSecs)) * 100)));
               }
+              const noProgress = pct === 0 && currSecs > targetSecs;
 
               const cLabel = t.metric === "marathon" ? secsToHmmss(currSecs) : secsToMmss(currSecs);
 
@@ -1412,7 +1470,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                 subLabel = "Based on your PB. Log runs of 3km+ to track progress.";
               }
 
-              items.push({ key: `${t.metric}_${goal.id}`, icon: "🏃", label, targetStr: tLabel, targetDate, hasData: true, pct, currentLabel: hasLogged ? `est. ${cLabel}` : cLabel, subLabel, weeksEst: null, tight: false });
+              items.push({ key: `${t.metric}_${goal.id}`, icon: "🏃", label, targetStr: tLabel, targetDate, hasData: true, pct, noProgress, currentLabel: hasLogged ? `est. ${cLabel}` : cLabel, subLabel, weeksEst: null, tight: false });
             }
           }
         }
@@ -1430,15 +1488,21 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                 <div key={item.key}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-semibold">{item.icon} {item.label} → {item.targetStr}</span>
-                    {item.hasData && <span className="text-[11px] text-muted-foreground font-medium">{item.pct}%</span>}
+                    {item.hasData && (
+                      <span className="text-[11px] text-muted-foreground font-medium">
+                        {item.noProgress ? "Starting point set" : `${item.pct}%`}
+                      </span>
+                    )}
                   </div>
                   {item.hasData ? (
                     <>
                       <div className="flex items-center gap-2.5">
                         <span className="text-xs text-muted-foreground w-16 shrink-0">{item.currentLabel}</span>
-                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${item.pct}%` }} />
-                        </div>
+                        {!item.noProgress && (
+                          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${item.pct}%` }} />
+                          </div>
+                        )}
                       </div>
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         {item.subLabel}
@@ -1623,73 +1687,73 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
           <h2 className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase mb-2.5">Performance</h2>
           <div className="grid grid-cols-2 gap-3">
 
-            {prefs.showEstimated5K && (
-              <StatCard
-                title="5K"
-                icon={<Footprints className="w-4 h-4" />}
-                value={runMetrics.estimated5K.current ?? "Add a steady run to estimate"}
-                unavailable={!runMetrics.estimated5K.current}
-                delta={<TimeDeltaBadge current={runMetrics.estimated5K.current} previous={runMetrics.estimated5K.previous} />}
-                sub={
-                  runMetrics.estimated5K.previous
-                    ? `was ${runMetrics.estimated5K.previous}`
-                    : runMetrics.estimated5K.current
-                      ? FIRST_BENCHMARK_LABEL
-                      : undefined
-                }
-              />
-            )}
+            {prefs.showEstimated5K && (() => {
+              const allTimeSess = analytics.allTimeEst5K ?? null;
+              const bl5K = analytics.baselines?.fiveKSeconds ?? null;
+              let allTimePB: string | null = null;
+              if (allTimeSess && bl5K != null) {
+                const estS = paceToSeconds(allTimeSess);
+                allTimePB = estS !== null && estS < bl5K ? allTimeSess : secsToMmss(bl5K);
+              } else if (allTimeSess) {
+                allTimePB = allTimeSess;
+              } else if (bl5K != null) {
+                allTimePB = secsToMmss(bl5K);
+              }
+              return (
+                <PerfCard
+                  title="5K"
+                  icon={<Footprints className="w-4 h-4" />}
+                  allTimePB={allTimePB}
+                  currentEst={runMetrics.estimated5K.current}
+                  isRunning
+                />
+              );
+            })()}
 
-            {prefs.showSquatE1RM && (
-              <StatCard
-                title="Squat"
-                icon={<Dumbbell className="w-4 h-4" />}
-                value={strengthMetrics.squat.current !== null ? `${strengthMetrics.squat.current}kg` : getLiftEmptyState("squat")}
-                unavailable={strengthMetrics.squat.current === null}
-                delta={<DeltaBadge current={strengthMetrics.squat.current} previous={strengthMetrics.squat.previous} kind="higher-better" suffix="kg" />}
-                sub={
-                  strengthMetrics.squat.previous !== null
-                    ? `was ${strengthMetrics.squat.previous}kg`
-                    : strengthMetrics.squat.current !== null
-                      ? FIRST_BENCHMARK_LABEL
-                      : undefined
-                }
-              />
-            )}
+            {prefs.showSquatE1RM && (() => {
+              const allTimeSess = analytics.allTimeStrength?.squat ?? null;
+              const blVal = analytics.baselines?.squatKg ?? null;
+              const nums = [allTimeSess, blVal].filter((v): v is number => v !== null);
+              const allTimePBNum = nums.length > 0 ? Math.max(...nums) : null;
+              return (
+                <PerfCard
+                  title="Squat"
+                  icon={<Dumbbell className="w-4 h-4" />}
+                  allTimePB={allTimePBNum !== null ? `${allTimePBNum}kg` : null}
+                  currentEst={strengthMetrics.squat.current !== null ? `${strengthMetrics.squat.current}kg` : null}
+                />
+              );
+            })()}
 
-            {prefs.showBenchE1RM && (
-              <StatCard
-                title="Bench"
-                icon={<Dumbbell className="w-4 h-4" />}
-                value={strengthMetrics.bench.current !== null ? `${strengthMetrics.bench.current}kg` : getLiftEmptyState("bench")}
-                unavailable={strengthMetrics.bench.current === null}
-                delta={<DeltaBadge current={strengthMetrics.bench.current} previous={strengthMetrics.bench.previous} kind="higher-better" suffix="kg" />}
-                sub={
-                  strengthMetrics.bench.previous !== null
-                    ? `was ${strengthMetrics.bench.previous}kg`
-                    : strengthMetrics.bench.current !== null
-                      ? FIRST_BENCHMARK_LABEL
-                      : undefined
-                }
-              />
-            )}
+            {prefs.showBenchE1RM && (() => {
+              const allTimeSess = analytics.allTimeStrength?.bench ?? null;
+              const blVal = analytics.baselines?.benchKg ?? null;
+              const nums = [allTimeSess, blVal].filter((v): v is number => v !== null);
+              const allTimePBNum = nums.length > 0 ? Math.max(...nums) : null;
+              return (
+                <PerfCard
+                  title="Bench"
+                  icon={<Dumbbell className="w-4 h-4" />}
+                  allTimePB={allTimePBNum !== null ? `${allTimePBNum}kg` : null}
+                  currentEst={strengthMetrics.bench.current !== null ? `${strengthMetrics.bench.current}kg` : null}
+                />
+              );
+            })()}
 
-            {prefs.showDeadliftE1RM && (
-              <StatCard
-                title="Deadlift"
-                icon={<Dumbbell className="w-4 h-4" />}
-                value={strengthMetrics.deadlift.current !== null ? `${strengthMetrics.deadlift.current}kg` : getLiftEmptyState("deadlift")}
-                unavailable={strengthMetrics.deadlift.current === null}
-                delta={<DeltaBadge current={strengthMetrics.deadlift.current} previous={strengthMetrics.deadlift.previous} kind="higher-better" suffix="kg" />}
-                sub={
-                  strengthMetrics.deadlift.previous !== null
-                    ? `was ${strengthMetrics.deadlift.previous}kg`
-                    : strengthMetrics.deadlift.current !== null
-                      ? FIRST_BENCHMARK_LABEL
-                      : undefined
-                }
-              />
-            )}
+            {prefs.showDeadliftE1RM && (() => {
+              const allTimeSess = analytics.allTimeStrength?.deadlift ?? null;
+              const blVal = analytics.baselines?.deadliftKg ?? null;
+              const nums = [allTimeSess, blVal].filter((v): v is number => v !== null);
+              const allTimePBNum = nums.length > 0 ? Math.max(...nums) : null;
+              return (
+                <PerfCard
+                  title="Deadlift"
+                  icon={<Dumbbell className="w-4 h-4" />}
+                  allTimePB={allTimePBNum !== null ? `${allTimePBNum}kg` : null}
+                  currentEst={strengthMetrics.deadlift.current !== null ? `${strengthMetrics.deadlift.current}kg` : null}
+                />
+              );
+            })()}
           </div>
         </section>
       )}
@@ -1700,39 +1764,47 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
           <h2 className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase mb-2.5">This Week</h2>
           <div className="grid grid-cols-2 gap-3">
 
-            {prefs.showDistanceRun && (
-              <StatCard
-                title="Distance Run"
-                icon={<Footprints className="w-4 h-4" />}
-                value={thisWeekData?.totalDistance ? fmtDist(thisWeekData.totalDistance) : "—"}
-                delta={
-                  <DeltaBadge
-                    current={thisWeekData?.totalDistance ?? null}
-                    previous={lastWeekData?.totalDistance ?? null}
-                    kind="higher-better"
-                    formatter={n => fmtDist(n)}
-                  />
-                }
-                sub={lastWeekData?.totalDistance ? `${fmtDist(lastWeekData.totalDistance)} last wk` : undefined}
-              />
-            )}
+            {prefs.showDistanceRun && (() => {
+              const curr = thisWeekData?.totalDistance ?? 0;
+              const prev = lastWeekByNow.distance;
+              const diff = curr - prev;
+              return (
+                <StatCard
+                  title="Distance Run"
+                  icon={<Footprints className="w-4 h-4" />}
+                  value={curr > 0 ? fmtDist(curr) : "—"}
+                  sub={prev > 0 ? (
+                    <span>
+                      {"By this point last week: "}{fmtDist(prev)}{" "}
+                      <span className={diff >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
+                        {diff >= 0 ? `+${fmtDist(diff)} ahead` : `-${fmtDist(Math.abs(diff))} behind`}
+                      </span>
+                    </span>
+                  ) : undefined}
+                />
+              );
+            })()}
 
-            {prefs.showVolumeLifted && (
-              <StatCard
-                title="Volume Lifted"
-                icon={<TrendingUp className="w-4 h-4" />}
-                value={thisWeekData?.totalVolume ? fmtVol(thisWeekData.totalVolume) : "—"}
-                delta={
-                  <DeltaBadge
-                    current={thisWeekData?.totalVolume ?? null}
-                    previous={lastWeekData?.totalVolume ?? null}
-                    kind="higher-better"
-                    formatter={n => fmtVol(n)}
-                  />
-                }
-                sub={lastWeekData?.totalVolume ? `${fmtVol(lastWeekData.totalVolume)} last wk` : undefined}
-              />
-            )}
+            {prefs.showVolumeLifted && (() => {
+              const curr = thisWeekData?.totalVolume ?? 0;
+              const prev = lastWeekByNow.volume;
+              const diff = curr - prev;
+              return (
+                <StatCard
+                  title="Volume Lifted"
+                  icon={<TrendingUp className="w-4 h-4" />}
+                  value={curr > 0 ? fmtVol(curr) : "—"}
+                  sub={prev > 0 ? (
+                    <span>
+                      {"By this point last week: "}{fmtVol(prev)}{" "}
+                      <span className={diff >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
+                        {diff >= 0 ? `+${fmtVol(diff)} ahead` : `-${fmtVol(Math.abs(diff))} behind`}
+                      </span>
+                    </span>
+                  ) : undefined}
+                />
+              );
+            })()}
           </div>
 
           {(prefs.showDistanceRun || prefs.showVolumeLifted) && (thisMonthData || lastMonthData) && (
@@ -1777,177 +1849,6 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
         </section>
       )}
 
-      {/* ── 6. Strength Records (1RM Tracker) ───────────────── */}
-      {clientLifts.length > 0 && (
-        <section>
-          <button
-            className="flex items-center justify-between w-full"
-            onClick={() => setLiftSectionOpen(o => !o)}
-          >
-            <h2 className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase">Strength Records</h2>
-            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${liftSectionOpen ? "" : "-rotate-90"}`} />
-          </button>
-
-          {liftSectionOpen && (
-            <div className="mt-2 space-y-1.5">
-              {clientLifts.filter(l => !l.isHidden).map(lift => {
-                const goalTarget = getGoalTarget(lift.exerciseName, goals);
-                const goalPct = (goalTarget && lift.currentWeightKg)
-                  ? Math.min(100, Math.round((lift.currentWeightKg / goalTarget) * 100))
-                  : null;
-                const isExpanded = expandedLiftId === lift.id;
-
-                return (
-                  <div key={lift.id} className="rounded-xl border bg-card overflow-hidden">
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                      onClick={() => setExpandedLiftId(isExpanded ? null : lift.id)}
-                    >
-                      <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-                      <span className="flex-1 text-sm font-medium truncate">{lift.exerciseName}</span>
-                      {lift.currentWeightKg !== null ? (
-                        <span className="text-sm font-semibold tabular-nums">{lift.currentWeightKg}kg</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No entry</span>
-                      )}
-                      {goalPct !== null && (
-                        <span className="text-[11px] text-muted-foreground ml-1 tabular-nums">{goalPct}%</span>
-                      )}
-                    </button>
-
-                    {isExpanded && (
-                      <div className="px-3 pb-3 pt-1 border-t space-y-3">
-                        {goalPct !== null && goalTarget && lift.currentWeightKg && (
-                          <div>
-                            <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
-                              <span>{lift.currentWeightKg}kg current</span>
-                              <span>{goalPct}% of {goalTarget}kg goal</span>
-                            </div>
-                            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                              <div className="h-full rounded-full bg-primary" style={{ width: `${goalPct}%` }} />
-                            </div>
-                          </div>
-                        )}
-
-                        {lift.currentWeightKg !== null && (
-                          <div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Training percentages</p>
-                            <div className="grid grid-cols-3 gap-x-4 gap-y-1">
-                              {PCT_LEVELS.map(pct => (
-                                <div key={pct} className="flex justify-between text-xs">
-                                  <span className="text-muted-foreground">{pct}%</span>
-                                  <span className="font-medium tabular-nums">{roundHalf(lift.currentWeightKg! * pct / 100)}kg</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {lift.history.length > 0 && (
-                          <div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">History</p>
-                            <div className="space-y-1">
-                              {lift.history.slice(0, 8).map((h, i) => (
-                                <div key={h.id} className="flex justify-between text-xs">
-                                  <span className="text-muted-foreground">
-                                    {new Date(h.loggedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}
-                                    {h.source !== "manual" && <span className="ml-1 opacity-60">({h.source})</span>}
-                                  </span>
-                                  <span className={i === 0 ? "font-semibold" : "text-muted-foreground"}>{h.weightKg}kg</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex gap-2 items-center">
-                          <Input
-                            type="number"
-                            placeholder="Log new 1RM (kg)"
-                            step="0.5"
-                            min="0"
-                            value={liftLogInputs[lift.id] ?? ""}
-                            onChange={e => setLiftLogInputs(p => ({ ...p, [lift.id]: e.target.value }))}
-                            className="h-7 text-xs flex-1"
-                          />
-                          <Button
-                            size="sm"
-                            className="h-7 text-xs px-3"
-                            disabled={!liftLogInputs[lift.id] || liftLogSaving[lift.id]}
-                            onClick={() => void handleLogOneRM(lift.id, lift.exerciseName)}
-                          >
-                            {liftLogSaving[lift.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : "Log"}
-                          </Button>
-                          <button
-                            className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
-                            onClick={() => void handleToggleLiftHidden(lift.id)}
-                          >
-                            <Eye className="w-3 h-3" />
-                            Hide
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {clientLifts.some(l => l.isHidden) && (
-                <div className="pt-0.5">
-                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-1">Hidden lifts</p>
-                  {clientLifts.filter(l => l.isHidden).map(lift => (
-                    <button
-                      key={lift.id}
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground py-0.5 w-full hover:text-foreground"
-                      onClick={() => void handleToggleLiftHidden(lift.id)}
-                    >
-                      <Eye className="w-3 h-3" />
-                      Show {lift.exerciseName}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {addLiftOpen ? (
-                <div className="flex gap-2 items-center pt-0.5">
-                  <Input
-                    placeholder="Exercise name"
-                    value={newLiftName}
-                    onChange={e => setNewLiftName(e.target.value)}
-                    className="h-7 text-xs flex-1"
-                    onKeyDown={e => { if (e.key === "Enter") void handleAddLift(); }}
-                    autoFocus
-                  />
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs px-3"
-                    disabled={!newLiftName.trim() || addLiftSaving}
-                    onClick={() => void handleAddLift()}
-                  >
-                    {addLiftSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs px-2"
-                    onClick={() => { setAddLiftOpen(false); setNewLiftName(""); }}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              ) : (
-                <button
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1 py-1 hover:text-foreground"
-                  onClick={() => setAddLiftOpen(true)}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add lift
-                </button>
-              )}
-            </div>
-          )}
-        </section>
-      )}
 
       {/* ── 7. Edit Dashboard button ─────────────────────────── */}
       <div className="pt-2">
@@ -2096,6 +1997,146 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
               {pbSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : pbSaved ? <Check className="w-3.5 h-3.5 text-green-500" /> : null}
               {pbSaved ? "Saved" : "Save PBs"}
             </Button>
+          </div>
+
+          {/* ── YOUR LIFTS (1RM Tracker) ──────────────────────────── */}
+          <div className="mt-6 mb-1">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2">Your Lifts</p>
+            <p className="text-xs text-muted-foreground mb-3">Track 1RM records for specific exercises. Expand to log a new entry, view history, or hide.</p>
+            {clientLifts.length > 0 && (
+              <div className="space-y-1.5 mb-2">
+                {clientLifts.map(lift => {
+                  const goalTarget = getGoalTarget(lift.exerciseName, goals);
+                  const goalPct = goalTarget && lift.currentWeightKg
+                    ? Math.min(100, Math.round((lift.currentWeightKg / goalTarget) * 100))
+                    : null;
+                  const isExpanded = expandedLiftId === lift.id;
+                  return (
+                    <div key={lift.id} className={`rounded-xl border bg-card overflow-hidden ${lift.isHidden ? "opacity-60" : ""}`}>
+                      <button
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+                        onClick={() => setExpandedLiftId(isExpanded ? null : lift.id)}
+                      >
+                        <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                        <span className="flex-1 text-sm font-medium truncate">{lift.exerciseName}</span>
+                        {lift.isHidden && <span className="text-[10px] text-muted-foreground mr-1">Hidden</span>}
+                        {lift.currentWeightKg !== null ? (
+                          <span className="text-sm font-semibold tabular-nums">{lift.currentWeightKg}kg</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No entry</span>
+                        )}
+                      </button>
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1 border-t space-y-3">
+                          {goalPct !== null && goalTarget && lift.currentWeightKg && (
+                            <div>
+                              <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
+                                <span>{lift.currentWeightKg}kg current</span>
+                                <span>{goalPct}% of {goalTarget}kg goal</span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full rounded-full bg-primary" style={{ width: `${goalPct}%` }} />
+                              </div>
+                            </div>
+                          )}
+                          {lift.currentWeightKg !== null && (
+                            <div>
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Training percentages</p>
+                              <div className="grid grid-cols-3 gap-x-4 gap-y-1">
+                                {PCT_LEVELS.map(pct => (
+                                  <div key={pct} className="flex justify-between text-xs">
+                                    <span className="text-muted-foreground">{pct}%</span>
+                                    <span className="font-medium tabular-nums">{roundHalf(lift.currentWeightKg! * pct / 100)}kg</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {lift.history.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">History</p>
+                              <div className="space-y-1">
+                                {lift.history.slice(0, 8).map((h, i) => (
+                                  <div key={h.id} className="flex justify-between text-xs">
+                                    <span className="text-muted-foreground">
+                                      {new Date(h.loggedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}
+                                      {h.source !== "manual" && <span className="ml-1 opacity-60">({h.source})</span>}
+                                    </span>
+                                    <span className={i === 0 ? "font-semibold" : "text-muted-foreground"}>{h.weightKg}kg</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex gap-2 items-center">
+                            <Input
+                              type="number"
+                              placeholder="Log new 1RM (kg)"
+                              step="0.5"
+                              min="0"
+                              value={liftLogInputs[lift.id] ?? ""}
+                              onChange={e => setLiftLogInputs(p => ({ ...p, [lift.id]: e.target.value }))}
+                              className="h-7 text-xs flex-1"
+                            />
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs px-3"
+                              disabled={!liftLogInputs[lift.id] || liftLogSaving[lift.id]}
+                              onClick={() => void handleLogOneRM(lift.id, lift.exerciseName)}
+                            >
+                              {liftLogSaving[lift.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : "Log"}
+                            </Button>
+                            <button
+                              className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                              onClick={() => void handleToggleLiftHidden(lift.id)}
+                            >
+                              <Eye className="w-3 h-3" />
+                              {lift.isHidden ? "Show" : "Hide"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {addLiftOpen ? (
+              <div className="flex gap-2 items-center">
+                <Input
+                  placeholder="Exercise name"
+                  value={newLiftName}
+                  onChange={e => setNewLiftName(e.target.value)}
+                  className="h-7 text-xs flex-1"
+                  onKeyDown={e => { if (e.key === "Enter") void handleAddLift(); }}
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  className="h-7 text-xs px-3"
+                  disabled={!newLiftName.trim() || addLiftSaving}
+                  onClick={() => void handleAddLift()}
+                >
+                  {addLiftSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs px-2"
+                  onClick={() => { setAddLiftOpen(false); setNewLiftName(""); }}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              <button
+                className="flex items-center gap-1.5 text-xs text-muted-foreground py-1 hover:text-foreground"
+                onClick={() => setAddLiftOpen(true)}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add lift
+              </button>
+            )}
           </div>
 
           <div className="space-y-0 divide-y mt-6">

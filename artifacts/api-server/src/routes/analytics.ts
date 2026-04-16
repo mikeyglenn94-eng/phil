@@ -448,6 +448,7 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
     .where(eq(programmesTable.clientId, clientId));
 
   const today = todayStr();
+  const thisWk = weekStartMonday(today);
 
   // All sessions (for planned counts)
   const allSessions: any[] = [];
@@ -473,8 +474,11 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
   };
 
   for (const s of allSessions) {
-    if (!s.date || s.date > today) continue;
-    getBucket(weekStartMonday(s.date)).planned++;
+    if (!s.date) continue;
+    const wk = weekStartMonday(s.date);
+    // Count all sessions in current or past weeks as planned (including future days within this week)
+    if (wk > thisWk) continue;
+    getBucket(wk).planned++;
   }
   for (const s of sessions) {
     const b = getBucket(weekStartMonday(s.date));
@@ -516,7 +520,6 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
   }
 
   // Ensure this week always appears
-  const thisWk = weekStartMonday(today);
   if (!weekMap.has(thisWk)) {
     const b = bucketMap.get(thisWk);
     weekMap.set(thisWk, {
@@ -568,6 +571,15 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
   const strengthPrev = strengthInPeriod(sessions, prev4wkStart, prev4wkEnd);
   const est5KCurr    = estimated5KInPeriod(sessions, curr4wkStart, curr4wkEnd);
   const est5KPrev    = estimated5KInPeriod(sessions, prev4wkStart, prev4wkEnd);
+
+  // All-time bests across every logged session ever
+  const allExercises = sessions.flatMap(s => s.exerciseBreakdown);
+  const allTimeStrength = {
+    squat:    bestE1RM(allExercises, SQUAT_INCLUDE),
+    bench:    bestE1RM(allExercises, BENCH_INCLUDE),
+    deadlift: bestE1RM(allExercises, DEADLIFT_INCLUDE, DEADLIFT_EXCLUDE),
+  };
+  const allTimeEst5K = estimated5KInPeriod(sessions, "2000-01-01", "2099-12-31");
 
   // ── Fitness score (rolling 12 weeks with smoothing) ─────────────
 
@@ -714,9 +726,11 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
       bench:    { current: strengthCurr.bench,    previous: strengthPrev.bench    },
       deadlift: { current: strengthCurr.deadlift, previous: strengthPrev.deadlift },
     },
+    allTimeStrength,
     runMetrics: {
       estimated5K: { current: est5KCurr, previous: est5KPrev },
     },
+    allTimeEst5K,
     baselines: manualBaselines ? {
       benchKg:             parseNumeric(manualBaselines.benchKg),
       squatKg:             parseNumeric(manualBaselines.squatKg),
