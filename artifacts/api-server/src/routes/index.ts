@@ -24,6 +24,7 @@ import clientNotesRouter from "./client-notes";
 import coachDashboardRouter from "./coach-dashboard";
 import cycleBrainRouter from "./cycle-brain";
 import swimBrainRouter from "./swim-brain";
+import adminMetricsRouter from "./admin-metrics";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(clientNotesRouter);
 router.use(coachDashboardRouter);
 router.use(cycleBrainRouter);
 router.use(swimBrainRouter);
+router.use(adminMetricsRouter);
 
 export default router;

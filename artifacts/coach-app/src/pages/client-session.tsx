@@ -458,6 +458,20 @@ export default function ClientSession() {
     };
   }, []);
 
+  // Log "started" event once when the session page loads with a valid session
+  const sessionStartedLoggedRef = useRef(false);
+  useEffect(() => {
+    if (!session || !programme?.clientId || !sessionId || sessionStartedLoggedRef.current) return;
+    sessionStartedLoggedRef.current = true;
+    const tok = localStorage.getItem("axis_auth_token");
+    if (!tok) return;
+    fetch("/api/session-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+      body: JSON.stringify({ sessionId, programmeId, clientId: programme.clientId, eventType: "started" }),
+    }).catch(() => {});
+  }, [session, programme, sessionId, programmeId]);
+
   // Warn the browser if the user tries to close the tab with unsaved changes
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -1235,6 +1249,17 @@ export default function ClientSession() {
           }
         }
         void Promise.all(noteRequests);
+      }
+      // Log completed session event (fire-and-forget)
+      if (programme?.clientId && sessionId) {
+        const tok = localStorage.getItem("axis_auth_token");
+        if (tok) {
+          fetch("/api/session-events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+            body: JSON.stringify({ sessionId, programmeId, clientId: programme.clientId, eventType: "completed" }),
+          }).catch(() => {});
+        }
       }
       setSaved(true);
       if (!silent) toast({ title: "Session saved!" });

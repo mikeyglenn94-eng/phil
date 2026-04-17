@@ -4,6 +4,8 @@ import { openai } from "@workspace/integrations-openai-ai-server";
 import { db, clientGoalsTable, clientBaselinesTable, programmesTable, clientsTable } from "@workspace/db";
 import { randomUUID } from "crypto";
 import { format, addDays, parseISO } from "date-fns";
+import { logApiCost, logPhilInteraction, detectPhilInteractionType } from "../lib/log-api-cost";
+import { extractAuth } from "../middlewares/require-auth";
 
 const router: IRouter = Router();
 
@@ -68,6 +70,7 @@ The client's current dashboard context is provided in each message.`;
       temperature: 0.4,
     });
 
+    void logApiCost({ userId: req.auth?.userId, endpoint: "coaching", model: "gpt-4o-mini", usage: completion.usage });
     const answer = completion.choices[0]?.message?.content?.trim() ?? "No answer returned.";
     res.json({ answer });
   } catch (err) {
@@ -81,6 +84,7 @@ The client's current dashboard context is provided in each message.`;
 // Returns { reply, navigateTo?, action? }.
 
 router.post("/clients/:clientId/phil-chat", async (req, res) => {
+  extractAuth(req);
   const clientId = parseInt(req.params.clientId, 10);
   const { message, history, currentTab, dashboardContext, nutritionContext } = req.body as {
     message: string;
@@ -206,6 +210,11 @@ ${tabSection}`;
       max_tokens: 150,
       temperature: 0.6,
     });
+
+    if (req.auth?.userId) {
+      void logApiCost({ userId: req.auth.userId, endpoint: "phil-chat", model: "gpt-4o-mini", usage: completion.usage });
+      void logPhilInteraction({ userId: req.auth.userId, interactionType: detectPhilInteractionType(message) });
+    }
 
     const raw = completion.choices[0]?.message?.content?.trim() ?? "";
 

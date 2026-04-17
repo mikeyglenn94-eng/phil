@@ -30,7 +30,7 @@ The MG Coaching platform is a monorepo managed with pnpm workspaces, utilizing N
 -   `/clients/:clientId`: Client-specific area with calendar, scheduling, and AI program generation.
 -   `/library`: Curated library of WODs, runs, and strength blocks with a program builder.
 -   `/client`: Athlete portal for training and nutrition.
--   `/admin`: Admin console for user, content, billing, and audit management.
+-   `/admin`: Admin console for user, content, billing, audit, and platform metrics. The **Platform Metrics** tab (admin-only) shows: API cost tracking per user/month, Phil chat interaction breakdown, session started vs completed vs abandoned, programmes generated/abandoned, days since last session, business KPIs (registered/active/new/churned users), and monthly active vs registered comparison. Refreshes every 30 seconds.
 
 ## External Dependencies
 

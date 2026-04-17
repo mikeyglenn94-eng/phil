@@ -6,6 +6,8 @@ import type { Exercise } from "@workspace/db";
 import { eq, gte, and, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { addDays, parseISO, format } from "date-fns";
+import { logApiCost } from "../lib/log-api-cost";
+import { extractAuth } from "../middlewares/require-auth";
 
 // ── Safe JSON parser — strips AI markdown fences before parsing ─────────────
 function safeParseAIJson(raw: string): any {
@@ -176,6 +178,7 @@ router.post("/parse", async (req, res): Promise<void> => {
         },
       ],
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "parse", model: "gpt-5.2", usage: completion.usage });
 
     const content = completion.choices[0]?.message?.content ?? "{}";
 
@@ -302,6 +305,7 @@ Return format:
         },
       ],
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "calendar-command", model: "gpt-5.2", usage: completion.usage });
 
     const content = completion.choices[0]?.message?.content ?? "{}";
     let parsed: { sessions: any[]; changes: string[] };
@@ -358,6 +362,7 @@ router.post("/generate-rationale", async (req, res): Promise<void> => {
         },
       ],
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "generate-rationale", model: "gpt-5.2", usage: completion.usage });
     const rationale = completion.choices[0]?.message?.content?.trim() ?? "";
     res.json({ rationale });
   } catch (err) {
@@ -946,6 +951,7 @@ Generate EXACTLY 1 week of sessions. All day numbers must be between 1 and 7 (in
         { role: "user", content: `Description: "${effectiveDescription}"` },
       ],
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "generate-programme", model: completion.model ?? chosenModel, usage: completion.usage });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     let parsed: { title: string; sessions: any[] };
@@ -1035,6 +1041,7 @@ CRITICAL RULES:
       ],
       response_format: { type: "json_object" },
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "tweak-programme-preview", model: "gpt-4o", usage: completion.usage });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     let result: { sessions?: any[]; message?: string };
@@ -1135,6 +1142,7 @@ ${JSON.stringify(futureSessions, null, 2)}`;
         { role: "user", content: userContent },
       ],
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "session-feedback", model: "gpt-4o-mini", usage: completion.usage });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     let parsed: { updatedSessions: any[]; userConfirmation: string };
@@ -1197,6 +1205,7 @@ Return format:
         { role: "user", content: `Parse this log: "${transcript}"` },
       ],
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "parse-log", model: "gpt-5.2", usage: completion.usage });
 
     const content = completion.choices[0]?.message?.content ?? "{}";
     let parsed: { sets: { setIndex: number; weight: number | null; reps: number | null }[] };
@@ -1322,6 +1331,7 @@ Response format:
       ],
       response_format: { type: "json_object" },
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "parse-run-session", model: "gpt-4o-mini", usage: completion.usage });
 
     const parsed = JSON.parse(completion.choices[0].message.content || "{}");
     const userNameMeaningful = name?.trim() && name.trim().toLowerCase() !== "test" && name.trim().length > 2;
@@ -1764,6 +1774,7 @@ Response format — EMOM example:
       ],
       response_format: { type: "json_object" },
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "parse-wod-session", model: "gpt-4o", usage: completion.usage });
 
     const parsed = JSON.parse(completion.choices[0].message.content || "{}");
     const options: any[] = parsed.options ?? [];
@@ -1910,6 +1921,7 @@ Response format:
       ],
       response_format: { type: "json_object" },
     });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "parse-session", model: "gpt-4o-mini", usage: completion.usage });
 
     const parsed = JSON.parse(completion.choices[0].message.content || "{}");
     const sessionName = name?.trim() || parsed.name || "Session";

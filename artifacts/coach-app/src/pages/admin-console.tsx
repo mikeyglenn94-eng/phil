@@ -11,7 +11,7 @@ function authHeaders(token: string | null) {
   return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
 
-type NavItem = "users" | "athlete-linking" | "irl-sessions" | "content" | "billing" | "audit";
+type NavItem = "users" | "athlete-linking" | "irl-sessions" | "content" | "billing" | "audit" | "metrics";
 type AthleteFilter = "all" | "online" | "irl";
 
 interface User {
@@ -98,11 +98,41 @@ function BookingStatusBadge({ status }: { status: string }) {
   return <span className={`text-xs px-2 py-0.5 rounded font-medium ${c}`}>{status}</span>;
 }
 
+interface AdminMetrics {
+  apiCosts: {
+    byUser: { email: string; user_id: number; month: string; call_count: number; total_tokens: number; total_cost_usd: number }[];
+    platform: { month: string; call_count: number; total_tokens: number; total_cost_usd: number }[];
+  };
+  philUsage: {
+    byUser: { email: string; interaction_type: string; month: string; count: number }[];
+    platformAvg: { month: string; total_interactions: number; active_users: number; avg_per_user: number }[];
+  };
+  sessionActivity: {
+    events: { email: string; event_type: string; count: number }[];
+    lastSession: { email: string; last_session_at: string; days_since_last_session: number }[];
+  };
+  programmes: {
+    byUser: { email: string; programmes_generated: number; old_programmes: number }[];
+    abandoned: { email: string; abandoned_count: number }[];
+  };
+  business: {
+    allUsers: { id: number; email: string; roles: string[]; createdAt: string; lastLoginAt: string | null }[];
+    totalRegistered: number;
+    activeUsers: number;
+    newUsersThisMonth: number;
+    churnedUsers: number;
+    monthlyComparison: { month: string; active_users: number; registered_at_month_end: number }[];
+  };
+}
+
 export default function AdminConsole() {
   const { token, logout } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [nav, setNav] = useState<NavItem>("athlete-linking");
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
 
   // Users
   const [users, setUsers] = useState<User[]>([]);
@@ -163,6 +193,31 @@ export default function AdminConsole() {
   const [manualBookClient, setManualBookClient] = useState("");
   const [showManualBook, setShowManualBook] = useState(false);
   const [irlSubTab, setIrlSubTab] = useState<"slots" | "bookings">("slots");
+
+  // ── Metrics fetch ─────────────────────────────────────────────────────────
+
+  const fetchMetrics = async () => {
+    setMetricsLoading(true);
+    setMetricsError(null);
+    try {
+      const r = await fetch(`${BASE}/api/admin/metrics`, { headers: authHeaders(token) });
+      if (r.ok) setMetrics(await r.json());
+      else setMetricsError("Failed to load metrics");
+    } catch {
+      setMetricsError("Network error loading metrics");
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
+
+  // Auto-refresh metrics every 30 seconds when on the metrics tab
+  useEffect(() => {
+    if (nav !== "metrics") return;
+    fetchMetrics();
+    const id = setInterval(fetchMetrics, 30_000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav]);
 
   // ── Fetch functions ───────────────────────────────────────────────────────
 
@@ -549,6 +604,7 @@ export default function AdminConsole() {
     { id: "content", label: "Brain / Content" },
     { id: "billing", label: "Billing" },
     { id: "audit", label: "Audit Log" },
+    { id: "metrics", label: "Platform Metrics" },
   ];
 
   return (
@@ -1431,6 +1487,283 @@ export default function AdminConsole() {
                   This section will log account changes, programme edits, and admin actions. The section is reserved and ready to build when needed.
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* ── Platform Metrics ─────────────────────────────────────────────── */}
+          {nav === "metrics" && (
+            <div>
+              <div className="mb-6 flex items-start justify-between">
+                <div>
+                  <h1 className="text-xl font-semibold">Platform Metrics</h1>
+                  <p className="text-white/40 text-sm mt-1">Live data — refreshes every 30 seconds</p>
+                </div>
+                <button
+                  onClick={fetchMetrics}
+                  disabled={metricsLoading}
+                  className="px-3 py-1.5 text-sm bg-white/10 hover:bg-white/15 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {metricsLoading ? "Refreshing…" : "Refresh"}
+                </button>
+              </div>
+
+              {metricsError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-red-400 text-sm mb-6">{metricsError}</div>
+              )}
+
+              {metricsLoading && !metrics && (
+                <div className="text-white/30 text-sm py-12 text-center">Loading metrics…</div>
+              )}
+
+              {metrics && (
+                <div className="space-y-8">
+
+                  {/* ── Business Metrics ──────────────────────────────── */}
+                  <section>
+                    <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">Business Overview</h2>
+                    <div className="grid grid-cols-2 gap-3 mb-4 sm:grid-cols-4">
+                      {[
+                        { label: "Registered Users", value: metrics.business.totalRegistered },
+                        { label: "Active (30 days)", value: metrics.business.activeUsers },
+                        { label: "New This Month", value: metrics.business.newUsersThisMonth },
+                        { label: "Churned (60 days)", value: metrics.business.churnedUsers },
+                      ].map(s => (
+                        <div key={s.label} className="bg-white/5 rounded-xl border border-white/10 p-4">
+                          <div className="text-2xl font-semibold">{s.value}</div>
+                          <div className="text-white/40 text-xs mt-1">{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {metrics.business.monthlyComparison.length > 0 && (
+                      <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-white/10">
+                              <th className="text-left px-4 py-2.5 text-white/40 font-normal">Month</th>
+                              <th className="text-right px-4 py-2.5 text-white/40 font-normal">Active Users</th>
+                              <th className="text-right px-4 py-2.5 text-white/40 font-normal">Registered</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {metrics.business.monthlyComparison.map(r => (
+                              <tr key={r.month} className="border-b border-white/5 hover:bg-white/3">
+                                <td className="px-4 py-2.5">{r.month}</td>
+                                <td className="text-right px-4 py-2.5">{r.active_users}</td>
+                                <td className="text-right px-4 py-2.5">{r.registered_at_month_end}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* ── OpenAI Cost ──────────────────────────────────── */}
+                  <section>
+                    <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">API Cost Tracking</h2>
+                    {metrics.apiCosts.platform.length === 0 ? (
+                      <div className="bg-white/5 rounded-xl border border-white/10 p-6 text-center text-white/30 text-sm">No API calls logged yet</div>
+                    ) : (
+                      <>
+                        <div className="mb-3">
+                          <div className="text-xs text-white/40 mb-2 px-1">Platform totals by month</div>
+                          <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-white/10">
+                                  <th className="text-left px-4 py-2.5 text-white/40 font-normal">Month</th>
+                                  <th className="text-right px-4 py-2.5 text-white/40 font-normal">Calls</th>
+                                  <th className="text-right px-4 py-2.5 text-white/40 font-normal">Tokens</th>
+                                  <th className="text-right px-4 py-2.5 text-white/40 font-normal">Cost (USD)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {metrics.apiCosts.platform.map(r => (
+                                  <tr key={r.month} className="border-b border-white/5 hover:bg-white/3">
+                                    <td className="px-4 py-2.5">{r.month}</td>
+                                    <td className="text-right px-4 py-2.5">{r.call_count.toLocaleString()}</td>
+                                    <td className="text-right px-4 py-2.5">{r.total_tokens.toLocaleString()}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono">${r.total_cost_usd.toFixed(4)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        {metrics.apiCosts.byUser.length > 0 && (
+                          <div>
+                            <div className="text-xs text-white/40 mb-2 px-1">Per-user spend by month</div>
+                            <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-white/10">
+                                    <th className="text-left px-4 py-2.5 text-white/40 font-normal">User</th>
+                                    <th className="text-right px-4 py-2.5 text-white/40 font-normal">Month</th>
+                                    <th className="text-right px-4 py-2.5 text-white/40 font-normal">Calls</th>
+                                    <th className="text-right px-4 py-2.5 text-white/40 font-normal">Tokens</th>
+                                    <th className="text-right px-4 py-2.5 text-white/40 font-normal">Cost (USD)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {metrics.apiCosts.byUser.map((r, i) => (
+                                    <tr key={i} className="border-b border-white/5 hover:bg-white/3">
+                                      <td className="px-4 py-2.5 text-white/80">{r.email}</td>
+                                      <td className="text-right px-4 py-2.5">{r.month}</td>
+                                      <td className="text-right px-4 py-2.5">{r.call_count.toLocaleString()}</td>
+                                      <td className="text-right px-4 py-2.5">{r.total_tokens.toLocaleString()}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono">${r.total_cost_usd.toFixed(4)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </section>
+
+                  {/* ── User Activity ─────────────────────────────────── */}
+                  <section>
+                    <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">User Activity</h2>
+                    {(() => {
+                      const eventMap: Record<string, { started: number; completed: number }> = {};
+                      for (const e of metrics.sessionActivity.events) {
+                        if (!eventMap[e.email]) eventMap[e.email] = { started: 0, completed: 0 };
+                        if (e.event_type === "started") eventMap[e.email].started = e.count;
+                        if (e.event_type === "completed") eventMap[e.email].completed = e.count;
+                      }
+                      const lastMap: Record<string, number> = {};
+                      for (const l of metrics.sessionActivity.lastSession) lastMap[l.email] = l.days_since_last_session;
+                      const emails = Array.from(new Set([
+                        ...Object.keys(eventMap),
+                        ...metrics.programmes.byUser.map(p => p.email),
+                      ]));
+                      if (emails.length === 0) return <div className="bg-white/5 rounded-xl border border-white/10 p-6 text-center text-white/30 text-sm">No session activity yet</div>;
+                      return (
+                        <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-white/10">
+                                <th className="text-left px-4 py-2.5 text-white/40 font-normal">User</th>
+                                <th className="text-right px-4 py-2.5 text-white/40 font-normal">Started</th>
+                                <th className="text-right px-4 py-2.5 text-white/40 font-normal">Completed</th>
+                                <th className="text-right px-4 py-2.5 text-white/40 font-normal">Abandoned</th>
+                                <th className="text-right px-4 py-2.5 text-white/40 font-normal">Programmes</th>
+                                <th className="text-right px-4 py-2.5 text-white/40 font-normal">Days Since Last</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {emails.map(email => {
+                                const ev = eventMap[email] ?? { started: 0, completed: 0 };
+                                const prog = metrics.programmes.byUser.find(p => p.email === email);
+                                const abandoned = Math.max(0, ev.started - ev.completed);
+                                return (
+                                  <tr key={email} className="border-b border-white/5 hover:bg-white/3">
+                                    <td className="px-4 py-2.5 text-white/80">{email}</td>
+                                    <td className="text-right px-4 py-2.5">{ev.started}</td>
+                                    <td className="text-right px-4 py-2.5">{ev.completed}</td>
+                                    <td className="text-right px-4 py-2.5">{abandoned}</td>
+                                    <td className="text-right px-4 py-2.5">{prog?.programmes_generated ?? 0}</td>
+                                    <td className="text-right px-4 py-2.5">{lastMap[email] != null ? `${lastMap[email]}d` : "—"}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+                    {metrics.programmes.abandoned.length > 0 && (
+                      <div className="mt-3">
+                        <div className="text-xs text-white/40 mb-2 px-1">Abandoned programmes (no activity in 3 weeks)</div>
+                        <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-white/10">
+                                <th className="text-left px-4 py-2.5 text-white/40 font-normal">User</th>
+                                <th className="text-right px-4 py-2.5 text-white/40 font-normal">Abandoned</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {metrics.programmes.abandoned.map((r, i) => (
+                                <tr key={i} className="border-b border-white/5 hover:bg-white/3">
+                                  <td className="px-4 py-2.5 text-white/80">{r.email}</td>
+                                  <td className="text-right px-4 py-2.5">{r.abandoned_count}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* ── Phil Usage ───────────────────────────────────── */}
+                  <section>
+                    <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">Phil Usage</h2>
+                    {metrics.philUsage.platformAvg.length === 0 ? (
+                      <div className="bg-white/5 rounded-xl border border-white/10 p-6 text-center text-white/30 text-sm">No Phil interactions logged yet</div>
+                    ) : (
+                      <>
+                        <div className="mb-3">
+                          <div className="text-xs text-white/40 mb-2 px-1">Platform averages by month</div>
+                          <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-white/10">
+                                  <th className="text-left px-4 py-2.5 text-white/40 font-normal">Month</th>
+                                  <th className="text-right px-4 py-2.5 text-white/40 font-normal">Total</th>
+                                  <th className="text-right px-4 py-2.5 text-white/40 font-normal">Active Users</th>
+                                  <th className="text-right px-4 py-2.5 text-white/40 font-normal">Avg / User</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {metrics.philUsage.platformAvg.map(r => (
+                                  <tr key={r.month} className="border-b border-white/5 hover:bg-white/3">
+                                    <td className="px-4 py-2.5">{r.month}</td>
+                                    <td className="text-right px-4 py-2.5">{r.total_interactions}</td>
+                                    <td className="text-right px-4 py-2.5">{r.active_users}</td>
+                                    <td className="text-right px-4 py-2.5">{r.avg_per_user}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        {metrics.philUsage.byUser.length > 0 && (
+                          <div>
+                            <div className="text-xs text-white/40 mb-2 px-1">Per-user interaction breakdown</div>
+                            <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-white/10">
+                                    <th className="text-left px-4 py-2.5 text-white/40 font-normal">User</th>
+                                    <th className="text-left px-4 py-2.5 text-white/40 font-normal">Type</th>
+                                    <th className="text-right px-4 py-2.5 text-white/40 font-normal">Month</th>
+                                    <th className="text-right px-4 py-2.5 text-white/40 font-normal">Count</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {metrics.philUsage.byUser.map((r, i) => (
+                                    <tr key={i} className="border-b border-white/5 hover:bg-white/3">
+                                      <td className="px-4 py-2.5 text-white/80">{r.email}</td>
+                                      <td className="px-4 py-2.5 text-white/60 capitalize">{r.interaction_type.replace("_", " ")}</td>
+                                      <td className="text-right px-4 py-2.5">{r.month}</td>
+                                      <td className="text-right px-4 py-2.5">{r.count}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </section>
+
+                </div>
+              )}
             </div>
           )}
 
