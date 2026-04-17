@@ -883,6 +883,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       content: m.text,
     }));
 
+  // Tracks the FULL conversation for the current planning session.
+  // Built up as messages are exchanged — never truncated. Reset when a new
+  // plan is started or when "Build this" is clicked.
+  const planningConvRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
+
   useEffect(() => {
     if (philScrollRef.current) {
       philScrollRef.current.scrollTop = philScrollRef.current.scrollHeight;
@@ -1659,6 +1664,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     refinement?: string,
     previousPlan?: CoachParseResult
   ) => {
+    // On a fresh request (no follow-up or refinement), start a new planning
+    // session — wipe any previous conversation from a different session.
+    if (!followUpAnswer && !refinement) {
+      planningConvRef.current = [];
+    }
+
+    // Snapshot the history BEFORE this turn so the API sees all prior context.
+    // The current user message will be added to the ref AFTER the response.
+    const historySnapshot = [...planningConvRef.current];
+
     setCmdParsing(true);
     try {
       const res = await fetch("/api/coach-parse", {
@@ -1673,12 +1688,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             name: client?.name,
             programmes: (clientProgrammes ?? []).map(p => p.title),
           },
-          history: getRecentHistory(),
+          // Send the FULL planning conversation — never truncated
+          history: historySnapshot,
         }),
       });
       const data = await res.json();
       setCoachParseResult(data);
-      // Build Phil message text from parse result
+
+      // Build Phil's response text
       let philText = data.acknowledgement ?? "";
       if (data.hasEnough && (data.planSummary as string[] | undefined)?.length) {
         philText += "\n\nHere's what I'm going to build:\n" +
@@ -1687,6 +1704,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       } else if (!data.hasEnough && data.followUpQuestion) {
         philText += `\n\n${data.followUpQuestion}`;
       }
+
+      // Append this exchange to the planning conversation ref so the NEXT
+      // call has full context including everything said so far.
+      const userTurnContent = refinement ?? followUpAnswer ?? input;
+      planningConvRef.current = [
+        ...historySnapshot,
+        { role: "user", content: userTurnContent },
+        { role: "assistant", content: philText },
+      ];
+
       addPhilMsg(philText, { coachParseData: data });
     } catch {
       addPhilMsg("Couldn't reach the coaching service. Check your connection and try again.");
@@ -1894,6 +1921,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setCoachParseResult(null);
     setCoachFollowUpInput("");
     setStrengthStyle(inferredStyle);
+    // Session is committed — clear the planning conversation so the next
+    // request starts fresh without stale context from this session.
+    planningConvRef.current = [];
 
     if (isSession) {
       const inferredType = inferSessionTypeFromBrief(brief);

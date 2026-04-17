@@ -116,9 +116,12 @@ TRAINING PHILOSOPHY (use when building assumptions)
 ═══════════════════════════════════════════
 ADDITIONAL RULES
 ═══════════════════════════════════════════
-- NEVER ask for information the user already provided in their message.
+- NEVER ask for information the user already provided in their message OR in any earlier message in the conversation history.
 - NEVER add assumptions when hasEnough is false — wait until you have the full picture.
 - NEVER pretend certainty when guessing material details.
+- When conversation history is provided, treat the entire thread as a single planning session. Carry ALL constraints from every prior turn into the updated proposal — if the user said "30 min sessions" in turn 1 and "no running" in turn 3, both apply to the final plan.
+- When a refinement arrives, apply only the requested change to the latest proposal. Do not drop or alter other agreed constraints unless explicitly asked.
+- If the proposal already has hasEnough: true and the user refines it, return hasEnough: true in the updated response (unless they introduced a new ambiguity that genuinely needs clarification).
 - Use concise, modern coach language throughout. Direct, slightly opinionated, never robotic.
 - Avoid filler phrases: "this will involve", "the plan includes", "it is designed to", "in order to".
 - Prefer: "you'll", "focus is", "this gives you", "build your engine", "get stronger".
@@ -206,20 +209,26 @@ router.post("/coach-parse", async (req, res) => {
     : "";
 
   let userContent: string;
-  if (refinement && previousPlan) {
-    // User is refining a plan that was already proposed — pass full proposal context
-    const proposalBullets = (previousPlan.planSummary ?? []).map((l: string) => `• ${l}`).join("\n");
-    const briefLine = previousPlan.suggestedBrief ? `\nComplete brief: ${previousPlan.suggestedBrief}` : "";
-    userContent = `Original request: ${input}\n\nProposed plan we just agreed on:\n${proposalBullets}${briefLine}\n\nClient wants to adjust it: ${refinement}\n\nApply the adjustment to the plan. Return a new complete JSON. Set hasEnough: true if you now have enough to build it, or hasEnough: false with a followUpQuestion if critical info is still missing.`;
+  if (refinement) {
+    // Full conversation history (provided by the client, never truncated) contains
+    // the complete proposal Phil just made.  Just append the refinement so the AI
+    // sees: [...full conversation...] + [user: refinement].
+    // Optionally attach the last agreed brief as a belt-and-suspenders reminder.
+    const briefLine = previousPlan?.suggestedBrief
+      ? `\n\nLast agreed brief: ${previousPlan.suggestedBrief}`
+      : "";
+    userContent = `${refinement}${briefLine}`;
   } else if (followUpAnswer) {
     userContent = `Original request: ${input}\n\nMy answer to your question: ${followUpAnswer}\n\nNow produce a complete response using all information above.`;
   } else {
     userContent = input;
   }
 
+  // Use the FULL planning conversation sent by the client — no truncation.
+  // The client is responsible for scoping this to the current session only.
   const msgs: { role: "user" | "assistant"; content: string }[] = [];
   if (history?.length) {
-    for (const h of history.slice(-6)) msgs.push(h);
+    for (const h of history) msgs.push(h);
   }
   msgs.push({ role: "user", content: userContent });
 
