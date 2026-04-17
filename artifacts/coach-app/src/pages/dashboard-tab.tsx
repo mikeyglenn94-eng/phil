@@ -2000,7 +2000,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
           {/* ── YOUR PBs ──────────────────────────────────────────── */}
           <div className="mt-6 mb-1">
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2">Your PBs</p>
-            <p className="text-xs text-muted-foreground mb-3">Your personal bests. Expand any row to log a new entry. Phil uses these to track progress and build programmes.</p>
+            <p className="text-xs text-muted-foreground mb-3">Your personal bests. Tap any row to edit. Phil uses these to track progress and build programmes.</p>
             <div className="space-y-1.5">
 
               {/* Fixed baseline metrics */}
@@ -2017,12 +2017,27 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                   if (metric.key === "marathon")     return bl.marathonSeconds     != null ? secsToHmmss(bl.marathonSeconds)   : null;
                   return null;
                 })();
+                const prefillValue = (() => {
+                  if (!bl) return "";
+                  if (metric.key === "bench")        return bl.benchKg             != null ? String(bl.benchKg)                 : "";
+                  if (metric.key === "squat")        return bl.squatKg             != null ? String(bl.squatKg)                 : "";
+                  if (metric.key === "deadlift")     return bl.deadliftKg          != null ? String(bl.deadliftKg)              : "";
+                  if (metric.key === "fiveK")        return bl.fiveKSeconds        != null ? secsToMmss(bl.fiveKSeconds)        : "";
+                  if (metric.key === "tenK")         return bl.tenKSeconds         != null ? secsToMmss(bl.tenKSeconds)         : "";
+                  if (metric.key === "halfMarathon") return bl.halfMarathonSeconds != null ? secsToMmss(bl.halfMarathonSeconds) : "";
+                  if (metric.key === "marathon")     return bl.marathonSeconds     != null ? secsToHmmss(bl.marathonSeconds)   : "";
+                  return "";
+                })();
                 const isExpanded = expandedPBKey === metric.key;
                 return (
                   <div key={metric.key} className="rounded-xl border bg-card overflow-hidden">
                     <button
                       className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                      onClick={() => setExpandedPBKey(isExpanded ? null : metric.key)}
+                      onClick={() => {
+                        const opening = !isExpanded;
+                        setExpandedPBKey(opening ? metric.key : null);
+                        if (opening) setPbInputs(p => ({ ...p, [metric.key]: prefillValue }));
+                      }}
                     >
                       <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                       <span className="flex-1 text-sm font-medium truncate">{metric.label}</span>
@@ -2043,6 +2058,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                             value={pbInputs[metric.key] ?? ""}
                             onChange={e => setPbInputs(p => ({ ...p, [metric.key]: e.target.value }))}
                             className="h-7 text-xs flex-1"
+                            autoFocus
                           />
                           <Button
                             size="sm"
@@ -2050,7 +2066,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                             disabled={!pbInputs[metric.key]?.trim() || pbInputSaving[metric.key]}
                             onClick={() => void handleLogBaseline(metric.key)}
                           >
-                            {pbInputSaving[metric.key] ? <Loader2 className="w-3 h-3 animate-spin" /> : "Log"}
+                            {pbInputSaving[metric.key] ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
                           </Button>
                         </div>
                       </div>
