@@ -153,6 +153,7 @@ ADDITIONAL RULES
 - When conversation history is provided, treat the entire thread as a single planning session. Carry ALL constraints from every prior turn into the updated proposal — if the user said "30 min sessions" in turn 1 and "no running" in turn 3, both apply to the final plan.
 - When a refinement arrives, apply only the requested change to the latest proposal. Do not drop or alter other agreed constraints unless explicitly asked.
 - If the proposal already has hasEnough: true and the user refines it, return hasEnough: true in the updated response (unless they introduced a new ambiguity that genuinely needs clarification).
+- EXACT SESSION COUNTS: If the user specifies exact session numbers — e.g. "3 and 3", "4 strength and 2 runs", "3 runs and 2 strength" — use EXACTLY those numbers. Do NOT adjust them for "better balance". Do NOT add an intentNote explaining a deviation. Just apply them as stated.
 - Use concise, modern coach language throughout. Direct, slightly opinionated, never robotic.
 - Avoid filler phrases: "this will involve", "the plan includes", "it is designed to", "in order to".
 - Prefer: "you'll", "focus is", "this gives you", "build your engine", "get stronger".
@@ -282,7 +283,7 @@ router.post("/coach-parse", async (req, res) => {
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,
-      max_tokens: 700,
+      max_tokens: 1200,
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";

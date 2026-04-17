@@ -1693,17 +1693,32 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           history: historySnapshot,
         }),
       });
-      const data = await res.json();
-      setCoachParseResult(data);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({})) as Record<string, unknown>;
+        throw new Error((errBody.error as string | undefined) ?? `Server error ${res.status}`);
+      }
+      const data = await res.json() as Record<string, unknown>;
+
+      // Guard: if the response is an error envelope, throw so catch handles it
+      if (data.error && !data.acknowledgement) {
+        throw new Error(data.error as string);
+      }
+
+      setCoachParseResult(data as CoachParseResult);
 
       // Build Phil's response text
-      let philText = data.acknowledgement ?? "";
+      let philText = (data.acknowledgement as string | undefined) ?? "";
       if (data.hasEnough && (data.planSummary as string[] | undefined)?.length) {
         philText += "\n\nHere's what I'm going to build:\n" +
           (data.planSummary as string[]).map((l: string) => `• ${l}`).join("\n");
         if (data.intentNote) philText += `\n\n${data.intentNote}`;
       } else if (!data.hasEnough && data.followUpQuestion) {
         philText += `\n\n${data.followUpQuestion}`;
+      }
+
+      // Safety net: never send a blank bubble
+      if (!philText.trim()) {
+        philText = "Got it — let me rework that.";
       }
 
       // Append this exchange to the planning conversation ref so the NEXT
@@ -1715,9 +1730,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         { role: "assistant", content: philText },
       ];
 
-      addPhilMsg(philText, { coachParseData: data });
-    } catch {
-      addPhilMsg("Couldn't reach the coaching service. Check your connection and try again.");
+      addPhilMsg(philText, { coachParseData: data as CoachParseResult });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      addPhilMsg(`Couldn't reach the coaching service${msg ? ` — ${msg}` : ""}. Check your connection and try again.`);
     } finally {
       setCmdParsing(false);
     }
