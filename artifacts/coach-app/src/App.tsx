@@ -19,6 +19,7 @@ import LibraryBuilder from "./pages/library-builder";
 import StrengthBlocks from "./pages/strength-blocks";
 import Teams from "./pages/teams";
 import TeamDetail from "./pages/team-detail";
+import CoachDashboard from "./pages/coach-dashboard";
 import { AppSidebar } from "./components/app-sidebar";
 import { ClientProvider, useClientContext } from "./contexts/client-context";
 import { AuthProvider, useAuth } from "./contexts/auth-context";
@@ -46,7 +47,7 @@ function RequireAuth({ children, roles }: { children: React.ReactNode; roles?: s
     if (roles && user && !roles.some(r => user.roles.includes(r as any))) {
       // Wrong role — redirect to their proper area
       if (user.roles.includes("admin")) setLocation("/admin");
-      else if (user.roles.includes("coach")) setLocation("/clients");
+      else if (user.roles.includes("coach")) setLocation("/dashboard");
       else setLocation("/client");
     }
   }, [isAuthenticated, isLoading, user, roles, setLocation]);
@@ -152,6 +153,7 @@ function CoachLayout() {
             </header>
             <main className="flex-1 overflow-hidden flex flex-col">
               <Switch>
+                <Route path="/dashboard" component={CoachDashboard} />
                 <Route path="/coach" component={ClientsList} />
                 <Route path="/clients" component={ClientsList} />
                 <Route path="/clients/:clientId/programmes/:programmeId" component={CoachClientCalendar} />

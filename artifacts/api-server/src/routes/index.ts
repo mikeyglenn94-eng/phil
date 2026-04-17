@@ -21,6 +21,7 @@ import coachParseRouter from "./coach-parse";
 import irlRouter from "./irl";
 import teamsRouter from "./teams";
 import clientNotesRouter from "./client-notes";
+import coachDashboardRouter from "./coach-dashboard";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(coachParseRouter);
 router.use(irlRouter);
 router.use(teamsRouter);
 router.use(clientNotesRouter);
+router.use(coachDashboardRouter);
 
 export default router;
