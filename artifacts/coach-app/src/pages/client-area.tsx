@@ -50,6 +50,39 @@ interface IrlSlot { id: number; date: string; startTime: string; endTime: string
 interface IrlBookingRow { booking: { id: number; slotId: number; creditsUsed: number; status: string; cancelledAt: string | null; creditRefunded: boolean; createdAt: string; }; slot: IrlSlot | null; }
 interface IrlLedgerEntry { id: number; delta: number; type: string; note: string | null; createdAt: string; }
 
+/** Fetch /api/generate-programme via SSE stream — heartbeats keep the proxy alive on mobile */
+async function streamProgramme(body: object): Promise<any> {
+  const res = await fetch("/api/generate-programme", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 429) return { t: "429" };
+  if (!res.ok) throw new Error(await res.text());
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("text/event-stream")) return { t: "ok", ...(await res.json()) };
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split("\n");
+    buf = parts.pop() ?? "";
+    for (const line of parts) {
+      if (!line.startsWith("data: ")) continue;
+      const json = line.slice(6).trim();
+      if (!json) continue;
+      let msg: any;
+      try { msg = JSON.parse(json); } catch { continue; }
+      if (msg.t === "hb") continue;
+      return msg;
+    }
+  }
+  throw new Error("Programme generation timed out. Check your connection and try again.");
+}
+
 function getSessionHighlight(session: Session): string {
   const isConditioning = session.source === "wod_brain" || session.source === "run_brain" || session.source === "cycle_brain" || session.source === "swim_brain";
   if (isConditioning && session.structure) return session.structure;
@@ -404,14 +437,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         setRationaleReady(true);
       }
       // Step 2: generate week 1 preview only (user confirms before weeks 2-4 are built)
-      const res = await fetch("/api/generate-programme", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, weekOnly: true }),
-      });
-      if (res.status === 429) { setGenerationLimitError(true); return; }
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const data = await streamProgramme({ ...body, weekOnly: true });
+      if (data.t === "429") { setGenerationLimitError(true); return; }
+      if (data.t === "err") throw new Error(data.error ?? "generation_failed");
       setGeneratedPreview({ ...data, rationale: capturedRationale });
     } catch (e: any) {
       toast({ title: "Couldn't generate programme", description: e?.message ?? "Try rephrasing your description.", variant: "destructive" });
@@ -623,13 +651,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setQuickAddWodOptions(null);
     try {
       const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const ctrl = new AbortController();
+      const abortTimer = setTimeout(() => ctrl.abort(), 60000);
+      let data: any;
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) throw new Error();
+        data = await res.json();
+      } finally {
+        clearTimeout(abortTimer);
+      }
       // WOD endpoint returns { options: [...] } — show choice cards
       if (data.options && Array.isArray(data.options) && data.options.length > 1) {
         setQuickAddWodOptions(data.options);
@@ -703,13 +739,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setQuickAddWodOptions(null);
     try {
       const endpoint = type === "wod" ? "/api/parse-wod-session" : type === "run" ? "/api/parse-run-session" : "/api/parse-session";
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: desc.trim(), name: quickAddName.trim() || undefined }),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const ctrl = new AbortController();
+      const abortTimer = setTimeout(() => ctrl.abort(), 60000);
+      let data: any;
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: desc.trim(), name: quickAddName.trim() || undefined }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) throw new Error();
+        data = await res.json();
+      } finally {
+        clearTimeout(abortTimer);
+      }
       // WOD endpoint returns { options: [...] } — show choice cards
       if (data.options && Array.isArray(data.options) && data.options.length > 1) {
         setQuickAddWodOptions(data.options);
@@ -1657,13 +1701,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     const date = assignStartDate || format(new Date(), "yyyy-MM-dd");
     try {
       const endpoint = type === "wod" ? "/api/parse-wod-session" : type === "run" ? "/api/parse-run-session" : "/api/parse-session";
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: brief }),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const ctrl = new AbortController();
+      const abortTimer = setTimeout(() => ctrl.abort(), 60000);
+      let data: any;
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: brief }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) throw new Error();
+        data = await res.json();
+      } finally {
+        clearTimeout(abortTimer);
+      }
       if (type === "wod" && data.options && data.options.length > 1) {
         addPhilMsg(`Got some WOD options for ${format(parseISO(date), "EEE d MMM")}. Tap to add one:`, {
           action: { type: "pick_wod", options: data.options, date },
@@ -1701,14 +1753,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     let generationError: string | null = null;
     const genPromise = (async () => {
       try {
-        const res = await fetch("/api/generate-programme", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...body, weekOnly: false }),
-        });
-        if (res.status === 429) { generationError = "limit"; return; }
-        if (!res.ok) throw new Error(await res.text());
-        generationResult = await res.json();
+        const data = await streamProgramme({ ...body, weekOnly: false });
+        if (data.t === "429") { generationError = "limit"; return; }
+        if (data.t === "err") throw new Error(data.error ?? "generation_failed");
+        generationResult = data;
       } catch (e: any) {
         generationError = e?.message ?? "failed";
       }

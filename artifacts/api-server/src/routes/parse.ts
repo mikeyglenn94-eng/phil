@@ -384,6 +384,16 @@ router.post("/generate-programme", async (req, res): Promise<void> => {
     }
   }
 
+  // ── SSE: keeps Replit proxy alive on mobile during long AI generation ──────
+  // Without this, the proxy drops idle connections before the AI responds.
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  const sseWrite = (obj: object) => { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {} };
+  const hbTimer = setInterval(() => sseWrite({ t: "hb" }), 5000);
+  const sseEnd = (obj?: object) => { clearInterval(hbTimer); if (obj) sseWrite(obj); res.end(); };
+
   // weekOnly = preview mode: generate exactly 1 week so the user can review before committing
   // Otherwise: ensure a multi-week block is generated (default 6 weeks)
   const weekMentioned = /\b(\d+)[\s-]?week|\bweeks?\b/i.test(description);
@@ -943,8 +953,7 @@ Generate EXACTLY 1 week of sessions. All day numbers must be between 1 and 7 (in
       parsed = safeParseAIJson(raw);
     } catch {
       req.log.warn({ raw }, "Failed to parse generate-programme LLM response");
-      res.status(500).json({ error: "AI returned invalid JSON — try rephrasing your description" });
-      return;
+      return sseEnd({ t: "err", error: "AI returned invalid JSON — try rephrasing your description" });
     }
 
     const start = parseISO(startDate);
@@ -973,7 +982,8 @@ Generate EXACTLY 1 week of sessions. All day numbers must be between 1 and 7 (in
       return base;
     });
 
-    res.json({
+    sseEnd({
+      t: "ok",
       title: parsed.title || "Custom Programme",
       blockLength: typeof parsed.blockLength === "number" ? parsed.blockLength : null,
       sessionsPerWeek: typeof parsed.sessionsPerWeek === "number" ? parsed.sessionsPerWeek : null,
@@ -981,7 +991,7 @@ Generate EXACTLY 1 week of sessions. All day numbers must be between 1 and 7 (in
     });
   } catch (err) {
     req.log.error({ err }, "Error generating programme");
-    res.status(500).json({ error: "Failed to generate programme" });
+    sseEnd({ t: "err", error: "Failed to generate programme" });
   }
 });
 
