@@ -1260,7 +1260,16 @@ router.post("/parse-run-session", async (req, res): Promise<void> => {
   const { description, name } = req.body as { description?: string; name?: string };
   if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
 
-  const systemPrompt = `You are a running coach. Parse the user's run description into a structured session.
+  const systemPrompt = `You are an experienced running coach. Parse the user's run description into a structured, interesting session.
+
+VARIETY RULE — NEVER REPEAT THE SAME INTERVAL DISTANCE/DURATION:
+When building interval sessions, create varied and interesting structures. Do NOT just repeat the same distance 4–6 times.
+Preferred structures (choose based on the brief):
+- Pyramid: ascending then descending (e.g. 200m, 300m, 400m, 500m, 400m, 300m, 200m)
+- Descending ladder: start long, get shorter (e.g. 500m, 400m, 300m, 200m, 200m)
+- Mixed sets: combine different distances (e.g. 3×500m + 4×300m + 2×200m)
+- Time-based variation: different effort durations (e.g. 90s, 60s, 45s, 30s repeats)
+When user says "max X distance" or "nothing over X", respect that cap but still VARY the distances below that cap.
 
 CRITICAL EXPANSION RULE:
 - "3x500m" → expand into 3 individual interval rows of 500 m each (NOT one row with reps=3)

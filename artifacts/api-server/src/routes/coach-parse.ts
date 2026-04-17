@@ -161,7 +161,8 @@ ADDITIONAL RULES
 Return a JSON object with EXACTLY this shape:
 {
   "requestType": "programme" | "session",
-  "acknowledgement": "One brief headline, max 8 words. Just name the request type and core goal. Examples: 'Hybrid plan — half marathon + muscle building.' or '4-day strength programme, powerlifting focus.' or 'Lower body session, 45 min.' NO full sentences. NO paragraphs.",
+  "sessionModality": "strength" | "run" | "wod" | null,
+  "acknowledgement": "One brief headline, max 8 words. Just name the request type and core goal. Examples: 'Hybrid plan — half marathon + muscle building.' or '4-day strength programme, powerlifting focus.' or 'Lower body session, 45 min.' or 'Running intervals, 30 min, treadmill.' NO full sentences. NO paragraphs.",
   "hasEnough": true | false,
   "followUpQuestion": "Bundled clarification question in natural coach language. Only include this field when hasEnough is false.",
   "assumptions": ["Short non-material assumption 1", "Short non-material assumption 2"],
@@ -193,6 +194,13 @@ Return a JSON object with EXACTLY this shape:
   }
 }
 
+sessionModality rules (only used when requestType is "session" — null for programmes):
+- "run"    → any running, intervals, sprints, treadmill, outdoor run, tempo, steady run, jog, 5K training, half marathon session
+- "wod"    → AMRAP, EMOM, For Time, Hyrox, metcon, CrossFit-style conditioning
+- "strength" → weights, lifting, resistance, gym-based strength work, bodyweight circuits without running
+- When requestType is "programme": always set sessionModality to null.
+- When in doubt for a session with running keywords: use "run".
+
 progressionStyle rules (for programmes only — null for sessions):
 - "straight" = same exercises every week, progress through load/reps/sets. Best for beginners, most clients, anyone who hasn't explicitly asked for variety.
 - "variety" = primary lifts stay fixed, accessory exercises can rotate week to week. For intermediate/advanced athletes who explicitly want variation, are experienced lifters, or describe a more complex programme.
@@ -201,12 +209,14 @@ progressionStyle rules (for programmes only — null for sessions):
 
 planSummary rules:
 - Only include when hasEnough is true.
-- Max 6 bullets total. One idea per bullet. No sets/reps. No detailed exercise selection.
-- Always include: duration, days per week, high-level session split, structure note, progression note.
-- Use short phrases: "6 weeks", "4 days per week", "2 strength → full-body", "gradual load increase".
-- When running is included, reflect the environment concisely in the session split bullet (e.g. "2 runs → quality on treadmill, steady on road").
-- Never use "easy run" — use "quality session", "steady run", or "long steady run".
-- For sessions (not programmes): use "planSummary" to describe the session structure instead (e.g. "45 min", "lower body focus", "compound-first", "5 exercises").`;
+- Max 6 bullets total. One idea per bullet.
+- For PROGRAMMES: include duration, days/week, high-level session split, structure note, progression note.
+  Examples: "6 weeks", "4 days per week", "2 strength → upper/lower", "2 runs → quality + steady", "gradual load increase".
+- For STRENGTH SESSIONS: include duration, focus area, exercise count, structure note. Examples: "45 min", "lower body focus", "5 exercises", "straight sets, compound-first".
+- For RUN SESSIONS: describe the run. Include duration, interval structure, distance targets, rest format. NEVER use compound/strength language.
+  Examples: "30 min", "6 × 400m intervals", "90 sec rest between reps", "treadmill-based", "max effort each rep".
+- For WOD/METCON SESSIONS: describe the format. Examples: "20 min AMRAP", "5 movements", "for time".
+- Never use "easy run" — use "quality session", "steady run", or "long steady run".`;
 
 router.post("/coach-parse", async (req, res) => {
   const { input, followUpAnswer, refinement, previousPlan, clientContext, history } = req.body as {

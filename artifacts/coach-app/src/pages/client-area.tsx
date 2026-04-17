@@ -955,6 +955,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   // ── Coach parse result (parse-first plan/session flow) ───────────────────
   interface CoachParseResult {
     requestType: "programme" | "session";
+    sessionModality?: "strength" | "run" | "wod" | null;
     acknowledgement: string;
     hasEnough: boolean;
     followUpQuestion?: string;
@@ -1926,7 +1927,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     planningConvRef.current = [];
 
     if (isSession) {
-      const inferredType = inferSessionTypeFromBrief(brief);
+      // Use the explicit modality from Phil's parse result if available.
+      // Fall back to text inference only as a last resort.
+      const modalityFromPhil = coachParseResult.sessionModality;
+      const inferredType: "strength" | "wod" | "run" =
+        modalityFromPhil === "run" ? "run" :
+        modalityFromPhil === "wod" ? "wod" :
+        modalityFromPhil === "strength" ? "strength" :
+        inferSessionTypeFromBrief(brief);
       void handleBuildSessionFromPhil(brief, inferredType);
     } else {
       const startDate = getNextMonday();
