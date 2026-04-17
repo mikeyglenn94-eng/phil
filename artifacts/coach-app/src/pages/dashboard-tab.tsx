@@ -1401,7 +1401,8 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                 continue;
               }
 
-              const pct = Math.min(Math.round((curr / targetNum) * 100), 100);
+              const higherIsBetter = true;
+              const pct = Math.min(100, Math.round(higherIsBetter ? (curr / targetNum) * 100 : (targetNum / curr) * 100));
               const weeklyGain = loggedCurr !== null && loggedPrev !== null ? (loggedCurr - loggedPrev) / 4 : null;
               const weeksEst = weeklyGain && weeklyGain > 0 ? Math.ceil((targetNum - curr) / weeklyGain) : null;
               const tight = weeksToTarget !== null && weeksEst !== null ? weeksEst > weeksToTarget : false;
@@ -1457,12 +1458,8 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                 : (t.metric === "marathon" && bl?.marathonSeconds) ? bl.marathonSeconds
                 : (loggedPrevSecs ?? currSecs);
 
-              let pct = 0;
-              if (currSecs <= targetSecs) {
-                pct = 100;
-              } else if (baselineSecs > targetSecs) {
-                pct = Math.max(0, Math.min(100, Math.round(((baselineSecs - currSecs) / (baselineSecs - targetSecs)) * 100)));
-              }
+              const higherIsBetter = false;
+              const pct = Math.min(100, Math.round(higherIsBetter ? (currSecs / targetSecs) * 100 : (targetSecs / currSecs) * 100));
               const noProgress = pct === 0 && currSecs > targetSecs;
 
               const cLabel = t.metric === "marathon" ? secsToHmmss(currSecs) : secsToMmss(currSecs);
