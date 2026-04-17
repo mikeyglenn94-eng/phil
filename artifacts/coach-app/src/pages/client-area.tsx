@@ -4415,15 +4415,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       )}
 
       {/* ── Phil Chat Panel — global bottom drawer (all tabs) ────────────────── */}
-      {!isTeamMode && (
+      {(
         <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${
-          activeTab === "training"
+          (activeTab === "training" || isTeamMode)
             ? (philOpen ? "h-[300px]" : "h-0")
             : (philExpanded ? "h-[300px]" : "h-14")
         }`}>
 
           {/* ── Slim bar (non-training, collapsed) ── */}
-          {activeTab !== "training" && !philExpanded && (
+          {activeTab !== "training" && !isTeamMode && !philExpanded && (
             <div className="h-14 flex items-center gap-2.5 px-3">
               <button
                 type="button"
@@ -4456,8 +4456,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </div>
           )}
 
-          {/* ── Expanded panel (non-training expanded, or training open) ── */}
-          {(philExpanded || activeTab === "training") && (
+          {/* ── Expanded panel (non-training expanded, or training open, or team mode) ── */}
+          {(philExpanded || activeTab === "training" || isTeamMode) && (
             <div className="h-[300px] flex flex-col">
               {/* Header */}
               <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
@@ -4468,7 +4468,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     <p className="text-[11px] text-muted-foreground">MG Coaching</p>
                   </div>
                 </div>
-                {activeTab === "training" ? (
+                {(activeTab === "training" || isTeamMode) ? (
                   <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPhilOpen(false)} title="Close">
                     <X className="w-4 h-4" />
                   </Button>
