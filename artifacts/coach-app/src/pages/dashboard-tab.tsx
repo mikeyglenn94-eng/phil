@@ -493,23 +493,28 @@ function StatCard({
 // ── Perf card (all-time PB + current estimate) ───────────────────
 
 function PerfCard({
-  title, icon, allTimePB, currentEst, isRunning = false, className = "",
+  title, icon, allTimePB, currentEst, higherIsBetter = true, className = "",
 }: {
   title: string; icon: React.ReactNode;
   allTimePB: string | null; currentEst: string | null;
-  isRunning?: boolean; className?: string;
+  higherIsBetter?: boolean; className?: string;
 }) {
   const hasBoth = allTimePB !== null && currentEst !== null;
-  let isAbovePB = false;
+  type Comparison = "better" | "equal" | "worse";
+  let comparison: Comparison = "worse";
   if (hasBoth) {
-    if (isRunning) {
-      const currS = paceToSeconds(currentEst!);
-      const pbS   = paceToSeconds(allTimePB!);
-      isAbovePB = currS !== null && pbS !== null && currS < pbS;
-    } else {
+    if (higherIsBetter) {
       const currN = parseFloat(currentEst!);
       const pbN   = parseFloat(allTimePB!);
-      isAbovePB = !isNaN(currN) && !isNaN(pbN) && currN > pbN;
+      if (!isNaN(currN) && !isNaN(pbN)) {
+        comparison = currN > pbN ? "better" : currN === pbN ? "equal" : "worse";
+      }
+    } else {
+      const currS = paceToSeconds(currentEst!);
+      const pbS   = paceToSeconds(allTimePB!);
+      if (currS !== null && pbS !== null) {
+        comparison = currS < pbS ? "better" : currS === pbS ? "equal" : "worse";
+      }
     }
   }
   return (
@@ -527,8 +532,8 @@ function PerfCard({
       {currentEst !== null && (
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">Current est.</span>
-          <span className={`text-sm font-semibold tabular-nums ${hasBoth && isAbovePB ? "text-emerald-600" : ""}`}>
-            {currentEst}{hasBoth && (isAbovePB ? " ↑ PB" : " 😟")}
+          <span className={`text-sm font-semibold tabular-nums ${hasBoth && comparison === "better" ? "text-emerald-600" : ""}`}>
+            {currentEst}{hasBoth && (comparison === "better" ? " ↑ PB" : comparison === "equal" ? " 😐" : " 😟")}
           </span>
         </div>
       )}
@@ -1705,7 +1710,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                   icon={<Footprints className="w-4 h-4" />}
                   allTimePB={allTimePB}
                   currentEst={runMetrics.estimated5K.current}
-                  isRunning
+                  higherIsBetter={false}
                 />
               );
             })()}
