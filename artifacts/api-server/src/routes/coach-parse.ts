@@ -175,9 +175,16 @@ planSummary rules:
 - For sessions (not programmes): use "planSummary" to describe the session structure instead (e.g. "45 min", "lower body focus", "compound-first", "5 exercises").`;
 
 router.post("/coach-parse", async (req, res) => {
-  const { input, followUpAnswer, clientContext, history } = req.body as {
+  const { input, followUpAnswer, refinement, previousPlan, clientContext, history } = req.body as {
     input: string;
     followUpAnswer?: string;
+    refinement?: string;
+    previousPlan?: {
+      planSummary?: string[];
+      suggestedBrief?: string;
+      requestType?: string;
+      parsedConstraints?: Record<string, unknown>;
+    };
     clientContext?: { name?: string; programmes?: string[]; goals?: string };
     history?: { role: "user" | "assistant"; content: string }[];
   };
@@ -198,9 +205,17 @@ router.post("/coach-parse", async (req, res) => {
     ? `\n\nClient context:\n${contextLines.join("\n")}`
     : "";
 
-  const userContent = followUpAnswer
-    ? `Original request: ${input}\n\nMy answer to your question: ${followUpAnswer}\n\nNow produce a complete response using all information above.`
-    : input;
+  let userContent: string;
+  if (refinement && previousPlan) {
+    // User is refining a plan that was already proposed — pass full proposal context
+    const proposalBullets = (previousPlan.planSummary ?? []).map((l: string) => `• ${l}`).join("\n");
+    const briefLine = previousPlan.suggestedBrief ? `\nComplete brief: ${previousPlan.suggestedBrief}` : "";
+    userContent = `Original request: ${input}\n\nProposed plan we just agreed on:\n${proposalBullets}${briefLine}\n\nClient wants to adjust it: ${refinement}\n\nApply the adjustment to the plan. Return a new complete JSON. Set hasEnough: true if you now have enough to build it, or hasEnough: false with a followUpQuestion if critical info is still missing.`;
+  } else if (followUpAnswer) {
+    userContent = `Original request: ${input}\n\nMy answer to your question: ${followUpAnswer}\n\nNow produce a complete response using all information above.`;
+  } else {
+    userContent = input;
+  }
 
   const msgs: { role: "user" | "assistant"; content: string }[] = [];
   if (history?.length) {

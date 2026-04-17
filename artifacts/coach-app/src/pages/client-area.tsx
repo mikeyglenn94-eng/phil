@@ -1653,7 +1653,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   }
 
   // ── Parse-first: called when user submits a plan/session brief ───────────
-  const callCoachParse = async (input: string, followUpAnswer?: string) => {
+  const callCoachParse = async (
+    input: string,
+    followUpAnswer?: string,
+    refinement?: string,
+    previousPlan?: CoachParseResult
+  ) => {
     setCmdParsing(true);
     try {
       const res = await fetch("/api/coach-parse", {
@@ -1662,6 +1667,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         body: JSON.stringify({
           input,
           ...(followUpAnswer ? { followUpAnswer } : {}),
+          ...(refinement ? { refinement } : {}),
+          ...(previousPlan ? { previousPlan } : {}),
           clientContext: {
             name: client?.name,
             programmes: (clientProgrammes ?? []).map(p => p.title),
@@ -2051,8 +2058,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     // On Training (or team mode): use existing routing logic unchanged
     if (activeTab === "training" || isTeamMode) {
       if (coachParseResult && !coachParseResult.hasEnough) {
+        // Still gathering info — pass the answer to Phil's clarifying question
         addUserMsg(input);
         await callCoachParse(originalCoachInput, input);
+        return;
+      }
+      if (coachParseResult && coachParseResult.hasEnough) {
+        // A plan preview is showing with "Build this" — treat this message as a refinement
+        addUserMsg(input);
+        await callCoachParse(originalCoachInput, undefined, input, coachParseResult);
         return;
       }
       await handleCoachInput(input);
