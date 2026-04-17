@@ -173,7 +173,7 @@ export default function TeamDetail() {
 
       {/* Programme tab — full AI calendar via shared ClientArea component */}
       {activeTab === "programme" && (
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col bg-background text-foreground">
           <ClientArea
             calendarContext="team"
             teamId={id}

@@ -3989,7 +3989,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 onKeyDown={e => { if (e.key === "Enter") void handleCoachInput(); }}
                 placeholder="Ask Phil: plan, adjust, progress or review your training…"
                 disabled={cmdListening || cmdParsing}
-                className="flex-1 text-sm bg-muted/30 border rounded-xl px-3.5 py-2 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 focus:bg-background transition-colors"
+                className="flex-1 text-sm text-foreground bg-muted/30 border rounded-xl px-3.5 py-2 outline-none placeholder:text-muted-foreground/50 focus:border-primary/40 focus:bg-background transition-colors"
               />
               <button
                 type="button"
