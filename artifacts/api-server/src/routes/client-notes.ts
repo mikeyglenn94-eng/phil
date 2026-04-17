@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq, and, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { clientNotesTable } from "@workspace/db";
+import { desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -66,6 +67,27 @@ router.post("/client-notes", async (req, res): Promise<void> => {
 router.get("/client-notes/all", async (_req, res): Promise<void> => {
   const rows = await db.select().from(clientNotesTable);
   res.json(rows);
+});
+
+router.get("/client-notes", async (req, res): Promise<void> => {
+  const clientId = parseInt(req.query.clientId as string, 10);
+  if (!clientId) { res.status(400).json({ error: "clientId required" }); return; }
+  const rows = await db
+    .select()
+    .from(clientNotesTable)
+    .where(eq(clientNotesTable.clientId, clientId))
+    .orderBy(desc(clientNotesTable.updatedAt));
+  res.json(rows);
+});
+
+router.patch("/client-notes/mark-read", async (req, res): Promise<void> => {
+  const { clientId, sessionId } = req.body as { clientId: number; sessionId: string };
+  if (!clientId || !sessionId) { res.status(400).json({ error: "clientId and sessionId required" }); return; }
+  await db
+    .update(clientNotesTable)
+    .set({ readByCoach: true })
+    .where(and(eq(clientNotesTable.clientId, clientId), eq(clientNotesTable.sessionId, sessionId)));
+  res.json({ ok: true });
 });
 
 export default router;
