@@ -216,8 +216,18 @@ ${tabSection}`;
       const cleaned = raw.replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      // Fallback: treat entire response as reply text
-      parsed = { reply: raw };
+      // Try to extract a JSON object embedded anywhere in the response
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch {
+          // Strip any JSON-like blocks so they never appear as visible text
+          parsed = { reply: raw.replace(/\{[\s\S]*?\}/g, "").trim() || "What would you like to work on today?" };
+        }
+      } else {
+        parsed = { reply: raw };
+      }
     }
 
     const reply = parsed.reply?.trim() || "What would you like to work on today?";

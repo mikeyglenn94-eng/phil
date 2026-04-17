@@ -833,6 +833,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     }
   }, [philMessages]);
 
+  // Phil first-load nudge — fires once when dashboard opens with no sessions and no programme
+  const philNudgeSentRef = useRef(false);
+  useEffect(() => {
+    if (philNudgeSentRef.current) return;
+    if (analyticsLoading || !analytics) return;
+    if (analytics.sessions.length > 0) return;
+    if ((clientProgrammes ?? []).flatMap((p: any) => p.sessions ?? []).length > 0) return;
+    philNudgeSentRef.current = true;
+    addPhilMsg("No programme yet. Head to Training and let's build one.");
+  }, [analyticsLoading, analytics, clientProgrammes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch welcome status once (client mode only)
   useEffect(() => {
     if (!clientId || mode !== "client") { setHasSeenWelcome(true); return; }

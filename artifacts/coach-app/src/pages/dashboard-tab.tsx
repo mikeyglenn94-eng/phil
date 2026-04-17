@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import CoachingSheet from "@/components/coaching-sheet";
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -1253,10 +1254,64 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
 
   if (!analytics || analytics.sessions.length === 0) {
     return (
-      <div className="text-center py-20 text-muted-foreground px-6">
-        <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-25" />
-        <p className="font-semibold">No logged sessions yet</p>
-        <p className="text-sm mt-1">Complete a session to see your stats here.</p>
+      <div className="px-4 pt-4 pb-8 space-y-4 opacity-60 pointer-events-none select-none">
+        {/* Onboarding nudge */}
+        <div className="rounded-xl border bg-primary/5 border-primary/20 px-4 py-3 pointer-events-auto">
+          <p className="text-sm font-semibold text-primary">No programme yet.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Head to Training and let Phil build one for you.</p>
+        </div>
+
+        {/* Skeleton: Fitness Score */}
+        <div className="rounded-2xl border bg-card p-4 space-y-3">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-10 w-16" />
+          <Skeleton className="h-2 w-full rounded-full" />
+          <div className="flex gap-2">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        </div>
+
+        {/* Skeleton: This Week */}
+        <div className="rounded-2xl border bg-card p-4 space-y-2">
+          <Skeleton className="h-3 w-20 mb-3" />
+          <div className="grid grid-cols-3 gap-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="space-y-1.5">
+                <Skeleton className="h-6 w-10" />
+                <Skeleton className="h-2.5 w-14" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Skeleton: Goals */}
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-14" />
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="rounded-xl border bg-card px-3 py-3 space-y-2">
+              <div className="flex justify-between">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-8" />
+              </div>
+              <Skeleton className="h-1.5 w-full rounded-full" />
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton: Performance cards */}
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <div className="grid grid-cols-2 gap-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-xl border bg-card p-3 space-y-2">
+                <Skeleton className="h-2.5 w-12" />
+                <Skeleton className="h-5 w-16" />
+                <Skeleton className="h-2.5 w-20" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
