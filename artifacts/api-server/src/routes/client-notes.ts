@@ -63,4 +63,9 @@ router.post("/client-notes", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/client-notes/all", async (_req, res): Promise<void> => {
+  const rows = await db.select().from(clientNotesTable);
+  res.json(rows);
+});
+
 export default router;
