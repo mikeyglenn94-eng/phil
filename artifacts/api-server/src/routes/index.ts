@@ -22,6 +22,8 @@ import irlRouter from "./irl";
 import teamsRouter from "./teams";
 import clientNotesRouter from "./client-notes";
 import coachDashboardRouter from "./coach-dashboard";
+import cycleBrainRouter from "./cycle-brain";
+import swimBrainRouter from "./swim-brain";
 
 const router: IRouter = Router();
 
@@ -48,5 +50,7 @@ router.use(irlRouter);
 router.use(teamsRouter);
 router.use(clientNotesRouter);
 router.use(coachDashboardRouter);
+router.use(cycleBrainRouter);
+router.use(swimBrainRouter);
 
 export default router;

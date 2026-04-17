@@ -1526,10 +1526,12 @@ export default function ClientSession() {
       })()}
 
       {/* Conditioning session (WOD Brain / Run Brain / Endurance Cycle) */}
-      {((session as any).source === "wod_brain" || (session as any).source === "run_brain" || (session as any).source === "endurance_cycle") && (() => {
+      {((session as any).source === "wod_brain" || (session as any).source === "run_brain" || (session as any).source === "endurance_cycle" || (session as any).source === "cycle_brain" || (session as any).source === "swim_brain") && (() => {
         const src = (session as any).source as string;
         const isGreen = src === "run_brain" || src === "endurance_cycle";
-        const label = src === "run_brain" ? "Run Brain" : src === "endurance_cycle" ? "Endurance Cycle" : "WOD Brain";
+        const isOrange = src === "cycle_brain";
+        const isBlue = src === "swim_brain";
+        const label = src === "run_brain" ? "Run" : src === "endurance_cycle" ? "Endurance Cycle" : src === "cycle_brain" ? "Cycling" : src === "swim_brain" ? "Swimming" : "WOD";
         return (
         <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
           {/* ── WOD Brain: structured workout definition + result inputs ── */}

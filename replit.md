@@ -19,8 +19,9 @@ The MG Coaching platform is a monorepo managed with pnpm workspaces, utilizing N
 -   **AI Coach (Phil):** A global AI coach accessible across all user tabs. It provides context-aware responses, welcome tours for new users, and maintains conversation history.
 -   **Program and Session Management:** Core functionality revolves around a multi-week calendar interface for creating, editing, and managing training programs and sessions. Sessions are stored in PostgreSQL with a flexible JSONB schema to accommodate various exercise structures.
 -   **Voice Input & AI Parsing:** Utilizes browser-based speech recognition to convert natural language commands into structured exercise data (sets, reps, RPE, rest, tempo, notes, week progression) via GPT-5.2.
--   **Workout Editor:** A unified `WorkoutPreviewEditorCard` component handles both session creation and editing, supporting various session types (strength, WOD, run) and range-based exercise prescriptions.
+-   **Workout Editor:** A unified `WorkoutPreviewEditorCard` component handles both session creation and editing, supporting various session types (strength, WOD, run, cycling, swimming) and range-based exercise prescriptions.
 -   **Engine & Strength Builders:** Specialized modules for generating aerobic engine programs (e.g., Hinshaw-style) and strength blocks (e.g., Smolov routines), which can be inserted directly into client training calendars.
+-   **Cycling & Swimming Session Types:** Full `cycle_brain` and `swim_brain` session source types. Cycle brain covers 20 workouts across endurance/tempo/intervals/recovery/race_sim. Swim brain covers 18 workouts across endurance/CSS/technique/sprint/open_water. Both are integrated into the AI parse prompt (with 3:1 build/recover rules, 10% volume cap, multi-sport scheduling rules) and the brain search endpoint. Colors: cycling = amber (#ea580c), swimming = sky (#0284c7).
 
 **Frontend Pages & Routing:**
 

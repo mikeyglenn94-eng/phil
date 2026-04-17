@@ -178,7 +178,7 @@ export default function CoachClientCalendar() {
                 const color = session ? getSessionColor(session.name) : null;
                 const hasResults = session ? sessionHasResults(session) : false;
                 const hasFeedback = session ? sessionHasFeedback(session) : false;
-                const isConditioning = session && ((session as any).source === "wod_brain" || (session as any).source === "run_brain");
+                const isConditioning = session && ((session as any).source === "wod_brain" || (session as any).source === "run_brain" || (session as any).source === "cycle_brain" || (session as any).source === "swim_brain");
                 const sessionNotes = session ? (notesBySessionId[session.id] ?? []) : [];
                 const hasUnreadNote = sessionNotes.some(n => !n.readByCoach);
                 const hasNote = sessionNotes.length > 0;
@@ -217,8 +217,16 @@ export default function CoachClientCalendar() {
                         {/* Exercise list */}
                         <div className="px-2 py-1 space-y-0.5">
                           {isConditioning ? (
-                            <span className={`text-[9px] font-semibold uppercase tracking-wide ${(session as any).source === "run_brain" ? "text-green-600" : "text-purple-600"}`}>
-                              {(session as any).source === "run_brain" ? "Run Brain" : "WOD Brain"}
+                            <span className={`text-[9px] font-semibold uppercase tracking-wide ${
+                              (session as any).source === "run_brain" ? "text-green-600"
+                              : (session as any).source === "cycle_brain" ? "text-amber-600"
+                              : (session as any).source === "swim_brain" ? "text-sky-600"
+                              : "text-purple-600"
+                            }`}>
+                              {(session as any).source === "run_brain" ? "Run"
+                                : (session as any).source === "cycle_brain" ? "Cycling"
+                                : (session as any).source === "swim_brain" ? "Swimming"
+                                : "WOD"}
                             </span>
                           ) : (
                             (session.exercises || []).slice(0, 4).map((ex: Exercise) => {
@@ -271,20 +279,25 @@ export default function CoachClientCalendar() {
               {/* Panel body */}
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
                 {/* Conditioning session */}
-                {((selectedSession as any).source === "wod_brain" || (selectedSession as any).source === "run_brain") && (() => {
-                  const isRun = (selectedSession as any).source === "run_brain";
+                {((selectedSession as any).source === "wod_brain" || (selectedSession as any).source === "run_brain" || (selectedSession as any).source === "cycle_brain" || (selectedSession as any).source === "swim_brain") && (() => {
+                  const src = (selectedSession as any).source as string;
+                  const isRun = src === "run_brain";
+                  const isCycle = src === "cycle_brain";
+                  const isSwim = src === "swim_brain";
+                  const bgCls = isRun ? "bg-green-50 border-green-200" : isCycle ? "bg-amber-50 border-amber-200" : isSwim ? "bg-sky-50 border-sky-200" : "bg-purple-50 border-purple-200";
+                  const labelCls = isRun ? "text-green-700" : isCycle ? "text-amber-700" : isSwim ? "text-sky-700" : "text-purple-700";
+                  const iconCls = isRun ? "text-green-600" : isCycle ? "text-amber-600" : isSwim ? "text-sky-600" : "text-purple-600";
+                  const label = isRun ? "Run" : isCycle ? "Cycling" : isSwim ? "Swimming" : "WOD";
                   return (
-                    <div className={`rounded-2xl border p-4 ${isRun ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
+                    <div className={`rounded-2xl border p-4 ${bgCls}`}>
                       <div className="flex items-center gap-2 mb-3">
-                        {isRun
-                          ? <Zap className="w-4 h-4 text-green-600" />
-                          : <Clock className="w-4 h-4 text-purple-600" />}
-                        <span className={`text-xs font-bold uppercase tracking-wide ${isRun ? "text-green-700" : "text-purple-700"}`}>
-                          {isRun ? "Run Brain" : "WOD Brain"}
+                        <Zap className={`w-4 h-4 ${iconCls}`} />
+                        <span className={`text-xs font-bold uppercase tracking-wide ${labelCls}`}>
+                          {label}
                         </span>
                       </div>
                       {(selectedSession as any).structure && (
-                        <p className={`text-sm font-medium mb-3 ${isRun ? "text-green-800" : "text-purple-800"}`}>
+                        <p className={`text-sm font-medium mb-3 ${isRun ? "text-green-800" : isCycle ? "text-amber-800" : isSwim ? "text-sky-800" : "text-purple-800"}`}>
                           {(selectedSession as any).structure}
                         </p>
                       )}

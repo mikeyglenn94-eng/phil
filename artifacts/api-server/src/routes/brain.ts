@@ -7,6 +7,8 @@ import { searchCyclesSync } from "./endurance-cycles";
 import { searchStrengthSync } from "./strength-blocks";
 import { searchEngineSync } from "./engine-builder";
 import { searchSessionLibrarySync } from "./session-library";
+import { searchCycleSync } from "./cycle-brain";
+import { searchSwimSync } from "./swim-brain";
 
 const router: IRouter = Router();
 
@@ -15,7 +17,7 @@ const router: IRouter = Router();
 // Sessions and blocks both live inside their bucket.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Bucket = "wod" | "run" | "strength" | "all";
+type Bucket = "wod" | "run" | "strength" | "cycle" | "swim" | "all";
 
 // WOD = conditioning sessions/blocks (AMRAP, EMOM, ergs, engine, etc.)
 const WOD_KW = [
@@ -39,17 +41,33 @@ const STRENGTH_KW = [
   "snatch", "clean", "jerk", "press", "pull",
 ];
 
+// Cycle = cycling sessions
+const CYCLE_KW = [
+  "cycling", "cycle", "bike", "ride", "riding", "cyclist",
+  "endurance ride", "tempo ride", "cycling intervals", "recovery ride",
+  "race sim", "sweet spot", "ftp", "turbo", "indoor cycling", "zwift",
+];
+
+// Swim = swimming sessions
+const SWIM_KW = [
+  "swim", "swimming", "pool", "freestyle", "css", "critical swim speed",
+  "open water", "stroke", "drills", "technique swim", "swim session",
+  "metres", "meters", "yardage", "triathlon swim",
+];
+
 function detectBucket(query: string): Bucket {
   const q = query.toLowerCase();
   const scores: Record<Bucket, number> = {
     wod:      WOD_KW.filter(k => q.includes(k)).length,
     run:      RUN_KW.filter(k => q.includes(k)).length,
     strength: STRENGTH_KW.filter(k => q.includes(k)).length,
+    cycle:    CYCLE_KW.filter(k => q.includes(k)).length,
+    swim:     SWIM_KW.filter(k => q.includes(k)).length,
     all:      0,
   };
-  const max = Math.max(scores.wod, scores.run, scores.strength);
+  const max = Math.max(scores.wod, scores.run, scores.strength, scores.cycle, scores.swim);
   if (max === 0) return "all";
-  const winners = (["wod", "run", "strength"] as Bucket[]).filter(k => scores[k] === max);
+  const winners = (["wod", "run", "strength", "cycle", "swim"] as Bucket[]).filter(k => scores[k] === max);
   return winners.length === 1 ? winners[0] : "all";
 }
 
@@ -188,6 +206,36 @@ function normaliseRunBlock(t: any, score: number) {
   };
 }
 
+function normaliseCycleSession(c: any) {
+  const dur = c.durationMin ? `${c.durationMin} min` : "";
+  return {
+    id: c.id,
+    name: c.name,
+    bucket: "cycle" as const,
+    source: "cycle_session" as const,
+    isBlock: false,
+    subtitle: `${c.type} · ${dur} · RPE ${c.rpeRange}`,
+    tags: c.tags ?? [],
+    score: c.score ?? 1,
+    raw: c,
+  };
+}
+
+function normaliseSwimSession(s: any) {
+  const dist = s.totalMeters ? `${s.totalMeters}m` : "";
+  return {
+    id: s.id,
+    name: s.name,
+    bucket: "swim" as const,
+    source: "swim_session" as const,
+    isBlock: false,
+    subtitle: `${s.type} · ${dist}`,
+    tags: s.tags ?? [],
+    score: s.score ?? 1,
+    raw: s,
+  };
+}
+
 function normaliseStrengthBlock_Programme(p: any, score: number) {
   const sessions: any[] = p.sessions ?? [];
   const dates = sessions.map((s: any) => s.date).filter(Boolean).sort();
@@ -233,6 +281,18 @@ router.post("/brain/search", async (req, res): Promise<void> => {
   if (bucket === "run" || bucket === "all") {
     const limit = bucket === "all" ? 2 : 4;
     searchRunsSync(query, limit).forEach(r => results.push(normaliseRunSession(r)));
+  }
+
+  // ── Cycle bucket ──────────────────────────────────────────────
+  if (bucket === "cycle" || bucket === "all") {
+    const limit = bucket === "all" ? 2 : 4;
+    searchCycleSync(query, limit).forEach(c => results.push(normaliseCycleSession(c)));
+  }
+
+  // ── Swim bucket ──────────────────────────────────────────────
+  if (bucket === "swim" || bucket === "all") {
+    const limit = bucket === "all" ? 2 : 4;
+    searchSwimSync(query, limit).forEach(s => results.push(normaliseSwimSession(s)));
   }
 
   // ── Strength bucket ──────────────────────────────────────────────

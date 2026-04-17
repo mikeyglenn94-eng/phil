@@ -51,7 +51,7 @@ interface IrlBookingRow { booking: { id: number; slotId: number; creditsUsed: nu
 interface IrlLedgerEntry { id: number; delta: number; type: string; note: string | null; createdAt: string; }
 
 function getSessionHighlight(session: Session): string {
-  const isConditioning = session.source === "wod_brain" || session.source === "run_brain";
+  const isConditioning = session.source === "wod_brain" || session.source === "run_brain" || session.source === "cycle_brain" || session.source === "swim_brain";
   if (isConditioning && session.structure) return session.structure;
   const exs = session.exercises ?? [];
   return exs
@@ -70,6 +70,10 @@ function getSessionTypeBadge(session: Session): { label: string; className: stri
       return { label: "Run", className: "bg-emerald-100 text-emerald-700" };
     case "wod_brain":
       return { label: "WOD", className: "bg-orange-100 text-orange-700" };
+    case "cycle_brain":
+      return { label: "Cycling", className: "bg-amber-100 text-amber-700" };
+    case "swim_brain":
+      return { label: "Swimming", className: "bg-sky-100 text-sky-700" };
     case "endurance_cycle":
       return { label: "Endurance", className: "bg-sky-100 text-sky-700" };
     case "strength_block":
@@ -4373,7 +4377,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                         {isPublished && <Lock className="w-2.5 h-2.5 opacity-50 shrink-0" />}
                                       </div>
                                     )}
-                                    {(session.source === "wod_brain" || session.source === "run_brain") && session.structure && (
+                                    {(session.source === "wod_brain" || session.source === "run_brain" || session.source === "cycle_brain" || session.source === "swim_brain") && session.structure && (
                                       <p className={`text-[10px] leading-snug mb-1 line-clamp-2 ${isTouchPicked ? "opacity-90" : "opacity-70"}`}>{session.structure}</p>
                                     )}
                                     {(session.exercises ?? []).length > 0 && (
@@ -4980,14 +4984,18 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     {generatedPreview.sessions.map((s: any) => {
                       const isWod = s.source === "wod_brain";
                       const isRun = s.source === "run_brain";
+                      const isCycle = s.source === "cycle_brain";
+                      const isSwim = s.source === "swim_brain";
+                      const isConditioning = isWod || isRun || isCycle || isSwim;
+                      const dotColor = isWod ? "bg-violet-500" : isRun ? "bg-emerald-500" : isCycle ? "bg-amber-500" : isSwim ? "bg-sky-500" : "bg-primary";
                       return (
                         <div key={s.id} className="rounded-xl border bg-background p-3 space-y-1.5">
                           <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${isWod ? "bg-violet-500" : isRun ? "bg-emerald-500" : "bg-primary"}`} />
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
                             <span className="text-[11px] text-muted-foreground">{format(parseISO(s.date), "EEE d MMM")}</span>
                             <span className="font-semibold text-sm">{s.name}</span>
                           </div>
-                          {isWod || isRun ? (
+                          {isConditioning ? (
                             <p className="text-xs text-muted-foreground leading-relaxed pl-4">{s.structure}</p>
                           ) : (
                             <div className="space-y-0.5 pl-4">

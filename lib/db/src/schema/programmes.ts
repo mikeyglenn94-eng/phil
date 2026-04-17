@@ -40,7 +40,7 @@ export const sessionSchema = z.object({
   dayNumber: z.number().int().optional(), // 1-indexed position in programme (Day 1 = startDate, Day 2 = startDate+1, etc.)
   name: z.string().optional(), // e.g. "Quads", "Upper Body"
   color: z.string().optional(), // hex or named color
-  source: z.enum(["wod_brain", "run_brain", "endurance_cycle", "strength_block"]).optional(),
+  source: z.enum(["wod_brain", "run_brain", "endurance_cycle", "strength_block", "cycle_brain", "swim_brain"]).optional(),
   structure: z.string().optional(),
   guidance: z.string().optional(),
   clientComment: z.string().nullable().optional(),

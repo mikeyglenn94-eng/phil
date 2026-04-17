@@ -487,6 +487,52 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - exercises: the run broken into segments as exercises (e.g. {name:"4×1km Threshold", sets:4, reps:"1km", rest:"90s", ...})
 - When environment is specified in the description, reflect it in the session name: e.g. "Treadmill Intervals", "Road Steady Run", "Hill Repeats"
 
+### Cycling sessions (source: "cycle_brain"):
+- "source": "cycle_brain"
+- "name": descriptive session name — use these types only:
+  - "Endurance Ride" — long steady effort, aerobic base, RPE 4-5
+  - "Tempo Ride" — sustained comfortably-hard effort, 20-60 min, RPE 7-8
+  - "Cycling Intervals" or "5×5 Min Intervals" (name the key effort) — short hard efforts with recovery, RPE 9-10
+  - "Recovery Ride" — very easy spinning, active recovery only, RPE 1-2
+  - "Race Sim" — race pace effort, longer sustained duration, RPE 8-9
+  - "Sweet Spot" — 88-93% FTP, between tempo and threshold, RPE 7-8
+- "structure": the full session description (e.g. "10 min warm-up, 5×5 min hard effort RPE 9-10 with 3 min easy spinning, 10 min cool-down")
+- "color": "#ea580c"
+- exercises: the session broken into segments as exercises (e.g. {name:"5×5 Min Hard Intervals", sets:5, reps:"5 min", rest:"3 min easy spin", rpe:"9-10", notes:null})
+
+### Cycling progression rules (apply whenever cycling is in the programme):
+- Never increase weekly volume more than 10% week on week
+- Build for 3 weeks then programme 1 easier recovery week — apply this 3:1 structure to every cycling block
+- Increase intensity OR volume in a given week, never both simultaneously
+- Every training week must include at least 1 endurance ride as the aerobic base
+- Max 2 interval sessions per week — intervals are the quality work, endurance is the volume
+
+### Swimming sessions (source: "swim_brain"):
+- "source": "swim_brain"
+- "name": descriptive session name — use these types only:
+  - "Endurance Swim" — steady continuous swimming, builds aerobic base
+  - "CSS Set" — critical swim speed intervals, the primary fitness builder (all paces reference CSS)
+  - "Technique" — drills focused, low intensity, correct form first
+  - "Sprint Set" — short fast efforts, full recovery between reps
+  - "Open Water" — sighting, navigation, race-specific practice
+- "structure": the full session description (e.g. "400m warm-up, 10×100m on CSS+5s interval with 15s rest, 300m cool-down")
+- "color": "#0284c7"
+- exercises: the session broken into segments as exercises (e.g. {name:"10×100m CSS Intervals", sets:10, reps:"100m", rest:"15s", rpe:"7-8", notes:"at CSS pace"})
+
+### Swimming progression rules (apply whenever swimming is in the programme):
+- Never increase weekly total metres more than 10% week on week
+- Build for 3 weeks, recover for 1 — same 3:1 block structure as cycling
+- Technique before fitness — weaker swimmers get more drill work early; progress to CSS sets as technique improves
+- CSS pace is the anchor metric for all interval work — write paces as "CSS", "CSS+5s", "CSS+10s"
+
+## Multi-sport rules (apply when the programme includes 2 or more of: cycling, swimming, running, strength):
+- Hard day in one sport means easy or rest in all other sports that same day — never stack two hard sessions on the same day
+- Long ride and long run must not fall on consecutive days — ensure at least one easy or rest day between them
+- Swim sessions can follow a hard run or ride on the same day but must never precede one
+- Minimum one full rest day per week
+- Strength work is supplementary — in a heavy training week it never replaces a sport-specific session
+- Use RPE to judge intensity when scheduling: RPE 1-3 = recovery, RPE 4-6 = endurance/base, RPE 7-8 = tempo/threshold, RPE 9-10 = intervals/race effort
+
 ## Scheduling rules — use dayNumber, NOT dates
 - Sessions are positioned by **dayNumber** (integer), NOT by calendar date. Day 1 = the first training day of the programme (maps to startDate). Do NOT output a "date" field.
 - dayNumber is a simple day counter: Day 1, Day 2, Day 3... across the full programme. Rest days are simply gaps in the sequence.
