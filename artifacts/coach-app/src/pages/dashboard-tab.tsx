@@ -1705,17 +1705,9 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
           <div className="grid grid-cols-2 gap-3">
 
             {prefs.showEstimated5K && (() => {
-              const allTimeSess = analytics.allTimeEst5K ?? null;
-              const bl5K = analytics.baselines?.fiveKSeconds ?? null;
-              let allTimePB: string | null = null;
-              if (allTimeSess && bl5K != null) {
-                const estS = paceToSeconds(allTimeSess);
-                allTimePB = estS !== null && estS < bl5K ? allTimeSess : secsToMmss(bl5K);
-              } else if (allTimeSess) {
-                allTimePB = allTimeSess;
-              } else if (bl5K != null) {
-                allTimePB = secsToMmss(bl5K);
-              }
+              const allTimePB = analytics.baselines?.fiveKSeconds != null
+                ? secsToMmss(analytics.baselines.fiveKSeconds)
+                : null;
               return (
                 <PerfCard
                   title="5K"
@@ -1728,17 +1720,9 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
             })()}
 
             {prefs.showHalfMarathonCard && (() => {
-              const allTimeHalfMaraSess = analytics.allTimeEstHalfMara ?? null;
-              const blHalfMara = analytics.baselines?.halfMarathonSeconds ?? null;
-              let allTimeHalfMaraPB: string | null = null;
-              if (allTimeHalfMaraSess && blHalfMara != null) {
-                const estS = paceToSeconds(allTimeHalfMaraSess);
-                allTimeHalfMaraPB = estS !== null && estS < blHalfMara ? allTimeHalfMaraSess : secsToMmss(blHalfMara);
-              } else if (allTimeHalfMaraSess) {
-                allTimeHalfMaraPB = allTimeHalfMaraSess;
-              } else if (blHalfMara != null) {
-                allTimeHalfMaraPB = secsToMmss(blHalfMara);
-              }
+              const allTimeHalfMaraPB = analytics.baselines?.halfMarathonSeconds != null
+                ? secsToMmss(analytics.baselines.halfMarathonSeconds)
+                : null;
               return (
                 <PerfCard
                   title="Half Marathon"
