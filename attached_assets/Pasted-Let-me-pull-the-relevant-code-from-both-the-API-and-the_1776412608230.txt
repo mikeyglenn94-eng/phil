@@ -1,0 +1,65 @@
+Let me pull the relevant code from both the API and the frontend:
+
+
+3 actions
+Let me read the exact sections:
+
+
+4 actions
+Also pulling the estimation function:
+
+
+2 actions
+Here's the full picture — two stages:
+
+Stage 1 — API calculates the numbers (analytics.ts)
+
+// Riegel formula: estimates 5K time from any run ≥ 3km
+function estimateTo5KSeconds(paceSecsPerKm: number, distanceKm: number): number {
+  return paceSecsPerKm * distanceKm * Math.pow(5 / distanceKm, 1.06);
+}
+// Scans sessions in a date range, picks the best (fastest) estimate
+function estimated5KInPeriod(sessions, from, to): string | null {
+  let best: number | null = null;
+  for (const s of sessions) {
+    if (s.date < from || s.date > to || s.totalDistance < 3 || !s.avgPace) continue;
+    const ps = paceToSeconds(s.avgPace);
+    if (!ps || ps < 180 || ps > 480) continue; // only 3:00–8:00 min/km pace
+    const est = estimateTo5KSeconds(ps, s.totalDistance);
+    if (best === null || est < best) best = est;
+  }
+  return best !== null ? formatMMSS(best) : null;
+}
+// Current estimate = last 4 weeks of sessions
+const est5KCurr = estimated5KInPeriod(sessions, curr4wkStart, curr4wkEnd);
+// All-time best = same function but across every session ever logged
+const allTimeEst5K = estimated5KInPeriod(sessions, "2000-01-01", "2099-12-31");
+
+Auto-reconcile: if allTimeEst5K beats the manually stored baseline, it silently overwrites fiveKSeconds in the DB.
+
+Stage 2 — Dashboard picks what to show as "all time PB" (dashboard-tab.tsx)
+
+const allTimeSess = analytics.allTimeEst5K ?? null;   // best Riegel estimate ever
+const bl5K = analytics.baselines?.fiveKSeconds ?? null; // manually entered PB
+let allTimePB: string | null = null;
+if (allTimeSess && bl5K != null) {
+  const estS = paceToSeconds(allTimeSess);
+  // Whichever is faster wins
+  allTimePB = estS !== null && estS < bl5K ? allTimeSess : secsToMmss(bl5K);
+} else if (allTimeSess) {
+  allTimePB = allTimeSess;          // only session data
+} else if (bl5K != null) {
+  allTimePB = secsToMmss(bl5K);    // only manual baseline
+}
+<PerfCard
+  title="5K"
+  allTimePB={allTimePB}          // ← "all time PB" label
+  currentEst={runMetrics.estimated5K.current}  // ← "current est" = last 4wks
+  higherIsBetter={false}
+/>
+
+Summary of the logic:
+
+All time PB = fastest of (A) best Riegel estimate across all logged sessions ever, or (B) manually entered baseline — whichever is quicker
+Current est = best Riegel estimate from the last 4 weeks of sessions only
+Riegel requires a run of ≥ 3km and a pace between 3:00–8:00 min/km to be eligible
