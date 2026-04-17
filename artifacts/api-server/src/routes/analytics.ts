@@ -232,6 +232,22 @@ function estimated5KInPeriod(sessions: SessionStat[], from: string, to: string):
   return best !== null ? formatMMSS(best) : null;
 }
 
+function estimateToHalfMaraSeconds(paceSecsPerKm: number, distanceKm: number): number {
+  return paceSecsPerKm * distanceKm * Math.pow(21.0975 / distanceKm, 1.06);
+}
+
+function estimatedHalfMaraInPeriod(sessions: SessionStat[], from: string, to: string): string | null {
+  let best: number | null = null;
+  for (const s of sessions) {
+    if (s.date < from || s.date > to || s.totalDistance < 8 || !s.avgPace) continue;
+    const ps = paceToSeconds(s.avgPace);
+    if (!ps || ps < 180 || ps > 480) continue;
+    const est = estimateToHalfMaraSeconds(ps, s.totalDistance);
+    if (best === null || est < best) best = est;
+  }
+  return best !== null ? formatMMSS(best) : null;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // WEEK BUCKETS
 // ═══════════════════════════════════════════════════════════════════
@@ -580,6 +596,8 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
     deadlift: bestE1RM(allExercises, DEADLIFT_INCLUDE, DEADLIFT_EXCLUDE),
   };
   const allTimeEst5K = estimated5KInPeriod(sessions, "2000-01-01", "2099-12-31");
+  const estHalfMaraCurr = estimatedHalfMaraInPeriod(sessions, curr4wkStart, curr4wkEnd);
+  const allTimeEstHalfMara = estimatedHalfMaraInPeriod(sessions, "2000-01-01", "2099-12-31");
 
   // ── Fitness score (rolling 12 weeks with smoothing) ─────────────
 
@@ -731,6 +749,8 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
       estimated5K: { current: est5KCurr, previous: est5KPrev },
     },
     allTimeEst5K,
+    estHalfMaraCurr,
+    allTimeEstHalfMara,
     baselines: manualBaselines ? {
       benchKg:             parseNumeric(manualBaselines.benchKg),
       squatKg:             parseNumeric(manualBaselines.squatKg),

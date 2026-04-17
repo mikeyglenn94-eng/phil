@@ -1,0 +1,61 @@
+Here you go:
+
+REPLIT INSTRUCTION — Add Half Marathon Performance Card
+
+Do not change anything else in the codebase. Do not refactor, rename, reformat, or touch any existing logic. Only add the code specified below.
+
+Step 1 — analytics.ts
+
+Find the two existing functions estimateTo5KSeconds and estimated5KInPeriod. Immediately below them, add these two new functions:
+
+ts
+function estimateToHalfMaraSeconds(paceSecsPerKm: number, distanceKm: number): number {
+  return paceSecsPerKm * distanceKm * Math.pow(21.0975 / distanceKm, 1.06);
+}
+
+function estimatedHalfMaraInPeriod(sessions: any[], from: string, to: string): string | null {
+  let best: number | null = null;
+  for (const s of sessions) {
+    if (s.date < from || s.date > to || s.totalDistance < 8 || !s.avgPace) continue;
+    const ps = paceToSeconds(s.avgPace);
+    if (!ps || ps < 180 || ps > 480) continue;
+    const est = estimateToHalfMaraSeconds(ps, s.totalDistance);
+    if (best === null || est < best) best = est;
+  }
+  return best !== null ? formatMMSS(best) : null;
+}
+Find the two lines where est5KCurr and allTimeEst5K are calculated. Immediately below them, add:
+
+ts
+const estHalfMaraCurr = estimatedHalfMaraInPeriod(sessions, curr4wkStart, curr4wkEnd);
+const allTimeEstHalfMara = estimatedHalfMaraInPeriod(sessions, "2000-01-01", "2099-12-31");
+Find where est5KCurr and allTimeEst5K are included in the return object from the analytics function. Add estHalfMaraCurr and allTimeEstHalfMara to that same return object in exactly the same way.
+
+Step 2 — dashboard-tab.tsx
+
+Find the block that builds allTimePB for 5K (the three-branch if/else block using allTimeSess and bl5K). Immediately below it, add this identical block for half marathon:
+
+ts
+const allTimeHalfMaraSess = analytics.allTimeEstHalfMara ?? null;
+const blHalfMara = analytics.baselines?.halfMaraSeconds ?? null;
+
+let allTimeHalfMaraPB: string | null = null;
+if (allTimeHalfMaraSess && blHalfMara != null) {
+  const estS = paceToSeconds(allTimeHalfMaraSess);
+  allTimeHalfMaraPB = estS !== null && estS < blHalfMara ? allTimeHalfMaraSess : secsToMmss(blHalfMara);
+} else if (allTimeHalfMaraSess) {
+  allTimeHalfMaraPB = allTimeHalfMaraSess;
+} else if (blHalfMara != null) {
+  allTimeHalfMaraPB = secsToMmss(blHalfMara);
+}
+Find the existing <PerfCard> for 5K. Immediately below it, add:
+
+tsx
+<PerfCard
+  title="Half Marathon"
+  allTimePB={allTimeHalfMaraPB}
+  currentEst={estHalfMaraCurr}
+  higherIsBetter={false}
+/>
+Do not change anything else. Do not touch the 5K card, the strength cards, the baseline logic, the DB schema, or any other component. If halfMaraSeconds does not exist as a baseline field yet, leave blHalfMara as null — the card will still display the session-derived estimate correctly without it.
+

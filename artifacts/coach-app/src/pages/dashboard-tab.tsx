@@ -57,6 +57,8 @@ export interface AnalyticsData {
   } | null;
   allTimeStrength?: { squat: number | null; bench: number | null; deadlift: number | null } | null;
   allTimeEst5K?: string | null;
+  estHalfMaraCurr?: string | null;
+  allTimeEstHalfMara?: string | null;
 }
 
 // ── Preferences ───────────────────────────────────────────────────
@@ -1726,14 +1728,23 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
             })()}
 
             {prefs.showHalfMarathonCard && (() => {
-              const blSecs = analytics.baselines?.halfMarathonSeconds ?? null;
-              const allTimePB = blSecs != null ? secsToMmss(blSecs) : null;
+              const allTimeHalfMaraSess = analytics.allTimeEstHalfMara ?? null;
+              const blHalfMara = analytics.baselines?.halfMarathonSeconds ?? null;
+              let allTimeHalfMaraPB: string | null = null;
+              if (allTimeHalfMaraSess && blHalfMara != null) {
+                const estS = paceToSeconds(allTimeHalfMaraSess);
+                allTimeHalfMaraPB = estS !== null && estS < blHalfMara ? allTimeHalfMaraSess : secsToMmss(blHalfMara);
+              } else if (allTimeHalfMaraSess) {
+                allTimeHalfMaraPB = allTimeHalfMaraSess;
+              } else if (blHalfMara != null) {
+                allTimeHalfMaraPB = secsToMmss(blHalfMara);
+              }
               return (
                 <PerfCard
                   title="Half Marathon"
                   icon={<Footprints className="w-4 h-4" />}
-                  allTimePB={allTimePB}
-                  currentEst={null}
+                  allTimePB={allTimeHalfMaraPB}
+                  currentEst={analytics.estHalfMaraCurr ?? null}
                   higherIsBetter={false}
                 />
               );
