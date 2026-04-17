@@ -1752,19 +1752,32 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
     try {
       const allSessions = expandWeeks(generationResult.sessions ?? [], 4);
-      const saveRes = await fetch("/api/programmes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: generationResult.title ?? "Custom Programme",
-          sessions: allSessions,
-          clientId,
-          blockLength: 4,
-          ...(generationResult.sessionsPerWeek != null ? { sessionsPerWeek: generationResult.sessionsPerWeek } : {}),
-        }),
-      });
-      if (!saveRes.ok) throw new Error("save_failed");
-      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      if (isTeamMode && teamId) {
+        const token = localStorage.getItem("axis_auth_token");
+        const headers = { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" };
+        for (const session of allSessions) {
+          await fetch(`/api/teams/${teamId}/sessions`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ sessionData: session, date: session.date }),
+          });
+        }
+        await queryClient.invalidateQueries({ queryKey: ["team-sessions", teamId] });
+      } else {
+        const saveRes = await fetch("/api/programmes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: generationResult.title ?? "Custom Programme",
+            sessions: allSessions,
+            clientId,
+            blockLength: 4,
+            ...(generationResult.sessionsPerWeek != null ? { sessionsPerWeek: generationResult.sessionsPerWeek } : {}),
+          }),
+        });
+        if (!saveRes.ok) throw new Error("save_failed");
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      }
       navigateToWeekOf(startDate);
       addPhilMsg(`Done. "${generationResult.title}" is live on your calendar. 4 weeks, deload in week 4.`);
     } catch {
@@ -1828,7 +1841,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     }
 
     // ── Conversational: lightweight Phil reply (greetings, short affirmations) ─
-    if (intent === "conversational") {
+    if (intent === "conversational" && clientId) {
       setCmdParsing(true);
       try {
         const res = await fetch(`/api/clients/${clientId}/phil-chat`, {
@@ -1858,7 +1871,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     }
 
     // ── Review: coaching endpoint → Phil chat message ────────────────────────
-    if (intent === "review") {
+    if (intent === "review" && clientId) {
       setCmdParsing(true);
       try {
         const sessionCount = (clientProgrammes ?? []).reduce((n, p) => n + (p.sessions?.length ?? 0), 0);
