@@ -68,6 +68,8 @@ interface DashboardPrefs {
   showNutritionCard:        boolean;
   includeNutritionInScore:  boolean;
   showEstimated5K:          boolean;
+  showHalfMarathonCard:     boolean;
+  showMarathonCard:         boolean;
   showSquatE1RM:            boolean;
   showBenchE1RM:            boolean;
   showDeadliftE1RM:         boolean;
@@ -82,6 +84,8 @@ const DEFAULT_PREFS: DashboardPrefs = {
   showNutritionCard:        false,
   includeNutritionInScore:  false,
   showEstimated5K:          true,
+  showHalfMarathonCard:     false,
+  showMarathonCard:         false,
   showSquatE1RM:            true,
   showBenchE1RM:            true,
   showDeadliftE1RM:         true,
@@ -1693,7 +1697,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
       )}
 
       {/* ── 4. Core performance cards ────────────────────────── */}
-      {(prefs.showEstimated5K || prefs.showSquatE1RM || prefs.showBenchE1RM || prefs.showDeadliftE1RM) && (
+      {(prefs.showEstimated5K || prefs.showHalfMarathonCard || prefs.showMarathonCard || prefs.showSquatE1RM || prefs.showBenchE1RM || prefs.showDeadliftE1RM) && (
         <section>
           <h2 className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase mb-2.5">Performance</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -1716,6 +1720,34 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                   icon={<Footprints className="w-4 h-4" />}
                   allTimePB={allTimePB}
                   currentEst={runMetrics.estimated5K.current}
+                  higherIsBetter={false}
+                />
+              );
+            })()}
+
+            {prefs.showHalfMarathonCard && (() => {
+              const blSecs = analytics.baselines?.halfMarathonSeconds ?? null;
+              const allTimePB = blSecs != null ? secsToMmss(blSecs) : null;
+              return (
+                <PerfCard
+                  title="Half Marathon"
+                  icon={<Footprints className="w-4 h-4" />}
+                  allTimePB={allTimePB}
+                  currentEst={null}
+                  higherIsBetter={false}
+                />
+              );
+            })()}
+
+            {prefs.showMarathonCard && (() => {
+              const blSecs = analytics.baselines?.marathonSeconds ?? null;
+              const allTimePB = blSecs != null ? secsToHmmss(blSecs) : null;
+              return (
+                <PerfCard
+                  title="Marathon"
+                  icon={<Footprints className="w-4 h-4" />}
+                  allTimePB={allTimePB}
+                  currentEst={null}
                   higherIsBetter={false}
                 />
               );
@@ -2180,8 +2212,10 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
             <PrefRow label="Include in fitness score" checked={prefs.includeNutritionInScore} onToggle={() => toggle("includeNutritionInScore")} disabled={!prefs.showNutritionCard} />
 
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 pt-4">Performance</p>
-            <PrefRow label="5K"        checked={prefs.showEstimated5K}  onToggle={() => toggle("showEstimated5K")}  />
-            <PrefRow label="Squat"     checked={prefs.showSquatE1RM}    onToggle={() => toggle("showSquatE1RM")}    />
+            <PrefRow label="5K"            checked={prefs.showEstimated5K}    onToggle={() => toggle("showEstimated5K")}    />
+            <PrefRow label="Half Marathon" checked={prefs.showHalfMarathonCard} onToggle={() => toggle("showHalfMarathonCard")} />
+            <PrefRow label="Marathon"      checked={prefs.showMarathonCard}     onToggle={() => toggle("showMarathonCard")}     />
+            <PrefRow label="Squat"         checked={prefs.showSquatE1RM}        onToggle={() => toggle("showSquatE1RM")}        />
             <PrefRow label="Bench"     checked={prefs.showBenchE1RM}    onToggle={() => toggle("showBenchE1RM")}    />
             <PrefRow label="Deadlift"  checked={prefs.showDeadliftE1RM} onToggle={() => toggle("showDeadliftE1RM")} />
 
