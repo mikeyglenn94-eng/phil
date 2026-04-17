@@ -1732,8 +1732,22 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       await new Promise<void>(resolve => setTimeout(resolve, 800));
     }
 
-    // ④ Ensure generation is complete before updating calendar
+    // ④ Wait for generation — heartbeat messages every 15s so it never looks frozen
+    const WAIT_MESSAGES = [
+      "Still building — this one's detailed.",
+      "Working through the progressions…",
+      "Nearly there.",
+    ];
+    let waitIdx = 0;
+    let generationDone = false;
+    const heartbeat = setInterval(() => {
+      if (!generationDone && waitIdx < WAIT_MESSAGES.length) {
+        addPhilMsg(WAIT_MESSAGES[waitIdx++]);
+      }
+    }, 15000);
     await genPromise;
+    generationDone = true;
+    clearInterval(heartbeat);
 
     if (generationError === "limit") {
       addPhilMsg("You've hit your monthly generation limit. Drop your coach a message to unlock more.");
