@@ -1210,6 +1210,32 @@ export default function ClientSession() {
       if (programme?.clientId) {
         queryClient.invalidateQueries({ queryKey: ["client-analytics", programme.clientId] });
       }
+      // Persist notes to client_notes table (fire-and-forget — doesn't block save)
+      if (programme?.clientId && sessionId) {
+        const noteClientId = programme.clientId;
+        const noteRequests: Promise<unknown>[] = [];
+        if (sessionComment.trim()) {
+          noteRequests.push(
+            fetch("/api/client-notes", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ clientId: noteClientId, sessionId, noteText: sessionComment.trim() }),
+            }).catch(() => {})
+          );
+        }
+        for (const [exId, text] of Object.entries(comments)) {
+          if (text.trim()) {
+            noteRequests.push(
+              fetch("/api/client-notes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId: noteClientId, sessionId, exerciseId: exId, noteText: text.trim() }),
+              }).catch(() => {})
+            );
+          }
+        }
+        void Promise.all(noteRequests);
+      }
       setSaved(true);
       if (!silent) toast({ title: "Session saved!" });
     } catch {

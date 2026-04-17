@@ -26,3 +26,4 @@ export * from "./irl";
 export * from "./teams";
 export * from "./baselines";
 export * from "./lifts";
+export * from "./client-notes";
