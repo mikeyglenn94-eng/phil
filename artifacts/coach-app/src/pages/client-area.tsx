@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, MapPin, Lock, Send, Eye } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, MapPin, Lock, Send, Eye, MoreVertical, EyeOff, RefreshCw, TrendingUp } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Tab = "dashboard" | "training" | "nutrition" | "irl";
 
@@ -193,6 +200,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const { logout } = useAuth();
 
   const isTeamMode = calendarContext === "team" && !!teamId;
+  const showPublishOpts = isTeamMode || mode !== "client";
   const { data: client, isLoading: clientLoading } = useGetClient(clientId, { query: { enabled: !isTeamMode && !!clientId } });
   const { data: masterProgrammes } = useListProgrammes(); // master programmes (no clientId)
   const { data: _rawClientProgrammes } = useListProgrammes({ clientId }, { query: { enabled: !isTeamMode && !!clientId } });
@@ -1186,6 +1194,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     const baseDate = dates.sort()[0];
     setSessionClipboard({ sessions: selected, baseDate });
     setPasteMode(true);
+  };
+
+  const copyOneSession = (session: Session) => {
+    const baseDate = session.date || format(new Date(), "yyyy-MM-dd");
+    setSessionClipboard({ sessions: [session], baseDate });
+    setSelectionMode(true);
+    setPasteMode(true);
+    toast({ title: "Session copied — tap a day to paste" });
+  };
+
+  const deleteOneSession = async (session: Session) => {
+    pushHistory();
+    const newSnapshot = (clientProgrammes ?? []).map(prog => ({
+      id: prog.id,
+      sessions: (prog.sessions as Session[]).filter(s => s.id !== session.id),
+    }));
+    await applySnapshot(newSnapshot);
+    toast({ title: "Session deleted" });
   };
 
   const pasteToDate = async (targetDateStr: string) => {
@@ -4373,6 +4399,69 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     }
                                   </span>
                                 )}
+                                {!selectionMode && (
+                                  <div
+                                    className="absolute top-0.5 right-0.5 z-20"
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 dark:hover:bg-white/10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                                          tabIndex={-1}
+                                        >
+                                          <MoreVertical className="w-3 h-3" />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-48" onClick={e => e.stopPropagation()}>
+                                        {showPublishOpts && (
+                                          <>
+                                            {!isPublished ? (
+                                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                                <Globe className="w-3.5 h-3.5 mr-2" />Publish
+                                              </DropdownMenuItem>
+                                            ) : (
+                                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                                <EyeOff className="w-3.5 h-3.5 mr-2" />Unpublish
+                                              </DropdownMenuItem>
+                                            )}
+                                            <DropdownMenuSeparator />
+                                          </>
+                                        )}
+                                        <DropdownMenuItem onClick={() => {
+                                          if (!prog) return;
+                                          if (mode === "client") {
+                                            setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
+                                          } else {
+                                            sessionStorage.setItem("session_editor_returnTo", `/clients/${clientId}`);
+                                            setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
+                                          }
+                                        }}>
+                                          <Pencil className="w-3.5 h-3.5 mr-2" />Edit
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                          <RefreshCw className="w-3.5 h-3.5 mr-2" />Repeat
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                          <TrendingUp className="w-3.5 h-3.5 mr-2" />Repeat with Progression
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                          <BookMarked className="w-3.5 h-3.5 mr-2" />Save to Library
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => copyOneSession(session)}>
+                                          <Copy className="w-3.5 h-3.5 mr-2" />Copy
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          className="text-red-600 focus:text-red-600"
+                                          onClick={() => void deleteOneSession(session)}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5 mr-2" />Delete
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                )}
                                 {calendarView === "month" ? (
                                   <>
                                     {(() => {
@@ -4673,26 +4762,51 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 </span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 px-3 text-xs rounded-lg gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                  disabled={selectedSessionIds.size === 0}
-                  onClick={copySelectedSessions}
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  Copy
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 px-3 text-xs rounded-lg gap-1.5 border-red-300 text-red-600 hover:bg-red-50"
-                  disabled={selectedSessionIds.size === 0}
-                  onClick={() => void deleteSelectedSessions()}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-3 text-xs rounded-lg gap-1.5"
+                      disabled={selectedSessionIds.size === 0}
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                      Actions
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {showPublishOpts && (
+                      <>
+                        <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                          <Globe className="w-3.5 h-3.5 mr-2" />Publish All
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                          <EyeOff className="w-3.5 h-3.5 mr-2" />Unpublish All
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                      <RefreshCw className="w-3.5 h-3.5 mr-2" />Repeat
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                      <TrendingUp className="w-3.5 h-3.5 mr-2" />Repeat with Progression
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                      <BookMarked className="w-3.5 h-3.5 mr-2" />Save to Library
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={copySelectedSessions}>
+                      <Copy className="w-3.5 h-3.5 mr-2" />Copy
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-red-600 focus:text-red-600"
+                      onClick={() => void deleteSelectedSessions()}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" />Delete All
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   size="sm"
                   variant="ghost"

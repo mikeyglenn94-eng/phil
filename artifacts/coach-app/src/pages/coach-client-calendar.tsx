@@ -1,7 +1,15 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, ChevronLeft, ChevronRight, Dumbbell, MessageSquare, CheckCircle2, X, Zap, Clock } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Dumbbell, MessageSquare, CheckCircle2, X, Zap, Clock, MoreVertical, Globe, EyeOff, Pencil, RefreshCw, TrendingUp, BookMarked, Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
 import { format, addWeeks, startOfWeek, addDays, parseISO } from "date-fns";
 import { useGetProgramme, useGetClient } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -62,6 +70,7 @@ export default function CoachClientCalendar() {
     query: { enabled: !!programmeId },
   });
 
+  const { toast } = useToast();
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
 
@@ -194,58 +203,107 @@ export default function CoachClientCalendar() {
                     </div>
 
                     {session && color && (
-                      <button
-                        onClick={() => setSelectedSession(session)}
-                        className={`w-full text-left rounded-xl border ${color.bg} ${color.border} overflow-hidden hover:shadow-sm transition-all hover:scale-[1.02] active:scale-100 ${hasUnreadNote ? "ring-2 ring-amber-400/60 ring-offset-1" : ""}`}
-                      >
-                        {/* Session name bar */}
-                        <div className={`px-2 py-1 ${color.header} flex items-center justify-between gap-1`}>
-                          <span className={`text-[10px] font-bold truncate ${color.text}`}>{session.name || "Session"}</span>
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            {hasResults && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />}
-                            {hasFeedback && <MessageSquare className="w-2.5 h-2.5 text-amber-500" />}
-                            {hasNote && (
-                              <span className="relative flex items-center">
-                                <MessageSquare className="w-2.5 h-2.5 text-blue-500" />
-                                {hasUnreadNote && (
-                                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500" />
-                                )}
+                      <div className="relative group">
+                        <button
+                          onClick={() => setSelectedSession(session)}
+                          className={`w-full text-left rounded-xl border ${color.bg} ${color.border} overflow-hidden hover:shadow-sm transition-all hover:scale-[1.02] active:scale-100 ${hasUnreadNote ? "ring-2 ring-amber-400/60 ring-offset-1" : ""}`}
+                        >
+                          {/* Session name bar */}
+                          <div className={`px-2 py-1 ${color.header} flex items-center justify-between gap-1`}>
+                            <span className={`text-[10px] font-bold truncate pr-3 ${color.text}`}>{session.name || "Session"}</span>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              {hasResults && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />}
+                              {hasFeedback && <MessageSquare className="w-2.5 h-2.5 text-amber-500" />}
+                              {hasNote && (
+                                <span className="relative flex items-center">
+                                  <MessageSquare className="w-2.5 h-2.5 text-blue-500" />
+                                  {hasUnreadNote && (
+                                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500" />
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {/* Exercise list */}
+                          <div className="px-2 py-1 space-y-0.5">
+                            {isConditioning ? (
+                              <span className={`text-[9px] font-semibold uppercase tracking-wide ${
+                                (session as any).source === "run_brain" ? "text-green-600"
+                                : (session as any).source === "cycle_brain" ? "text-amber-600"
+                                : (session as any).source === "swim_brain" ? "text-sky-600"
+                                : "text-purple-600"
+                              }`}>
+                                {(session as any).source === "run_brain" ? "Run"
+                                  : (session as any).source === "cycle_brain" ? "Cycling"
+                                  : (session as any).source === "swim_brain" ? "Swimming"
+                                  : "WOD"}
                               </span>
+                            ) : (
+                              (session.exercises || []).slice(0, 4).map((ex: Exercise) => {
+                                const logged = (ex.setWeights || []).some(w => w != null) || (ex.setReps || []).some(r => r != null);
+                                return (
+                                  <div key={ex.id} className="flex items-center gap-1">
+                                    {logged && <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />}
+                                    <p className={`text-[9px] truncate leading-tight ${logged ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                                      {ex.name}
+                                    </p>
+                                  </div>
+                                );
+                              })
+                            )}
+                            {!isConditioning && (session.exercises || []).length > 4 && (
+                              <p className="text-[9px] text-muted-foreground">+{(session.exercises || []).length - 4} more</p>
                             )}
                           </div>
+                        </button>
+                        {/* Three-dot menu — always visible on mobile, hover on desktop */}
+                        <div
+                          className="absolute top-0.5 right-0.5 z-10"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/15 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                                tabIndex={-1}
+                              >
+                                <MoreVertical className={`w-3 h-3 ${color.text}`} />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48" onClick={e => e.stopPropagation()}>
+                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                <Globe className="w-3.5 h-3.5 mr-2" />Publish
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => {
+                                sessionStorage.setItem("session_editor_returnTo", `/clients/${clientId}/programmes/${programmeId}`);
+                                setLocation(`/programmes/${programmeId}/sessions/${session.id}`);
+                              }}>
+                                <Pencil className="w-3.5 h-3.5 mr-2" />Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                <RefreshCw className="w-3.5 h-3.5 mr-2" />Repeat
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                <TrendingUp className="w-3.5 h-3.5 mr-2" />Repeat with Progression
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                <BookMarked className="w-3.5 h-3.5 mr-2" />Save to Library
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                <Copy className="w-3.5 h-3.5 mr-2" />Copy
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-red-600 focus:text-red-600"
+                                onClick={() => toast({ title: "Coming soon" })}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 mr-2" />Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                        {/* Exercise list */}
-                        <div className="px-2 py-1 space-y-0.5">
-                          {isConditioning ? (
-                            <span className={`text-[9px] font-semibold uppercase tracking-wide ${
-                              (session as any).source === "run_brain" ? "text-green-600"
-                              : (session as any).source === "cycle_brain" ? "text-amber-600"
-                              : (session as any).source === "swim_brain" ? "text-sky-600"
-                              : "text-purple-600"
-                            }`}>
-                              {(session as any).source === "run_brain" ? "Run"
-                                : (session as any).source === "cycle_brain" ? "Cycling"
-                                : (session as any).source === "swim_brain" ? "Swimming"
-                                : "WOD"}
-                            </span>
-                          ) : (
-                            (session.exercises || []).slice(0, 4).map((ex: Exercise) => {
-                              const logged = (ex.setWeights || []).some(w => w != null) || (ex.setReps || []).some(r => r != null);
-                              return (
-                                <div key={ex.id} className="flex items-center gap-1">
-                                  {logged && <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />}
-                                  <p className={`text-[9px] truncate leading-tight ${logged ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                                    {ex.name}
-                                  </p>
-                                </div>
-                              );
-                            })
-                          )}
-                          {!isConditioning && (session.exercises || []).length > 4 && (
-                            <p className="text-[9px] text-muted-foreground">+{(session.exercises || []).length - 4} more</p>
-                          )}
-                        </div>
-                      </button>
+                      </div>
                     )}
                   </div>
                 );
