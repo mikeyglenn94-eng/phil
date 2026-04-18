@@ -45,36 +45,46 @@ import {
 
 interface SetLog { weight: number | null; reps: number | null; }
 type LogState = Record<string, SetLog[]>;
+type DistUnit = "km" | "m" | "mi" | "time" | "yards";
+
 interface RunInterval {
   label: string;           // "Rep 1", "Warm-up", or empty
-  distance: string;        // numeric string (km/m/mi modes) OR "mm:ss" duration (time mode)
-  distUnit: "km" | "m" | "mi" | "time"; // "time" = duration mode — distance auto-calc'd from pace
+  distance: string;        // numeric string (km/m/mi/yards modes) OR "mm:ss" duration (time mode)
+  distUnit: DistUnit;      // "time" = duration mode — distance auto-calc'd from pace
   time: string;            // kept for backward-compat load; not used in new UI
-  targetPace: string;      // planned target pace, e.g. "4:30/km"
-  pace: string;            // actual pace logged by user
+  targetPace: string;      // planned target pace or speed
+  pace: string;            // actual pace/speed logged by user
   notes: string;
   equivalentRoadPace?: string | null;
 }
 
-const DIST_UNIT_CYCLE: Array<"km" | "m" | "mi" | "time"> = ["km", "m", "mi", "time"];
+const DIST_UNIT_CYCLE: DistUnit[] = ["km", "m", "mi", "time"];
+const CYCLE_UNIT_CYCLE: DistUnit[] = ["km", "m", "mi", "time"];
+const SWIM_UNIT_CYCLE: DistUnit[] = ["m", "yards", "time"];
+
+const BLANK_INTERVAL = (distUnit: DistUnit = "km"): RunInterval =>
+  ({ label: "", distance: "", distUnit, time: "", targetPace: "", pace: "", notes: "" });
 
 // Parse distance string + unit to km (stored value)
-function parseDistToKm(raw: string, unit: "km" | "m" | "mi"): number | null {
+function parseDistToKm(raw: string, unit: DistUnit): number | null {
   const s = raw.trim().toLowerCase();
-  if (!s) return null;
-  // Allow embedded suffixes in the text field (e.g. "400m", "0.25mi")
+  if (!s || unit === "time") return null;
+  // Allow embedded suffixes in the text field (e.g. "400m", "0.25mi", "50yd")
+  const ydM = s.match(/^([\d.]+)\s*(?:yd|yard|yards)$/);
+  if (ydM) return Math.round(parseFloat(ydM[1]) * 0.0009144 * 10000) / 10000;
   const miM = s.match(/^([\d.]+)\s*mi(?:le|les)?$/);
   if (miM) return Math.round(parseFloat(miM[1]) * 1.60934 * 10000) / 10000;
   const mM = s.match(/^([\d.]+)\s*m$/);
-  if (mM) return Math.round(parseFloat(mM[1]) / 10) / 100; // e.g. 400m → 0.4
+  if (mM) return Math.round(parseFloat(mM[1]) / 1000 * 10000) / 10000;
   const kmM = s.match(/^([\d.]+)\s*km?$/);
   if (kmM) return parseFloat(kmM[1]);
-  // No suffix — use dropdown unit
+  // No suffix — use selected unit
   const n = parseFloat(s);
   if (isNaN(n)) return null;
-  if (unit === "m") return Math.round(n / 10) / 100;
-  if (unit === "mi") return Math.round(n * 1.60934 * 10000) / 10000;
-  return n;
+  if (unit === "m")     return Math.round(n / 1000 * 10000) / 10000;
+  if (unit === "yards") return Math.round(n * 0.0009144 * 10000) / 10000;
+  if (unit === "mi")    return Math.round(n * 1.60934 * 10000) / 10000;
+  return n; // km
 }
 
 // Parse "mm:ss" time string to seconds (null if invalid)
@@ -593,10 +603,12 @@ export default function ClientSession() {
   // WOD result state
   const [wodResult, setWodResult] = useState<WodResult>({});
 
-  // Run interval logging state
-  const [runIntervals, setRunIntervals] = useState<RunInterval[]>([{ label: "", distance: "", distUnit: "km", time: "", targetPace: "", pace: "", notes: "" }]);
+  // Run / Cycle / Swim interval logging state
+  const [runIntervals, setRunIntervals] = useState<RunInterval[]>([BLANK_INTERVAL("km")]);
   const [runSurface, setRunSurface] = useState<RunSurface>("road");
   const [trailDifficulty, setTrailDifficulty] = useState<TrailDifficulty | null>(null);
+  const [cycleIntervals, setCycleIntervals] = useState<RunInterval[]>([BLANK_INTERVAL("km")]);
+  const [swimIntervals, setSwimIntervals] = useState<RunInterval[]>([BLANK_INTERVAL("m")]);
 
   // Init logs from saved data
   useEffect(() => {
@@ -637,11 +649,10 @@ export default function ClientSession() {
     if (savedSurface) setRunSurface(savedSurface);
     if (savedDifficulty) setTrailDifficulty(savedDifficulty);
 
-    const BLANK_INTERVAL: RunInterval = { label: "", distance: "", distUnit: "km", time: "", targetPace: "", pace: "", notes: "" };
-    if (savedRunLog && savedRunLog.length > 0) {
-      setRunIntervals(savedRunLog.map(r => {
-        const unit: "km" | "m" | "mi" | "time" = (r as any).distUnit ?? "km";
-        // For time-mode intervals, restore the original duration string from the saved `time` field
+    // Helper: restore a saved runLog array into RunInterval[]
+    function loadIntervalLog(savedLog: any[], defaultUnit: DistUnit): RunInterval[] {
+      return savedLog.map(r => {
+        const unit: DistUnit = (r as any).distUnit ?? defaultUnit;
         const displayDist = unit === "time"
           ? ((r as any).time ?? "")
           : (r.distance != null ? String(r.distance) : "");
@@ -655,7 +666,12 @@ export default function ClientSession() {
           notes: r.notes ?? "",
           equivalentRoadPace: (r as any).equivalentRoadPace ?? null,
         };
-      }));
+      });
+    }
+
+    // ── Run intervals ─────────────────────────────────────────────────
+    if (savedRunLog && savedRunLog.length > 0) {
+      setRunIntervals(loadIntervalLog(savedRunLog, "km"));
     } else {
       // Pre-populate from structured runBlocks or exercises (plan data)
       const runBlocks = (session as any).runBlocks as Array<{ blockType: string; label: string; rows: any[] }> | undefined;
@@ -675,24 +691,39 @@ export default function ClientSession() {
             });
           }
         }
-        setRunIntervals(intervals.length > 0 ? intervals : [BLANK_INTERVAL]);
+        setRunIntervals(intervals.length > 0 ? intervals : [BLANK_INTERVAL("km")]);
       } else {
-        // Fallback: one row per exercise that looks like an interval
         const exs = (session.exercises ?? []).filter((e: any) => e.name?.startsWith("Rep") || (session as any).source === "run_brain");
         if (exs.length > 1) {
           setRunIntervals(exs.map((e: any) => ({
             label: e.name || "",
             distance: e.reps || "",
-            distUnit: "km" as const,
+            distUnit: "km" as DistUnit,
             time: "",
             targetPace: e.notes?.match(/@ ?([\d:]+\/km)/)?.[1] ?? "",
             pace: "",
             notes: "",
           })));
         } else {
-          setRunIntervals([BLANK_INTERVAL]);
+          setRunIntervals([BLANK_INTERVAL("km")]);
         }
       }
+    }
+
+    // ── Cycle intervals (cycle_brain) ─────────────────────────────────
+    const savedCycleLog = (session as any).cycleLog as any[] | undefined;
+    if (savedCycleLog && savedCycleLog.length > 0) {
+      setCycleIntervals(loadIntervalLog(savedCycleLog, "km"));
+    } else {
+      setCycleIntervals([BLANK_INTERVAL("km")]);
+    }
+
+    // ── Swim intervals (swim_brain) ───────────────────────────────────
+    const savedSwimLog = (session as any).swimLog as any[] | undefined;
+    if (savedSwimLog && savedSwimLog.length > 0) {
+      setSwimIntervals(loadIntervalLog(savedSwimLog, "m"));
+    } else {
+      setSwimIntervals([BLANK_INTERVAL("m")]);
     }
   }, [session]);
 
@@ -1212,8 +1243,11 @@ export default function ClientSession() {
     if (!programme || !session) return;
     setIsSaving(true);
     try {
-      const isRunSession = (session as any).source === "run_brain" || (session as any).source === "endurance_cycle";
-      const isConditioningSession = (session as any).source === "wod_brain" || isRunSession;
+      const src = (session as any).source as string | undefined;
+      const isRunSession = src === "run_brain" || src === "endurance_cycle";
+      const isCycleSession = src === "cycle_brain";
+      const isSwimSession = src === "swim_brain";
+      const isConditioningSession = src === "wod_brain" || isRunSession || isCycleSession || isSwimSession;
       const updatedSessions = (programme.sessions || []).map((s: Session) => {
         if (s.id !== sessionId) return s;
         if (isConditioningSession) {
@@ -1250,6 +1284,54 @@ export default function ClientSession() {
               runSurface,
               trailDifficulty: runSurface === "trail" ? trailDifficulty : null,
             };
+          }
+          if (isCycleSession) {
+            const cycleLog = cycleIntervals
+              .filter(r => r.distance !== "" || r.pace !== "" || r.label !== "")
+              .map(r => {
+                let distKm: number | null = null;
+                if (r.distUnit === "time") {
+                  const tSecs = parseTimeStr(r.distance);
+                  const pSecs = parsePaceToSecsPerKm(r.targetPace);
+                  if (tSecs && pSecs) distKm = Math.round((tSecs / pSecs) * 100) / 100;
+                } else {
+                  distKm = parseDistToKm(r.distance, r.distUnit);
+                }
+                return {
+                  label: r.label || null,
+                  distance: distKm,
+                  distUnit: r.distUnit,
+                  time: r.distUnit === "time" ? (r.distance || null) : null,
+                  targetPace: r.targetPace || null,
+                  pace: r.pace || null,
+                  notes: r.notes || null,
+                };
+              });
+            return { ...base, cycleLog: cycleLog.length > 0 ? cycleLog : null };
+          }
+          if (isSwimSession) {
+            const swimLog = swimIntervals
+              .filter(r => r.distance !== "" || r.pace !== "" || r.label !== "")
+              .map(r => {
+                let distKm: number | null = null;
+                if (r.distUnit === "time") {
+                  const tSecs = parseTimeStr(r.distance);
+                  const pSecs = parsePaceToSecsPerKm(r.targetPace);
+                  if (tSecs && pSecs) distKm = Math.round((tSecs / pSecs) * 100) / 100;
+                } else {
+                  distKm = parseDistToKm(r.distance, r.distUnit);
+                }
+                return {
+                  label: r.label || null,
+                  distance: distKm,
+                  distUnit: r.distUnit,
+                  time: r.distUnit === "time" ? (r.distance || null) : null,
+                  targetPace: r.targetPace || null,
+                  pace: r.pace || null,
+                  notes: r.notes || null,
+                };
+              });
+            return { ...base, swimLog: swimLog.length > 0 ? swimLog : null };
           }
           // WOD — persist structured result
           const hasResult = Object.values(wodResult).some(v => v !== undefined && v !== "" && v !== null);
@@ -2049,6 +2131,134 @@ export default function ClientSession() {
                   <Plus className="w-3 h-3" /> Add interval
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ── Cycling interval logging ── */}
+          {src === "cycle_brain" && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase px-1">What you cycled</p>
+              <div className="rounded-xl border border-border overflow-hidden">
+                <div className="grid grid-cols-[2.5rem_1fr_4rem_4rem_1.5rem] gap-0 bg-muted/40 border-b border-border px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="pl-1">Rep</span>
+                  <span className="pl-1">Distance</span>
+                  <span className="text-center">Target</span>
+                  <span className="text-center">Actual</span>
+                  <span />
+                </div>
+                {cycleIntervals.map((interval, idx) => {
+                  const isTimeMode = interval.distUnit === "time";
+                  let autoDistKm: number | null = null;
+                  if (isTimeMode && interval.distance && interval.targetPace) {
+                    const tSecs = parseTimeStr(interval.distance);
+                    const pSecs = parsePaceToSecsPerKm(interval.targetPace);
+                    if (tSecs && pSecs) autoDistKm = Math.round((tSecs / pSecs) * 100) / 100;
+                  }
+                  const distPlaceholder = isTimeMode ? "mm:ss" : interval.distUnit === "m" ? "400" : interval.distUnit === "mi" ? "0.25" : "1.0";
+                  return (
+                    <div key={idx} className="border-b border-border last:border-b-0">
+                      <div className="grid grid-cols-[2.5rem_1fr_4rem_4rem_1.5rem] gap-0 items-center px-2 py-1.5 bg-background">
+                        <Input type="text" placeholder={String(idx + 1)} value={interval.label}
+                          onChange={e => { const u = [...cycleIntervals]; u[idx] = { ...u[idx], label: e.target.value }; setCycleIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                          className="h-7 text-xs font-semibold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg text-muted-foreground pl-1 transition-colors" />
+                        <div className={`flex items-center rounded-lg border transition-colors pl-1.5 pr-0.5 gap-0.5 ${isTimeMode ? "bg-violet-50 border-violet-200/60 dark:bg-violet-950/20 dark:border-violet-800/40" : "bg-muted/30 border-transparent hover:border-border"}`}>
+                          <Input type="text" inputMode={isTimeMode ? "text" : "decimal"} placeholder={distPlaceholder} value={interval.distance}
+                            onChange={e => { const u = [...cycleIntervals]; u[idx] = { ...u[idx], distance: e.target.value }; setCycleIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                            className={`h-6 text-sm font-bold border-0 bg-transparent focus:ring-0 focus:outline-none p-0 flex-1 min-w-0 font-mono ${isTimeMode ? "text-violet-700 dark:text-violet-300" : ""}`} />
+                          <button type="button" title="Tap to change unit"
+                            onClick={() => { const u = [...cycleIntervals]; const ci = CYCLE_UNIT_CYCLE.indexOf(interval.distUnit); u[idx] = { ...u[idx], distUnit: CYCLE_UNIT_CYCLE[(ci + 1) % CYCLE_UNIT_CYCLE.length], distance: "" }; setCycleIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                            className={`flex-none flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-colors ${isTimeMode ? "bg-violet-200/60 text-violet-700 dark:bg-violet-800/40 dark:text-violet-300 hover:bg-violet-300/60" : "bg-muted/60 text-muted-foreground hover:bg-muted"}`}>
+                            {isTimeMode ? "min" : interval.distUnit}<ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                          </button>
+                        </div>
+                        <Input type="text" inputMode="text" placeholder="—" value={interval.targetPace}
+                          onChange={e => { const u = [...cycleIntervals]; u[idx] = { ...u[idx], targetPace: e.target.value }; setCycleIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                          className="h-7 text-xs text-center text-muted-foreground border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg font-mono transition-colors" />
+                        <Input type="text" inputMode="text" placeholder="32" value={interval.pace}
+                          onChange={e => { const u = [...cycleIntervals]; u[idx] = { ...u[idx], pace: e.target.value }; setCycleIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                          className="h-7 text-sm text-center font-bold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg font-mono text-orange-600 dark:text-orange-400 transition-colors" />
+                        <button type="button" disabled={cycleIntervals.length === 1}
+                          onClick={() => { setCycleIntervals(cycleIntervals.filter((_, i) => i !== idx)); setSaved(false); scheduleClientAutosave(); }}
+                          className="text-muted-foreground/60 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed p-1 rounded-lg transition-colors flex items-center justify-center">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      {isTimeMode && autoDistKm && (
+                        <p className="text-[10px] text-violet-600 dark:text-violet-400 font-medium px-3 pb-1.5 -mt-0.5">≈ {autoDistKm} km</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <button type="button"
+                onClick={() => { setCycleIntervals([...cycleIntervals, BLANK_INTERVAL("km")]); setSaved(false); scheduleClientAutosave(); }}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-orange-400/60 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20 text-xs font-medium transition-colors">
+                <Plus className="w-3 h-3" /> Add interval
+              </button>
+            </div>
+          )}
+
+          {/* ── Swimming interval logging ── */}
+          {src === "swim_brain" && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase px-1">What you swam</p>
+              <div className="rounded-xl border border-border overflow-hidden">
+                <div className="grid grid-cols-[2.5rem_1fr_4rem_4rem_1.5rem] gap-0 bg-muted/40 border-b border-border px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="pl-1">Rep</span>
+                  <span className="pl-1">Distance</span>
+                  <span className="text-center">Target</span>
+                  <span className="text-center">Actual</span>
+                  <span />
+                </div>
+                {swimIntervals.map((interval, idx) => {
+                  const isTimeMode = interval.distUnit === "time";
+                  let autoDistKm: number | null = null;
+                  if (isTimeMode && interval.distance && interval.targetPace) {
+                    const tSecs = parseTimeStr(interval.distance);
+                    const pSecs = parsePaceToSecsPerKm(interval.targetPace);
+                    if (tSecs && pSecs) autoDistKm = Math.round((tSecs / pSecs) * 100) / 100;
+                  }
+                  const distPlaceholder = isTimeMode ? "mm:ss" : interval.distUnit === "yards" ? "50" : "50";
+                  return (
+                    <div key={idx} className="border-b border-border last:border-b-0">
+                      <div className="grid grid-cols-[2.5rem_1fr_4rem_4rem_1.5rem] gap-0 items-center px-2 py-1.5 bg-background">
+                        <Input type="text" placeholder={String(idx + 1)} value={interval.label}
+                          onChange={e => { const u = [...swimIntervals]; u[idx] = { ...u[idx], label: e.target.value }; setSwimIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                          className="h-7 text-xs font-semibold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg text-muted-foreground pl-1 transition-colors" />
+                        <div className={`flex items-center rounded-lg border transition-colors pl-1.5 pr-0.5 gap-0.5 ${isTimeMode ? "bg-violet-50 border-violet-200/60 dark:bg-violet-950/20 dark:border-violet-800/40" : "bg-muted/30 border-transparent hover:border-border"}`}>
+                          <Input type="text" inputMode={isTimeMode ? "text" : "decimal"} placeholder={distPlaceholder} value={interval.distance}
+                            onChange={e => { const u = [...swimIntervals]; u[idx] = { ...u[idx], distance: e.target.value }; setSwimIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                            className={`h-6 text-sm font-bold border-0 bg-transparent focus:ring-0 focus:outline-none p-0 flex-1 min-w-0 font-mono ${isTimeMode ? "text-violet-700 dark:text-violet-300" : ""}`} />
+                          <button type="button" title="Tap to change unit"
+                            onClick={() => { const u = [...swimIntervals]; const ci = SWIM_UNIT_CYCLE.indexOf(interval.distUnit); u[idx] = { ...u[idx], distUnit: SWIM_UNIT_CYCLE[(ci + 1) % SWIM_UNIT_CYCLE.length], distance: "" }; setSwimIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                            className={`flex-none flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-colors ${isTimeMode ? "bg-violet-200/60 text-violet-700 dark:bg-violet-800/40 dark:text-violet-300 hover:bg-violet-300/60" : "bg-muted/60 text-muted-foreground hover:bg-muted"}`}>
+                            {isTimeMode ? "min" : interval.distUnit}<ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                          </button>
+                        </div>
+                        <Input type="text" inputMode="text" placeholder="—" value={interval.targetPace}
+                          onChange={e => { const u = [...swimIntervals]; u[idx] = { ...u[idx], targetPace: e.target.value }; setSwimIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                          className="h-7 text-xs text-center text-muted-foreground border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg font-mono transition-colors" />
+                        <Input type="text" inputMode="text" placeholder="1:45" value={interval.pace}
+                          onChange={e => { const u = [...swimIntervals]; u[idx] = { ...u[idx], pace: e.target.value }; setSwimIntervals(u); setSaved(false); scheduleClientAutosave(); }}
+                          className="h-7 text-sm text-center font-bold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg font-mono text-sky-600 dark:text-sky-400 transition-colors" />
+                        <button type="button" disabled={swimIntervals.length === 1}
+                          onClick={() => { setSwimIntervals(swimIntervals.filter((_, i) => i !== idx)); setSaved(false); scheduleClientAutosave(); }}
+                          className="text-muted-foreground/60 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed p-1 rounded-lg transition-colors flex items-center justify-center">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      {isTimeMode && autoDistKm && (
+                        <p className="text-[10px] text-violet-600 dark:text-violet-400 font-medium px-3 pb-1.5 -mt-0.5">≈ {autoDistKm} km</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <button type="button"
+                onClick={() => { setSwimIntervals([...swimIntervals, BLANK_INTERVAL("m")]); setSaved(false); scheduleClientAutosave(); }}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-sky-400/60 text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-950/20 text-xs font-medium transition-colors">
+                <Plus className="w-3 h-3" /> Add interval
+              </button>
             </div>
           )}
 
