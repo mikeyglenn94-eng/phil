@@ -1474,33 +1474,48 @@ export default function ClientSession() {
     setShareImageLoading(true);
     try {
       const canvas = await html2canvas(shareWidgetRef.current, {
-        backgroundColor: null,
+        backgroundColor: "#0d0d0d",
         scale: 2,
-        useCORS: true,
+        useCORS: false,
         allowTaint: true,
         logging: false,
+        foreignObjectRendering: false,
       });
-      canvas.toBlob(blob => {
-        if (!blob) return;
-        const name = session.name || "session";
-        const file = new File([blob], `phil-${name.toLowerCase().replace(/\s+/g, "-")}.png`, { type: "image/png" });
-        setShareFile(file);
-        // iOS/Android: native share sheet
-        if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
-          navigator.share({ files: [file] }).then(() => {
-            setShareSaved(true); setTimeout(() => setShareSaved(false), 2500);
-          }).catch(() => {});
-        } else {
-          // Desktop: download
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url; a.download = file.name; a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
-          setShareSaved(true); setTimeout(() => setShareSaved(false), 2500);
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const name = `phil-${(session.name || "session").toLowerCase().replace(/\s+/g, "-")}.png`;
+
+      // Convert dataUrl → Blob for share API
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], name, { type: "image/png" });
+      setShareFile(file);
+
+      // iOS / Android — native share sheet (must be called before any await after the file is ready)
+      if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] });
+          setShareSaved(true);
+          setTimeout(() => setShareSaved(false), 2500);
+          return;
+        } catch {
+          // User cancelled or share failed — fall through to download
         }
-      }, "image/png");
+      }
+
+      // Desktop — trigger download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      setShareSaved(true);
+      setTimeout(() => setShareSaved(false), 2500);
     } catch (err) {
-      console.error("html2canvas error", err);
+      console.error("Save image error", err);
     } finally {
       setShareImageLoading(false);
     }
@@ -1511,7 +1526,7 @@ export default function ClientSession() {
     setShareImageLoading(true);
     try {
       const canvas = await html2canvas(shareWidgetRef.current, {
-        backgroundColor: null, scale: 2, useCORS: true, allowTaint: true, logging: false,
+        backgroundColor: "#0d0d0d", scale: 2, useCORS: false, allowTaint: true, logging: false, foreignObjectRendering: false,
       });
       canvas.toBlob(async blob => {
         if (!blob) return;
@@ -2981,7 +2996,12 @@ export default function ClientSession() {
                 {/* ── Header ── */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <img src="/phil.png" crossOrigin="anonymous" style={{ width: 28, height: 28, minWidth: 28, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
+                    {/* Geometric logomark — no image tag, html2canvas-safe */}
+                    <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: 7, background: "linear-gradient(135deg, #7c3aed 0%, #4f1d96 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 12V3L7.5 9L13 3V12" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
                     <span style={{ color: "rgba(255,255,255,0.9)", fontWeight: 600, fontSize: 14, letterSpacing: "-0.01em" }}>Trained with Phil</span>
                   </div>
                   <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, fontWeight: 500 }}>{shareDateStr}</span>
