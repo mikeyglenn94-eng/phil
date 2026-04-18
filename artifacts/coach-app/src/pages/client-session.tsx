@@ -47,11 +47,45 @@ interface SetLog { weight: number | null; reps: number | null; }
 type LogState = Record<string, SetLog[]>;
 interface RunInterval {
   label: string;           // "Rep 1", "Warm-up", or empty
-  distance: string;        // planned distance/duration from session, e.g. "2 km"
+  distance: string;        // distance value (numeric string, no unit)
+  distUnit: "km" | "m" | "mi"; // unit for the distance field (stored internally in km)
+  time: string;            // duration "mm:ss" — for pace-only intervals (e.g. "4:00")
   targetPace: string;      // planned target pace, e.g. "4:30/km"
   pace: string;            // actual pace logged by user
   notes: string;
   equivalentRoadPace?: string | null;
+}
+
+// Parse distance string + unit to km (stored value)
+function parseDistToKm(raw: string, unit: "km" | "m" | "mi"): number | null {
+  const s = raw.trim().toLowerCase();
+  if (!s) return null;
+  // Allow embedded suffixes in the text field (e.g. "400m", "0.25mi")
+  const miM = s.match(/^([\d.]+)\s*mi(?:le|les)?$/);
+  if (miM) return Math.round(parseFloat(miM[1]) * 1.60934 * 10000) / 10000;
+  const mM = s.match(/^([\d.]+)\s*m$/);
+  if (mM) return Math.round(parseFloat(mM[1]) / 10) / 100; // e.g. 400m → 0.4
+  const kmM = s.match(/^([\d.]+)\s*km?$/);
+  if (kmM) return parseFloat(kmM[1]);
+  // No suffix — use dropdown unit
+  const n = parseFloat(s);
+  if (isNaN(n)) return null;
+  if (unit === "m") return Math.round(n / 10) / 100;
+  if (unit === "mi") return Math.round(n * 1.60934 * 10000) / 10000;
+  return n;
+}
+
+// Parse "mm:ss" time string to seconds (null if invalid)
+function parseTimeStr(t: string): number | null {
+  const m = t.trim().match(/^(\d+):(\d{2})$/);
+  return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+}
+
+// Parse pace "m:ss" or "m:ss/km" to seconds per km
+function parsePaceToSecsPerKm(pace: string): number | null {
+  const clean = pace.replace(/\/km.*/, "").trim();
+  const m = clean.match(/^(\d+):(\d{2})$/);
+  return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
 }
 
 type RunSurface = "road" | "trail";
@@ -558,7 +592,7 @@ export default function ClientSession() {
   const [wodResult, setWodResult] = useState<WodResult>({});
 
   // Run interval logging state
-  const [runIntervals, setRunIntervals] = useState<RunInterval[]>([{ label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+  const [runIntervals, setRunIntervals] = useState<RunInterval[]>([{ label: "", distance: "", distUnit: "km", time: "", targetPace: "", pace: "", notes: "" }]);
   const [runSurface, setRunSurface] = useState<RunSurface>("road");
   const [trailDifficulty, setTrailDifficulty] = useState<TrailDifficulty | null>(null);
 
@@ -601,10 +635,14 @@ export default function ClientSession() {
     if (savedSurface) setRunSurface(savedSurface);
     if (savedDifficulty) setTrailDifficulty(savedDifficulty);
 
+    const BLANK_INTERVAL: RunInterval = { label: "", distance: "", distUnit: "km", time: "", targetPace: "", pace: "", notes: "" };
     if (savedRunLog && savedRunLog.length > 0) {
       setRunIntervals(savedRunLog.map(r => ({
         label: r.label ?? "",
+        // Stored as km — display as km by default
         distance: r.distance != null ? String(r.distance) : "",
+        distUnit: (r as any).distUnit ?? "km" as const,
+        time: (r as any).time ?? "",
         targetPace: r.targetPace ?? "",
         pace: r.pace ?? "",
         notes: r.notes ?? "",
@@ -620,14 +658,16 @@ export default function ClientSession() {
             if (row.rowType === "rest") continue;
             intervals.push({
               label: row.rowType === "interval" ? `Rep ${row.repNumber ?? ""}`.trim() : (block.label || ""),
-              distance: row.distance || row.duration || "",
+              distance: row.distance || "",
+              distUnit: "km",
+              time: row.duration || "",
               targetPace: row.pace || "",
               pace: "",
               notes: row.effort || "",
             });
           }
         }
-        setRunIntervals(intervals.length > 0 ? intervals : [{ label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+        setRunIntervals(intervals.length > 0 ? intervals : [BLANK_INTERVAL]);
       } else {
         // Fallback: one row per exercise that looks like an interval
         const exs = (session.exercises ?? []).filter((e: any) => e.name?.startsWith("Rep") || (session as any).source === "run_brain");
@@ -635,12 +675,14 @@ export default function ClientSession() {
           setRunIntervals(exs.map((e: any) => ({
             label: e.name || "",
             distance: e.reps || "",
+            distUnit: "km" as const,
+            time: "",
             targetPace: e.notes?.match(/@ ?([\d:]+\/km)/)?.[1] ?? "",
             pace: "",
             notes: "",
           })));
         } else {
-          setRunIntervals([{ label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+          setRunIntervals([BLANK_INTERVAL]);
         }
       }
     }
@@ -1170,16 +1212,23 @@ export default function ClientSession() {
           const base = { ...s, clientComment: sessionComment.trim() || null };
           if (isRunSession) {
             const runLog = runIntervals
-              .filter(r => r.distance !== "" || r.pace !== "" || r.label !== "")
+              .filter(r => r.distance !== "" || r.time !== "" || r.pace !== "" || r.label !== "")
               .map(r => {
-                // Parse distance string to number (km). "9.57" → 9.57, "10 km" → 10, "" → null.
-                const rawDist = r.distance.trim();
-                const distNum = rawDist !== ""
-                  ? (() => { const n = parseFloat(rawDist); return isNaN(n) ? null : n; })()
-                  : null;
+                // Parse distance with unit awareness. Stored in km.
+                let distKm = parseDistToKm(r.distance, r.distUnit);
+                // Auto-calc distance from time ÷ pace if distance is blank
+                if (distKm === null && r.time && r.targetPace) {
+                  const timeSecs = parseTimeStr(r.time);
+                  const paceSecs = parsePaceToSecsPerKm(r.targetPace);
+                  if (timeSecs && paceSecs) {
+                    distKm = Math.round((timeSecs / paceSecs) * 100) / 100;
+                  }
+                }
                 return {
                   label: r.label || null,
-                  distance: distNum,
+                  distance: distKm,
+                  distUnit: r.distUnit,
+                  time: r.time || null,
                   targetPace: r.targetPace || null,
                   pace: r.pace || null,
                   notes: r.notes || null,
@@ -1846,18 +1895,26 @@ export default function ClientSession() {
                 <p className="text-xs font-bold text-muted-foreground tracking-widest uppercase px-1">What you ran</p>
                 <div className="rounded-xl border border-border overflow-hidden">
                   {/* Header */}
-                  <div className="grid grid-cols-[3rem_1fr_4.5rem_4.5rem_2rem] gap-0 bg-muted/40 border-b border-border px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div className="grid grid-cols-[2.5rem_1fr_3.5rem_4rem_4rem_1.5rem] gap-0 bg-muted/40 border-b border-border px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                     <span className="pl-1">Rep</span>
-                    <span>Distance</span>
+                    <span className="pl-1">Dist</span>
+                    <span className="text-center">Time</span>
                     <span className="text-center">Target</span>
                     <span className="text-center">Actual</span>
                     <span />
                   </div>
                   {runIntervals.map((interval, idx) => {
                     const eqPace = calcEquivalentPace(interval.pace, runSurface, trailDifficulty);
+                    // Auto-calc distance preview for pace-only rows
+                    let autoDistKm: number | null = null;
+                    if (!interval.distance && interval.time && interval.targetPace) {
+                      const tSecs = parseTimeStr(interval.time);
+                      const pSecs = parsePaceToSecsPerKm(interval.targetPace);
+                      if (tSecs && pSecs) autoDistKm = Math.round((tSecs / pSecs) * 100) / 100;
+                    }
                     return (
                       <div key={idx} className="border-b border-border last:border-b-0">
-                        <div className="grid grid-cols-[3rem_1fr_4.5rem_4.5rem_2rem] gap-0 items-center px-2 py-1.5 bg-background">
+                        <div className="grid grid-cols-[2.5rem_1fr_3.5rem_4rem_4rem_1.5rem] gap-0 items-center px-2 py-1.5 bg-background">
                           {/* Rep label */}
                           <Input
                             type="text"
@@ -1870,22 +1927,54 @@ export default function ClientSession() {
                               setSaved(false);
                               scheduleClientAutosave();
                             }}
-                            className="h-7 text-xs font-semibold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg text-muted-foreground pl-1.5 transition-colors"
+                            className="h-7 text-xs font-semibold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg text-muted-foreground pl-1 transition-colors"
                           />
-                          {/* Distance */}
+                          {/* Distance + unit selector */}
+                          <div className="flex items-center gap-0.5 pl-1 pr-0.5">
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder={autoDistKm ? `≈${autoDistKm}` : "0"}
+                              value={interval.distance}
+                              onChange={e => {
+                                const updated = [...runIntervals];
+                                updated[idx] = { ...updated[idx], distance: e.target.value };
+                                setRunIntervals(updated);
+                                setSaved(false);
+                                scheduleClientAutosave();
+                              }}
+                              className="h-7 text-sm font-bold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg flex-1 min-w-0 transition-colors"
+                            />
+                            <select
+                              value={interval.distUnit}
+                              onChange={e => {
+                                const updated = [...runIntervals];
+                                updated[idx] = { ...updated[idx], distUnit: e.target.value as "km" | "m" | "mi" };
+                                setRunIntervals(updated);
+                                setSaved(false);
+                                scheduleClientAutosave();
+                              }}
+                              className="h-7 text-[10px] font-semibold bg-muted/40 border border-transparent hover:border-border rounded-md px-0.5 text-muted-foreground focus:outline-none focus:border-primary/40 transition-colors cursor-pointer"
+                            >
+                              <option value="km">km</option>
+                              <option value="m">m</option>
+                              <option value="mi">mi</option>
+                            </select>
+                          </div>
+                          {/* Duration / time (for pace-only intervals) */}
                           <Input
                             type="text"
                             inputMode="text"
-                            placeholder="e.g. 1 km"
-                            value={interval.distance}
+                            placeholder="mm:ss"
+                            value={interval.time}
                             onChange={e => {
                               const updated = [...runIntervals];
-                              updated[idx] = { ...updated[idx], distance: e.target.value };
+                              updated[idx] = { ...updated[idx], time: e.target.value };
                               setRunIntervals(updated);
                               setSaved(false);
                               scheduleClientAutosave();
                             }}
-                            className="h-7 text-sm font-bold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg mx-1 transition-colors"
+                            className="h-7 text-xs text-center font-mono text-muted-foreground border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg transition-colors"
                           />
                           {/* Target pace */}
                           <Input
@@ -1915,7 +2004,7 @@ export default function ClientSession() {
                               setSaved(false);
                               scheduleClientAutosave();
                             }}
-                            className="h-7 text-sm text-center font-bold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg font-mono text-emerald-700 dark:text-emerald-400 ml-1 transition-colors"
+                            className="h-7 text-sm text-center font-bold border border-transparent bg-muted/30 hover:border-border focus:border-primary/40 focus:bg-background rounded-lg font-mono text-emerald-700 dark:text-emerald-400 transition-colors"
                           />
                           <button
                             type="button"
@@ -1925,11 +2014,17 @@ export default function ClientSession() {
                               setSaved(false);
                               scheduleClientAutosave();
                             }}
-                            className="text-muted-foreground/60 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                            className="text-muted-foreground/60 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed p-1 rounded-lg transition-colors flex items-center justify-center"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-3 h-3" />
                           </button>
                         </div>
+                        {/* Auto-calculated distance hint for pace-only rows */}
+                        {autoDistKm && (
+                          <p className="text-[10px] text-primary/60 font-medium px-3 pb-1.5 -mt-0.5">
+                            ≈ {autoDistKm} km (time ÷ pace)
+                          </p>
+                        )}
                         {/* Trail equivalent pace */}
                         {eqPace && (
                           <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium px-3 pb-1.5 -mt-0.5">
@@ -1943,7 +2038,7 @@ export default function ClientSession() {
                 <button
                   type="button"
                   onClick={() => {
-                    setRunIntervals([...runIntervals, { label: "", distance: "", targetPace: "", pace: "", notes: "" }]);
+                    setRunIntervals([...runIntervals, { label: "", distance: "", distUnit: "km", time: "", targetPace: "", pace: "", notes: "" }]);
                     setSaved(false);
                     scheduleClientAutosave();
                   }}

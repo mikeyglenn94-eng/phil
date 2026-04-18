@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3, Trophy, CheckSquare, TrendingUp, Footprints,
   Timer, Dumbbell, SlidersHorizontal, ChevronDown, ChevronRight, Sparkles,
@@ -951,6 +952,7 @@ async function generateProgressCard(
 // ── Main component ────────────────────────────────────────────────
 
 export default function DashboardTab({ analytics, isLoading, clientId, calorieTarget, proteinTarget, nutritionMode = "calories", hasSessionData = true, onOpenCustomise }: Props) {
+  const queryClient = useQueryClient();
   const [prefs, setPrefs] = useState<DashboardPrefs>(() => loadPrefs(clientId));
   const [editOpen, setEditOpen] = useState(false);
   const [nutritionLogs, setNutritionLogs] = useState<RawNutritionEntry[]>([]);
@@ -1045,11 +1047,14 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
     if (key === "tenK")         body.tenKSeconds         = parseTimeInput(val);
     if (key === "halfMarathon") body.halfMarathonSeconds = parseTimeInput(val);
     if (key === "marathon")     body.marathonSeconds     = parseTimeInput(val);
-    await fetch(`/api/clients/${clientId}/baselines`, {
+    const res = await fetch(`/api/clients/${clientId}/baselines`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (res?.ok) {
+      await queryClient.invalidateQueries({ queryKey: ["client-analytics", clientId] });
+    }
     setPbInputs(p => ({ ...p, [key]: "" }));
     setPbInputSaving(p => ({ ...p, [key]: false }));
   }
