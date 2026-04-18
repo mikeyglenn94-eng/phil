@@ -589,7 +589,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   // ── Quick-add single session ──
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddDate, setQuickAddDate] = useState("");
-  const [quickAddType, setQuickAddType] = useState<"strength" | "wod" | "run">("strength");
+  const [quickAddType, setQuickAddType] = useState<"strength" | "wod" | "run" | "cycle" | "swim">("strength");
   const [quickAddName, setQuickAddName] = useState("");
   const [quickAddDesc, setQuickAddDesc] = useState("");
   const [quickAddParsing, setQuickAddParsing] = useState(false);
@@ -658,7 +658,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setEditableSession(null);
     setQuickAddWodOptions(null);
     try {
-      const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : quickAddType === "run" ? "/api/parse-run-session" : "/api/parse-session";
+      const isEnduranceType = quickAddType === "run" || quickAddType === "cycle" || quickAddType === "swim";
+      const endpoint = quickAddType === "wod" ? "/api/parse-wod-session" : isEnduranceType ? "/api/parse-run-session" : "/api/parse-session";
       const ctrl = new AbortController();
       const abortTimer = setTimeout(() => ctrl.abort(), 60000);
       let data: any;
@@ -679,10 +680,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         setQuickAddWodOptions(data.options);
       } else {
         const single = data.options?.[0] ?? data;
+        // Stamp source for cycle/swim so logging screen shows the right UI
+        if (quickAddType === "cycle") single.source = "cycle_brain";
+        if (quickAddType === "swim") single.source = "swim_brain";
         setParsedQuickSession(single);
         if (quickAddType === "wod") {
           setEditableSession(parseWodToEditable(single));
-        } else if (quickAddType === "run") {
+        } else if (isEnduranceType) {
           setEditableSession(parseRunToEditable(single));
         } else {
           setEditableSession(parseStrengthToEditable(single));
@@ -737,7 +741,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   }
 
   /** Build Through AI — single session mode: parses and shows preview with save options */
-  async function handleAiSession(overrides?: { desc?: string; type?: "strength" | "wod" | "run" }) {
+  async function handleAiSession(overrides?: { desc?: string; type?: "strength" | "wod" | "run" | "cycle" | "swim" }) {
     const desc = overrides?.desc ?? quickAddDesc;
     const type = overrides?.type ?? quickAddType;
     if (!desc.trim() || !assignStartDate) return;
@@ -746,7 +750,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setParsedAiSession(null);
     setQuickAddWodOptions(null);
     try {
-      const endpoint = type === "wod" ? "/api/parse-wod-session" : type === "run" ? "/api/parse-run-session" : "/api/parse-session";
+      const isEnduranceType = type === "run" || type === "cycle" || type === "swim";
+      const endpoint = type === "wod" ? "/api/parse-wod-session" : isEnduranceType ? "/api/parse-run-session" : "/api/parse-session";
       const ctrl = new AbortController();
       const abortTimer = setTimeout(() => ctrl.abort(), 60000);
       let data: any;
@@ -766,10 +771,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       if (data.options && Array.isArray(data.options) && data.options.length > 1) {
         setQuickAddWodOptions(data.options);
       } else {
-        setParsedAiSession(data.options?.[0] ?? data);
+        const single = data.options?.[0] ?? data;
+        if (type === "cycle") single.source = "cycle_brain";
+        if (type === "swim") single.source = "swim_brain";
+        setParsedAiSession(single);
       }
     } catch {
-      setQuickAddError(quickAddType === "wod" ? "Couldn't design your WOD. Please try again." : "Couldn't parse your session. Please try again.");
+      setQuickAddError(type === "wod" ? "Couldn't design your WOD. Please try again." : "Couldn't parse your session. Please try again.");
     } finally {
       setAiSessionGenerating(false);
     }
@@ -955,7 +963,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   // ── Coach parse result (parse-first plan/session flow) ───────────────────
   interface CoachParseResult {
     requestType: "programme" | "session";
-    sessionModality?: "strength" | "run" | "wod" | null;
+    sessionModality?: "strength" | "run" | "wod" | "cycle" | "swim" | null;
     acknowledgement: string;
     hasEnough: boolean;
     followUpQuestion?: string;
@@ -1740,10 +1748,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   };
 
   // ── Infer session type from a natural-language brief ─────────────────────
-  function inferSessionTypeFromBrief(brief: string): "strength" | "wod" | "run" {
+  function inferSessionTypeFromBrief(brief: string): "strength" | "wod" | "run" | "cycle" | "swim" {
     const lower = brief.toLowerCase();
     if (/\b(wod|amrap|emom|for time|metcon|box jump|wall ball|burpee|double under|pull.?up|kb|kettlebell|row.*cal|cal.*row|chipper)\b/.test(lower)) return "wod";
-    if (/\b(run|km|kilometer|metre|meter|mile|interval|tempo|sprint|jog|5k|10k|half marathon|marathon|parkrun|pace|treadmill|track)\b/.test(lower)) return "run";
+    if (/\b(swim|swimming|pool|stroke|lap|laps|freestyle|backstroke|breaststroke|butterfly|100m|200m swim|400m swim|open water)\b/.test(lower)) return "swim";
+    if (/\b(cycl|bike|biking|cycling|ride|riding|watts|power|cadence|ftp|zwift|velodrome|peloton|threshold ride|endurance ride)\b/.test(lower)) return "cycle";
+    if (/\b(run|km|kilometer|mile|interval|tempo|sprint|jog|5k|10k|half marathon|marathon|parkrun|pace|treadmill|track)\b/.test(lower)) return "run";
     return "strength";
   }
 
@@ -1772,12 +1782,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   }
 
   // ── Build a single session from Phil — no modal ────────────────────────────
-  async function handleBuildSessionFromPhil(brief: string, type: "strength" | "wod" | "run") {
+  async function handleBuildSessionFromPhil(brief: string, type: "strength" | "wod" | "run" | "cycle" | "swim") {
     setPhilOpen(true);
     setCmdParsing(true);
     const date = assignStartDate || format(new Date(), "yyyy-MM-dd");
     try {
-      const endpoint = type === "wod" ? "/api/parse-wod-session" : type === "run" ? "/api/parse-run-session" : "/api/parse-session";
+      const isEnduranceType = type === "run" || type === "cycle" || type === "swim";
+      const endpoint = type === "wod" ? "/api/parse-wod-session" : isEnduranceType ? "/api/parse-run-session" : "/api/parse-session";
       const ctrl = new AbortController();
       const abortTimer = setTimeout(() => ctrl.abort(), 60000);
       let data: any;
@@ -1799,13 +1810,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         });
       } else {
         const session = data.options?.[0] ?? data;
+        if (type === "cycle") session.source = "cycle_brain";
+        if (type === "swim") session.source = "swim_brain";
         const exercises: any[] = session.exercises ?? [];
         const preview = exercises.slice(0, 3)
           .map((ex: any) => `• ${ex.name}${ex.sets && ex.reps ? ` ${ex.sets}×${ex.reps}` : ex.sets ? ` ${ex.sets} sets` : ""}`)
           .join("\n");
         const suffix = exercises.length > 3 ? `\n+${exercises.length - 3} more` : "";
+        const typeLabel = type === "run" ? "run" : type === "cycle" ? "ride" : type === "swim" ? "swim" : "session";
         addPhilMsg(
-          `Here's your ${type === "run" ? "run" : "session"}, ${session.name ?? "Session"}:\n\n${preview}${suffix}`,
+          `Here's your ${typeLabel}, ${session.name ?? "Session"}:\n\n${preview}${suffix}`,
           { action: { type: "save_session", session, sessionType: type, date } }
         );
       }
@@ -1946,10 +1960,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       // Use the explicit modality from Phil's parse result if available.
       // Fall back to text inference only as a last resort.
       const modalityFromPhil = coachParseResult.sessionModality;
-      const inferredType: "strength" | "wod" | "run" =
+      const inferredType: "strength" | "wod" | "run" | "cycle" | "swim" =
         modalityFromPhil === "run" ? "run" :
         modalityFromPhil === "wod" ? "wod" :
         modalityFromPhil === "strength" ? "strength" :
+        modalityFromPhil === "cycle" ? "cycle" :
+        modalityFromPhil === "swim" ? "swim" :
         inferSessionTypeFromBrief(brief);
       void handleBuildSessionFromPhil(brief, inferredType);
     } else {
@@ -4987,15 +5003,15 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               {aiMode === "session" && (
                 <>
                   {/* Session type selector */}
-                  <div className="flex rounded-xl overflow-hidden border border-muted p-0.5 gap-0.5 bg-muted/30">
-                    {(["strength", "wod", "run"] as const).map(t => (
+                  <div className="grid grid-cols-5 rounded-xl overflow-hidden border border-muted p-0.5 gap-0.5 bg-muted/30">
+                    {(["strength", "wod", "run", "cycle", "swim"] as const).map(t => (
                       <button
                         key={t}
                         type="button"
                         onClick={() => setQuickAddType(t)}
-                        className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition-colors ${quickAddType === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        className={`flex-1 text-[10px] font-medium py-1.5 rounded-lg transition-colors ${quickAddType === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                       >
-                        {t === "strength" ? "Strength" : t === "wod" ? "WOD" : "Run"}
+                        {t === "strength" ? "Strength" : t === "wod" ? "WOD" : t === "run" ? "Run" : t === "cycle" ? "Cycle" : "Swim"}
                       </button>
                     ))}
                   </div>
@@ -5004,7 +5020,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Session name <span className="text-muted-foreground font-normal">(optional)</span></label>
                     <Input
-                      placeholder={quickAddType === "wod" ? "e.g. Thursday Metcon" : quickAddType === "run" ? "e.g. Tuesday Tempo" : "e.g. Lower Body Day"}
+                      placeholder={quickAddType === "wod" ? "e.g. Thursday Metcon" : quickAddType === "run" ? "e.g. Tuesday Tempo" : quickAddType === "cycle" ? "e.g. Threshold Ride" : quickAddType === "swim" ? "e.g. Swim Intervals" : "e.g. Lower Body Day"}
                       value={quickAddName}
                       onChange={e => setQuickAddName(e.target.value)}
                     />
@@ -5013,7 +5029,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   {/* Description */}
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">
-                      {quickAddType === "wod" ? "WOD description" : quickAddType === "run" ? "Run description" : "What are you working with?"}
+                      {quickAddType === "wod" ? "WOD description" : quickAddType === "run" ? "Run description" : quickAddType === "cycle" ? "Ride description" : quickAddType === "swim" ? "Swim description" : "What are you working with?"}
                     </label>
                     <div className="relative">
                       <textarea
@@ -5023,6 +5039,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                             ? "e.g. 30 min AMRAP: 10 burpees, 15 box jumps, 20 wall balls. I have a 24kg KB."
                             : quickAddType === "run"
                             ? "e.g. 45 min steady run, 4×500m with 90s rest, 5km time trial"
+                            : quickAddType === "cycle"
+                            ? "e.g. 60 min endurance ride, 4×8 min at threshold, 15 min warm-up/cool-down"
+                            : quickAddType === "swim"
+                            ? "e.g. 2km total, 10×100m with 20s rest, steady pace"
                             : "e.g. I have 30 mins, 22.5kg dumbbells, and can run 500m laps. Build me a full-body circuit."
                         }
                         value={quickAddListening ? (quickAddInterim || quickAddDesc) : quickAddDesc}
@@ -5446,28 +5466,30 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               <DialogDescription>
                 {quickAddType === "wod" ? "Describe your WOD in any format. The AI will structure it."
                   : quickAddType === "run" ? "Describe your run. The AI will structure it."
+                  : quickAddType === "cycle" ? "Describe your ride. The AI will structure it."
+                  : quickAddType === "swim" ? "Describe your swim. The AI will structure it."
                   : "List your exercises in any format. The AI will structure them for you."}
               </DialogDescription>
             </DialogHeader>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 pb-6 space-y-3" style={{ WebkitOverflowScrolling: "touch" }}>
             {/* Type toggle */}
-            <div className="flex rounded-xl overflow-hidden border border-muted p-0.5 gap-0.5 bg-muted/30">
-              {(["strength", "wod", "run"] as const).map(t => (
+            <div className="grid grid-cols-5 rounded-xl overflow-hidden border border-muted p-0.5 gap-0.5 bg-muted/30">
+              {(["strength", "wod", "run", "cycle", "swim"] as const).map(t => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => { setQuickAddType(t); setQuickAddDesc(""); setQuickAddError(""); }}
-                  className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition-colors ${quickAddType === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`flex-1 text-[10px] font-medium py-1.5 rounded-lg transition-colors ${quickAddType === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                 >
-                  {t === "strength" ? "Strength" : t === "wod" ? "WOD" : "Run"}
+                  {t === "strength" ? "Strength" : t === "wod" ? "WOD" : t === "run" ? "Run" : t === "cycle" ? "Cycle" : "Swim"}
                 </button>
               ))}
             </div>
 
             <div>
               <label className="text-xs font-medium text-muted-foreground">
-                {quickAddType === "wod" ? "WOD name (optional)" : quickAddType === "run" ? "Run name (optional)" : "Session name (optional)"}
+                {quickAddType === "wod" ? "WOD name (optional)" : quickAddType === "run" ? "Run name (optional)" : quickAddType === "cycle" ? "Ride name (optional)" : quickAddType === "swim" ? "Swim name (optional)" : "Session name (optional)"}
               </label>
               <input
                 value={quickAddName}
@@ -5475,6 +5497,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 placeholder={
                   quickAddType === "wod" ? "e.g. Thursday Metcon, Lunchtime WOD"
                   : quickAddType === "run" ? "e.g. Tuesday Tempo, Long Run"
+                  : quickAddType === "cycle" ? "e.g. Monday Threshold Ride"
+                  : quickAddType === "swim" ? "e.g. Tuesday Swim Session"
                   : "e.g. Push Day, Leg Session"
                 }
                 className="input mt-1"
@@ -5483,7 +5507,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             <div>
               <div className="flex items-center justify-between mt-0">
                 <label className="text-xs font-medium text-muted-foreground">
-                  {quickAddType === "wod" ? "WOD description" : quickAddType === "run" ? "Run description" : "Exercises"}
+                  {quickAddType === "wod" ? "WOD description" : quickAddType === "run" ? "Run description" : quickAddType === "cycle" ? "Ride description" : quickAddType === "swim" ? "Swim description" : "Exercises"}
                 </label>
                 <button
                   type="button"
@@ -5503,6 +5527,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     ? "e.g. 30 min amrap, 15 press ups, 1km bike erg, 500m run\n\nor: EMOM 12 (min 1: 12 cal bike, min 2: 15 wall balls)\nor: 5 rounds for time: 400m run, 20 burpees"
                   : quickAddType === "run"
                     ? "e.g. 45 min steady run\n\nor: 5 × 1km at tempo pace, 90s jog recovery\nor: 8km steady state, hilly route\nor: 6 × 200m hill sprints"
+                  : quickAddType === "cycle"
+                    ? "e.g. 60 min endurance ride\n\nor: 4 × 8 min at threshold, 4 min easy recovery\nor: 90 min long ride, moderate pace\nor: 6 × 2 min hill efforts"
+                  : quickAddType === "swim"
+                    ? "e.g. 2km total, mixed pace\n\nor: 10 × 100m with 20s rest\nor: 400m warm-up, 8 × 50m sprint, 400m cool-down\nor: 1500m time trial"
                   : "Bench press 4x8\nSquat 3x5 @RPE 8\nRDL 3x10\nLateral raises 3x15\n\n…or speak naturally"
                 }
                 rows={6}
@@ -5519,6 +5547,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 <p className="text-[11px] text-muted-foreground/60 mt-1">
                   {quickAddType === "wod" ? "Describe format, duration and movements. Cmd+Enter to save."
                     : quickAddType === "run" ? "Include distance, duration, intensity or structure. Cmd+Enter to save."
+                    : quickAddType === "cycle" ? "Include duration, distance, intervals or target power. Cmd+Enter to save."
+                    : quickAddType === "swim" ? "Include distance, sets, intervals or target pace. Cmd+Enter to save."
                     : "One exercise per line, comma-separated, or just speak. Cmd+Enter to save."}
                 </p>
               )}
