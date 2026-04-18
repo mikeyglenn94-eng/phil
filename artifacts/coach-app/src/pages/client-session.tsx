@@ -2994,16 +2994,7 @@ export default function ClientSession() {
                 }}
               >
                 {/* ── Header ── */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {/* Geometric logomark — no image tag, html2canvas-safe */}
-                    <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: 7, background: "linear-gradient(135deg, #7c3aed 0%, #4f1d96 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M2 12V3L7.5 9L13 3V12" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    <span style={{ color: "rgba(255,255,255,0.9)", fontWeight: 600, fontSize: 14, letterSpacing: "-0.01em" }}>Trained with Phil</span>
-                  </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                   <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, fontWeight: 500 }}>{shareDateStr}</span>
                 </div>
 
