@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
   Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2,
-  Pencil,
+  Pencil, ChevronDown,
 } from "lucide-react";
 import {
   WorkoutPreviewEditorCard,
@@ -1968,13 +1968,14 @@ export default function ClientSession() {
                                 setSaved(false);
                                 scheduleClientAutosave();
                               }}
-                              className={`flex-none text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-colors ${
+                              className={`flex-none flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-colors ${
                                 isTimeMode
                                   ? "bg-violet-200/60 text-violet-700 dark:bg-violet-800/40 dark:text-violet-300 hover:bg-violet-300/60"
                                   : "bg-muted/60 text-muted-foreground hover:bg-muted"
                               }`}
                             >
                               {isTimeMode ? "min" : interval.distUnit}
+                              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
                             </button>
                           </div>
                           {/* Target pace */}
