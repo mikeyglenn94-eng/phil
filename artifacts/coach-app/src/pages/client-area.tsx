@@ -4366,7 +4366,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                             return (
                               <div
                                 key={session.id}
-                                draggable={(!selectionMode || isSelected) && !isPublished && !isTeamSession}
+                                draggable={(!selectionMode || isSelected) && !isPublished && !(isTeamSession && mode === "coach")}
                                 onDragStart={() => {
                                   if (selectionMode && isSelected) {
                                     draggedItemRef.current = { sessionId: session.id, programmeId: prog?.id ?? 0, isGroupDrag: true, originalDate: dateStr };
@@ -4485,7 +4485,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                   }
                                   if (isDragActiveRef.current) return;
                                   if (isPublished) return; // published team sessions are read-only
-                                  if (isTeamSession) return; // team sessions are read-only in individual client view
+                                  if (isTeamSession && mode === "coach") return; // coaches cannot edit published team sessions from client view
                                   if (prog) {
                                     if (mode === "client") {
                                       setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
@@ -4506,10 +4506,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     }
                                   </span>
                                 )}
-                                {!selectionMode && isTeamSession && (
+                                {!selectionMode && isTeamSession && mode === "coach" && (
                                   <span className="absolute top-0.5 right-0.5 z-20 text-[7px] font-bold leading-none px-1 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">TEAM</span>
                                 )}
-                                {!selectionMode && !isTeamSession && (
+                                {!selectionMode && !(isTeamSession && mode === "coach") && (
                                   <div
                                     className="absolute top-0.5 right-0.5 z-20"
                                     onClick={e => e.stopPropagation()}
