@@ -71,12 +71,24 @@ export default function SessionEditor() {
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const existingSession = useMemo(() => {
+    // Check for injected session data (used when navigating from team calendar
+    // where there is no real programme to fetch from)
+    const injected = sessionStorage.getItem("session_editor_injected");
+    if (injected) {
+      try {
+        return JSON.parse(injected) as Session;
+      } catch {
+        // fall through to programme lookup
+      }
+    }
     if (!programme?.sessions || isNew) return null;
     return programme.sessions.find((s: Session) => s.id === sessionId) || null;
   }, [programme, sessionId, isNew]);
 
   useEffect(() => {
     if (existingSession) {
+      // Clear injected data now that it's been consumed into state
+      sessionStorage.removeItem("session_editor_injected");
       setSessionName(existingSession.name || "");
       setSessionDate(existingSession.date);
       setExercises(existingSession.exercises || []);

@@ -4447,6 +4447,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                         setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                       } else {
                                         sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
+                                        sessionStorage.setItem("session_editor_injected", JSON.stringify(session));
                                         setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                       }
                                     }
@@ -4469,6 +4470,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                       setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                     } else {
                                       sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
+                                      sessionStorage.setItem("session_editor_injected", JSON.stringify(session));
                                       setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                     }
                                   }
@@ -4518,6 +4520,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                             setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                           } else {
                                             sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
+                                            sessionStorage.setItem("session_editor_injected", JSON.stringify(session));
                                             setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                           }
                                         }}>
