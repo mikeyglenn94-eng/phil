@@ -317,6 +317,34 @@ router.post("/teams/:teamId/sessions/:id/publish", coachOnly, async (req: Reques
   res.json({ ...published, distributedTo: members.length });
 });
 
+// DELETE /teams/:teamId/sessions/:id/publish  (unpublish)
+router.delete("/teams/:teamId/sessions/:id/publish", coachOnly, async (req: Request, res): Promise<void> => {
+  const teamId = parseInt(req.params.teamId, 10);
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(teamId) || isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [team] = await db.select().from(teamsTable).where(eq(teamsTable.id, teamId));
+  if (!team) { res.status(404).json({ error: "Team not found" }); return; }
+  if (team.coachId !== req.auth!.userId) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [existing] = await db
+    .select()
+    .from(teamSessionsTable)
+    .where(and(eq(teamSessionsTable.id, id), eq(teamSessionsTable.teamId, teamId)));
+  if (!existing) { res.status(404).json({ error: "Session not found" }); return; }
+  if (existing.status !== "published") { res.status(400).json({ error: "Session is not published" }); return; }
+
+  await db.delete(clientTeamSessionsTable).where(eq(clientTeamSessionsTable.teamSessionId, id));
+
+  const [unpublished] = await db
+    .update(teamSessionsTable)
+    .set({ status: "draft", publishedAt: null })
+    .where(eq(teamSessionsTable.id, id))
+    .returning();
+
+  res.json(unpublished);
+});
+
 // GET /teams/:teamId/sessions/:id/client-copies
 router.get("/teams/:teamId/sessions/:id/client-copies", coachOnly, async (req: Request, res): Promise<void> => {
   const teamId = parseInt(req.params.teamId, 10);

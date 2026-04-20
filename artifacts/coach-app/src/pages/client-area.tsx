@@ -1021,6 +1021,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   // Team-mode state
   const [teamPublishConfirm, setTeamPublishConfirm] = useState<{ sessionId: string; dbId: number } | null>(null);
   const [teamPublishing, setTeamPublishing] = useState(false);
+  const [teamUnpublishConfirm, setTeamUnpublishConfirm] = useState<{ sessionId: string; dbId: number } | null>(null);
+  const [teamUnpublishing, setTeamUnpublishing] = useState(false);
   const [teamCopiesPanel, setTeamCopiesPanel] = useState<{ dbId: number; sessionName: string } | null>(null);
   const [teamCopies, setTeamCopies] = useState<any[]>([]);
   const [teamCopiesLoading, setTeamCopiesLoading] = useState(false);
@@ -3264,6 +3266,46 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     }
   };
 
+  const handleTeamUnpublishSession = async () => {
+    if (!teamUnpublishConfirm || !teamId) return;
+    setTeamUnpublishing(true);
+    try {
+      const token = localStorage.getItem("axis_auth_token");
+      const r = await fetch(`/api/teams/${teamId}/sessions/${teamUnpublishConfirm.dbId}/publish`, {
+        method: "DELETE",
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+      if (!r.ok) throw new Error("Unpublish failed");
+      await queryClient.invalidateQueries({ queryKey: ["team-sessions", teamId] });
+      toast({ title: "Session unpublished — member copies removed" });
+      setTeamUnpublishConfirm(null);
+    } catch {
+      toast({ title: "Failed to unpublish session", variant: "destructive" });
+    } finally {
+      setTeamUnpublishing(false);
+    }
+  };
+
+  const handleTeamDeleteSession = async (dbId: number) => {
+    if (!teamId) return;
+    try {
+      const token = localStorage.getItem("axis_auth_token");
+      const r = await fetch(`/api/teams/${teamId}/sessions/${dbId}`, {
+        method: "DELETE",
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        toast({ title: body.error === "Published sessions cannot be deleted" ? "Unpublish the session first, then delete" : "Failed to delete session", variant: "destructive" });
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["team-sessions", teamId] });
+      toast({ title: "Session deleted" });
+    } catch {
+      toast({ title: "Failed to delete session", variant: "destructive" });
+    }
+  };
+
   // Team: load client copies for a session
   const handleViewTeamCopies = async (dbId: number, sessionName: string) => {
     setTeamCopiesPanel({ dbId, sessionName });
@@ -4533,7 +4575,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                                 <Globe className="w-3.5 h-3.5 mr-2" />Publish
                                               </DropdownMenuItem>
                                             ) : (
-                                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                              <DropdownMenuItem onClick={() => {
+                                                if (teamMeta) setTeamUnpublishConfirm({ sessionId: session.id, dbId: teamMeta.dbId });
+                                              }} className="text-amber-600 focus:text-amber-600">
                                                 <EyeOff className="w-3.5 h-3.5 mr-2" />Unpublish
                                               </DropdownMenuItem>
                                             )}
@@ -4565,12 +4609,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                           <Copy className="w-3.5 h-3.5 mr-2" />Copy
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                          className="text-red-600 focus:text-red-600"
-                                          onClick={() => void deleteOneSession(session)}
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5 mr-2" />Delete
-                                        </DropdownMenuItem>
+                                        {isTeamMode && isPublished ? (
+                                          <DropdownMenuItem disabled className="text-red-400 opacity-50 cursor-not-allowed">
+                                            <Trash2 className="w-3.5 h-3.5 mr-2" />Delete (unpublish first)
+                                          </DropdownMenuItem>
+                                        ) : (
+                                          <DropdownMenuItem
+                                            className="text-red-600 focus:text-red-600"
+                                            onClick={() => {
+                                              if (isTeamMode && teamMeta) {
+                                                void handleTeamDeleteSession(teamMeta.dbId);
+                                              } else {
+                                                void deleteOneSession(session);
+                                              }
+                                            }}
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5 mr-2" />Delete
+                                          </DropdownMenuItem>
+                                        )}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </div>
@@ -6264,6 +6320,27 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               <Button onClick={() => void handleTeamPublishSession()} disabled={teamPublishing} className="gap-1.5">
                 {teamPublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 Publish to Team
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Team: Unpublish Confirmation Dialog */}
+      {isTeamMode && (
+        <Dialog open={!!teamUnpublishConfirm} onOpenChange={o => { if (!o) setTeamUnpublishConfirm(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Unpublish Session?</DialogTitle>
+              <DialogDescription>
+                This will remove the session from all members' calendars and delete their personal copies. Any logged data will be lost. The session returns to draft.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setTeamUnpublishConfirm(null)} disabled={teamUnpublishing}>Cancel</Button>
+              <Button variant="destructive" onClick={() => void handleTeamUnpublishSession()} disabled={teamUnpublishing} className="gap-1.5">
+                {teamUnpublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <EyeOff className="w-3.5 h-3.5" />}
+                Unpublish
               </Button>
             </DialogFooter>
           </DialogContent>
