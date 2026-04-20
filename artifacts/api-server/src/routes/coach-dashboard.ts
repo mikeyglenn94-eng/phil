@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { clientsTable, programmesTable, clientNotesTable, clientOneRMsTable } from "@workspace/db";
+import { clientsTable, programmesTable, clientNotesTable, clientOneRMsTable, clientTeamSessionsTable, teamSessionsTable } from "@workspace/db";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import type { Session } from "@workspace/db";
 
@@ -22,7 +22,7 @@ router.get("/coach/dashboard", async (_req, res): Promise<void> => {
   const weekStartStr = format(weekStart, "yyyy-MM-dd");
   const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
-  const [clients, allProgrammes, unreadNotes, weekOneRMs] = await Promise.all([
+  const [clients, allProgrammes, unreadNotes, weekOneRMs, allClientTeamSessions] = await Promise.all([
     db.select().from(clientsTable).orderBy(clientsTable.name),
     db.select({ id: programmesTable.id, clientId: programmesTable.clientId, title: programmesTable.title, sessions: programmesTable.sessions, createdAt: programmesTable.createdAt })
       .from(programmesTable)
@@ -34,6 +34,15 @@ router.get("/coach/dashboard", async (_req, res): Promise<void> => {
         lte(clientOneRMsTable.loggedAt, weekEnd)
       )
     ),
+    // Fetch all published team sessions per client, joining to get the canonical date
+    db.select({
+      clientId: clientTeamSessionsTable.clientId,
+      sessionData: clientTeamSessionsTable.sessionData,
+      date: teamSessionsTable.date,
+    })
+      .from(clientTeamSessionsTable)
+      .innerJoin(teamSessionsTable, eq(clientTeamSessionsTable.teamSessionId, teamSessionsTable.id))
+      .where(eq(teamSessionsTable.status, "published")),
   ]);
 
   const latestByClient: Record<number, typeof allProgrammes[0]> = {};
@@ -41,6 +50,13 @@ router.get("/coach/dashboard", async (_req, res): Promise<void> => {
     if (p.clientId && !latestByClient[p.clientId]) {
       latestByClient[p.clientId] = p;
     }
+  }
+
+  // Group team sessions by client, stamping canonical date from teamSessionsTable
+  const teamSessionsByClient: Record<number, Session[]> = {};
+  for (const cts of allClientTeamSessions) {
+    if (!teamSessionsByClient[cts.clientId]) teamSessionsByClient[cts.clientId] = [];
+    teamSessionsByClient[cts.clientId].push({ ...(cts.sessionData as Session), date: cts.date });
   }
 
   const unreadByClient: Record<number, typeof unreadNotes> = {};
@@ -80,7 +96,12 @@ router.get("/coach/dashboard", async (_req, res): Promise<void> => {
 
   const rows = clients.map(client => {
     const prog = latestByClient[client.id];
-    const sessions: Session[] = (prog?.sessions as Session[]) || [];
+
+    // Standalone clients use their individual programme sessions.
+    // Team-only members fall back to their personal client_team_sessions.
+    const sessions: Session[] = prog
+      ? (prog.sessions as Session[])
+      : (teamSessionsByClient[client.id] ?? []);
 
     const weekSessions = sessions.filter(s => s.date >= weekStartStr && s.date <= weekEndStr);
     const todaySession = weekSessions.find(s => s.date === today);
