@@ -2884,7 +2884,7 @@ export default function ClientSession() {
 
         // Run: logged intervals
         const shareLoggedRuns = runIntervals.filter(r => r.pace?.trim());
-        const shareTotalKm = shareLoggedRuns.reduce((s, r) => { const k = parseFloat(r.distance); return s + (isNaN(k) ? 0 : k); }, 0);
+        const shareTotalKm = shareLoggedRuns.reduce((s, r) => { const k = parseDistToKm(r.distance, r.distUnit); return s + (k ?? 0); }, 0);
 
         // WOD result
         const shareWodVal = (wodResult as any)?.value as string | undefined;
@@ -3032,7 +3032,11 @@ export default function ClientSession() {
                       {shareLoggedRuns.map((r, i) => (
                         <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
                           <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>
-                            {r.distance ? `${r.distance} km` : r.label || `Rep ${i + 1}`}
+                            {r.distance
+                              ? /[a-zA-Z]/.test(r.distance)
+                                ? r.distance                          // old data: "1 km", "800 m" already embedded
+                                : `${r.distance} ${r.distUnit}`      // new data: numeric + unit from field
+                              : r.label || `Rep ${i + 1}`}
                           </span>
                           <span style={{ fontSize: 13, color: badgeColor, fontWeight: 600 }}>
                             {r.pace} /km
@@ -3051,7 +3055,15 @@ export default function ClientSession() {
                     return (
                       <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", lineHeight: 1.5 }}>
                         {struct || runIntervals.map((r, i) => (
-                          <div key={i} style={{ marginBottom: 4 }}>• {r.distance ? `${r.distance} km` : r.label || `Rep ${i + 1}`}{r.targetPace ? ` @ ${r.targetPace}/km` : ""}</div>
+                          <div key={i} style={{ marginBottom: 4 }}>
+                            {"• "}
+                            {r.distance
+                              ? /[a-zA-Z]/.test(r.distance)
+                                ? r.distance
+                                : `${r.distance} ${r.distUnit}`
+                              : r.label || `Rep ${i + 1}`}
+                            {r.targetPace ? ` @ ${r.targetPace}/km` : ""}
+                          </div>
                         ))}
                       </div>
                     );
