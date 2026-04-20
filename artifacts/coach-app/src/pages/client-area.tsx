@@ -4503,7 +4503,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                         {showPublishOpts && (
                                           <>
                                             {!isPublished ? (
-                                              <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                              <DropdownMenuItem onClick={() => {
+                                                if (teamMeta) setTeamPublishConfirm({ sessionId: session.id, dbId: teamMeta.dbId });
+                                              }}>
                                                 <Globe className="w-3.5 h-3.5 mr-2" />Publish
                                               </DropdownMenuItem>
                                             ) : (
