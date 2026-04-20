@@ -4446,7 +4446,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                       if (mode === "client") {
                                         setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                       } else {
-                                        sessionStorage.setItem("session_editor_returnTo", `/clients/${clientId}`);
+                                        sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
                                         setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                       }
                                     }
@@ -4468,7 +4468,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     if (mode === "client") {
                                       setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                     } else {
-                                      sessionStorage.setItem("session_editor_returnTo", `/clients/${clientId}`);
+                                      sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
                                       setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                     }
                                   }
@@ -4517,7 +4517,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                           if (mode === "client") {
                                             setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
                                           } else {
-                                            sessionStorage.setItem("session_editor_returnTo", `/clients/${clientId}`);
+                                            sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
                                             setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                           }
                                         }}>
