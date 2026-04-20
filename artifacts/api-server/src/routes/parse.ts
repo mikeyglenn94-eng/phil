@@ -1257,10 +1257,25 @@ router.post("/transcribe", upload.single("audio"), async (req, res): Promise<voi
 // POST /parse-run-session  { description, name? }
 // Returns a ready-to-save run session (source: "run_brain") from free-text.
 router.post("/parse-run-session", async (req, res): Promise<void> => {
-  const { description, name } = req.body as { description?: string; name?: string };
+  const { description, name, mode } = req.body as { description?: string; name?: string; mode?: "parse" | "generate" };
   if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
 
-  const systemPrompt = `You are an experienced running coach. Parse the user's run description into a structured, interesting session.
+  const systemPrompt = mode === "parse"
+    ? `You are a run session parser. Your only job is to convert the user's input into structured session data.
+
+CRITICAL RULES:
+- Return ONLY what the user explicitly described. Nothing more.
+- Do NOT add warm-up or cool-down blocks unless the user mentioned them.
+- Do NOT add rest rows unless the user mentioned rest.
+- Do NOT embellish, pad, or improve the session.
+- If the user says "5×1km intervals", return exactly 5 interval rows of 1km each.
+- If the user says "45 min steady run", return a single run row.
+- Your job is parsing, not programming.
+
+Apply the same structural rules: expand "3×500m" into 3 individual interval rows, never use a reps count, set distance vs duration fields based on what the user said. Never use "easy run" — use "steady run", "recovery run", or "long steady run".
+
+Return ONLY valid JSON matching the standard blocks-based format. Include "name", "duration", "distanceKm", "intensity", "structure", and "blocks".`
+    : `You are an experienced running coach. Parse the user's run description into a structured, interesting session.
 
 VARIETY RULE — NEVER REPEAT THE SAME INTERVAL DISTANCE/DURATION:
 When building interval sessions, create varied and interesting structures. Do NOT just repeat the same distance 4–6 times.
@@ -1599,10 +1614,21 @@ function wodBuildCanonical(format: string, blocks: Record<string, unknown>[], du
 // POST /parse-wod-session  { description, name? }
 // Returns a ready-to-save WOD session (source: "wod_brain") from free-text.
 router.post("/parse-wod-session", async (req, res): Promise<void> => {
-  const { description, name } = req.body as { description?: string; name?: string };
+  const { description, name, mode } = req.body as { description?: string; name?: string; mode?: "parse" | "generate" };
   if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
 
-  const systemPrompt = `You are an expert conditioning coach. Design TWO different WOD workout options from the user's movements and constraints.
+  const systemPrompt = mode === "parse"
+    ? `You are a WOD parser. Your only job is to convert the user's input into structured workout data.
+
+CRITICAL RULES:
+- Return ONLY ONE option — the exact workout the user described.
+- Do NOT invent a second option or alternative.
+- Use EXACTLY the movements, reps, format, and timing the user specified.
+- Do NOT add extra movements, change rep counts, or alter the format.
+- Your job is parsing, not programming.
+
+Return a valid JSON object with a single item in the "options" array, using the standard format with "name", "format", "blocks" (or "segments"), "estimatedMinutes", and "structure".`
+    : `You are an expert conditioning coach. Design TWO different WOD workout options from the user's movements and constraints.
 
 Supported formats: amrap, for_time, emom, rounds_for_time, chipper, interval.
 
@@ -1857,10 +1883,33 @@ Response format — EMOM example:
 // POST /parse-session  { description, name? }
 // Returns a ready-to-save session object with structured exercises.
 router.post("/parse-session", async (req, res): Promise<void> => {
-  const { description, name } = req.body as { description?: string; name?: string };
+  const { description, name, mode } = req.body as { description?: string; name?: string; mode?: "parse" | "generate" };
   if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
 
-  const systemPrompt = `You are a personal training assistant applying MG Coaching's programming philosophy. Your job is to produce a complete, ready-to-use strength session from whatever the user provides — either an explicit exercise list or a vague description.
+  const systemPrompt = mode === "parse"
+    ? `You are a session parser. Your only job is to convert the user's input into structured exercise data.
+
+CRITICAL RULES:
+- Return ONLY the exercises the user explicitly listed. Nothing more.
+- Do NOT add, suggest, pad, or infer any additional exercises.
+- If the user lists 1 exercise, return exactly 1 exercise.
+- If the user lists 3 exercises, return exactly 3 exercises.
+- Never complete, balance, or improve the session.
+
+Your job is parsing, not programming.
+
+Formatting rules:
+- Rep ranges for hypertrophy accessories (never a fixed number)
+- Big 4 compounds (Back Squat, Bench Press, Deadlift, Strict Press) in a strength context = fixed rep number
+- Olympic lifts (Snatch, Clean & Jerk, Power Snatch, Hang Clean etc.) = always fixed rep number
+- Leave weight null unless user specifies
+- Sets/reps/RPE: use exactly what the user gave, apply defaults only where genuinely missing
+- Always produce at least 1 exercise — NEVER return an empty list
+- Return ONLY valid JSON, no markdown fences
+
+Response format:
+{"name": "...", "exercises": [{"name": "Barbell Back Squat", "sets": 4, "reps": "5", "rpe": null, "rest": "2 min", "weight": null, "notes": null}]}`
+    : `You are a personal training assistant applying MG Coaching's programming philosophy. Your job is to produce a complete, ready-to-use strength session from whatever the user provides — either an explicit exercise list or a vague description.
 
 ## Mode A — Explicit exercise list (e.g. "4x8 bench press, 3x10 squat @RPE8")
 Parse each exercise extracting: name, sets (integer), reps (string), rpe (string e.g. "7", "8-9"), rest (string e.g. "90s", "2 min"), weight (string e.g. "80kg", "185lb"), notes. Accept any common format. If a field is not mentioned, set it to null.

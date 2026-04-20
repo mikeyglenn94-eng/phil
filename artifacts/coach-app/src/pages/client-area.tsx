@@ -667,7 +667,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined }),
+          body: JSON.stringify({ description: quickAddDesc.trim(), name: quickAddName.trim() || undefined, mode: "parse" }),
           signal: ctrl.signal,
         });
         if (!res.ok) throw new Error();
@@ -759,7 +759,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description: desc.trim(), name: quickAddName.trim() || undefined }),
+          body: JSON.stringify({ description: desc.trim(), name: quickAddName.trim() || undefined, mode: "generate" }),
           signal: ctrl.signal,
         });
         if (!res.ok) throw new Error();
@@ -1796,7 +1796,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description: brief }),
+          body: JSON.stringify({ description: brief, mode: "generate" }),
           signal: ctrl.signal,
         });
         if (!res.ok) throw new Error();
