@@ -220,6 +220,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     refetchInterval: 8000,
   });
 
+  // Per-client team sessions — fetched when viewing a client's individual calendar (not team builder mode)
+  const { data: clientTeamSessionRows } = useQuery<Array<{
+    id: number; teamSessionId: number; clientId: number;
+    sessionData: Session; date: string; teamId: number; teamName: string;
+  }>>({
+    queryKey: ["client-team-sessions-for-client", clientId],
+    queryFn: async () => {
+      const r = await fetch(`/api/clients/${clientId}/team-sessions`);
+      if (!r.ok) throw new Error("Failed to load client team sessions");
+      return r.json();
+    },
+    enabled: !isTeamMode && !!clientId,
+  });
+
   // Ref: session UUID → { dbId, status, publishedAt }  — updated each render
   const teamSessionsMetaRef = useRef<Map<string, { dbId: number; status: string; publishedAt: string | null }>>(new Map());
 
@@ -1289,9 +1303,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   }, [trainingWeekOffset, calendarView]);
 
   const allClientSessions = useMemo<Session[]>(() => {
-    if (!clientProgrammes) return [];
-    return clientProgrammes.flatMap(p => p.sessions || []);
-  }, [clientProgrammes]);
+    const progSessions = clientProgrammes ? clientProgrammes.flatMap((p: any) => p.sessions || []) : [];
+    const teamSessions = (clientTeamSessionRows ?? []).map(row => ({
+      ...(row.sessionData as Session),
+      date: row.date,
+      source: "team_session",
+    }));
+    return [...progSessions, ...teamSessions];
+  }, [clientProgrammes, clientTeamSessionRows]);
 
   async function handleAssign() {
     if (!selectedSourceId || !assignStartDate) return;
@@ -4343,10 +4362,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                             const isSelected = selectedSessionIds.has(session.id);
                             const teamMeta = isTeamMode ? teamSessionsMetaRef.current.get(session.id) : undefined;
                             const isPublished = teamMeta?.status === "published";
+                            const isTeamSession = !isTeamMode && (session as any).source === "team_session";
                             return (
                               <div
                                 key={session.id}
-                                draggable={(!selectionMode || isSelected) && !isPublished}
+                                draggable={(!selectionMode || isSelected) && !isPublished && !isTeamSession}
                                 onDragStart={() => {
                                   if (selectionMode && isSelected) {
                                     draggedItemRef.current = { sessionId: session.id, programmeId: prog?.id ?? 0, isGroupDrag: true, originalDate: dateStr };
@@ -4465,6 +4485,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                   }
                                   if (isDragActiveRef.current) return;
                                   if (isPublished) return; // published team sessions are read-only
+                                  if (isTeamSession) return; // team sessions are read-only in individual client view
                                   if (prog) {
                                     if (mode === "client") {
                                       setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
@@ -4485,7 +4506,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     }
                                   </span>
                                 )}
-                                {!selectionMode && (
+                                {!selectionMode && isTeamSession && (
+                                  <span className="absolute top-0.5 right-0.5 z-20 text-[7px] font-bold leading-none px-1 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">TEAM</span>
+                                )}
+                                {!selectionMode && !isTeamSession && (
                                   <div
                                     className="absolute top-0.5 right-0.5 z-20"
                                     onClick={e => e.stopPropagation()}
