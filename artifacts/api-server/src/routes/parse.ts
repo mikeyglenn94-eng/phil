@@ -1261,20 +1261,57 @@ router.post("/parse-run-session", async (req, res): Promise<void> => {
   if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
 
   const systemPrompt = mode === "parse"
-    ? `You are a run session parser. Your only job is to convert the user's input into structured session data.
+    ? `You are a run session parser. Convert the user's text exactly into structured JSON. Do not add, invent, or omit anything.
 
-CRITICAL RULES:
+STRICT RULES:
 - Return ONLY what the user explicitly described. Nothing more.
 - Do NOT add warm-up or cool-down blocks unless the user mentioned them.
-- Do NOT add rest rows unless the user mentioned rest.
-- Do NOT embellish, pad, or improve the session.
-- If the user says "5×1km intervals", return exactly 5 interval rows of 1km each.
-- If the user says "45 min steady run", return a single run row.
-- Your job is parsing, not programming.
+- Do add rest rows when the user mentioned rest (e.g. "90s rest between each" → insert a rest row between every interval).
+- Do NOT invent paces, times, or effort levels the user did not specify.
+- Expand shorthand: "1km, 800m, 600m" → three separate interval rows of 1km, 800m, 600m.
+- NEVER use a "reps" count — always expand fully into individual rows.
+- Distance fields: use "1 km", "800 m", "400 m" etc. Duration fields: use "90 sec", "5 min" etc.
+- Never use "easy run" — use "steady run" or "recovery run".
 
-Apply the same structural rules: expand "3×500m" into 3 individual interval rows, never use a reps count, set distance vs duration fields based on what the user said. Never use "easy run" — use "steady run", "recovery run", or "long steady run".
+Row types:
+- "interval": a work rep — has repNumber, distance (e.g. "1 km"), duration, pace, effort
+- "rest": recovery — has description (e.g. "90 sec rest"), duration (e.g. "90 sec")
+- "run": continuous block — has description, distance, duration, effort
 
-Return ONLY valid JSON matching the standard blocks-based format. Include "name", "duration", "distanceKm", "intensity", "structure", and "blocks".`
+Block types: "warmup", "main", "cooldown"
+
+Return ONLY valid JSON. Example for "90s rest between each / 1km warm up / 1km / 800m / 600m / 400m / 600m":
+{
+  "name": "Pyramid 1km Top",
+  "duration": null,
+  "distanceKm": null,
+  "intensity": "Intervals",
+  "structure": "1 km warm-up · 1 km / 800 m / 600 m / 400 m / 600 m · 90 sec rest between",
+  "blocks": [
+    {
+      "blockType": "warmup",
+      "label": "Warm-up",
+      "rows": [
+        { "rowType": "run", "description": "1 km warm up", "distance": "1 km", "effort": "steady" }
+      ]
+    },
+    {
+      "blockType": "main",
+      "label": "Main Set",
+      "rows": [
+        { "rowType": "interval", "repNumber": 1, "distance": "1 km" },
+        { "rowType": "rest", "description": "90 sec rest", "duration": "90 sec" },
+        { "rowType": "interval", "repNumber": 2, "distance": "800 m" },
+        { "rowType": "rest", "description": "90 sec rest", "duration": "90 sec" },
+        { "rowType": "interval", "repNumber": 3, "distance": "600 m" },
+        { "rowType": "rest", "description": "90 sec rest", "duration": "90 sec" },
+        { "rowType": "interval", "repNumber": 4, "distance": "400 m" },
+        { "rowType": "rest", "description": "90 sec rest", "duration": "90 sec" },
+        { "rowType": "interval", "repNumber": 5, "distance": "600 m" }
+      ]
+    }
+  ]
+}`
     : `You are an experienced running coach. Parse the user's run description into a structured, interesting session.
 
 VARIETY RULE — NEVER REPEAT THE SAME INTERVAL DISTANCE/DURATION:
