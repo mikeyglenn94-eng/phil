@@ -4486,6 +4486,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     setTouchDraggingActive(false);
                                     setTouchGhostPos(null);
                                     setTouchDragOverDate(null);
+                                    e.preventDefault(); // prevent click firing after long-press drag
                                     return;
                                   }
                                   if (selectionMode) {
@@ -4557,6 +4558,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     onClick={e => e.stopPropagation()}
                                     onPointerDown={e => e.stopPropagation()}
                                     onTouchStart={e => e.stopPropagation()}
+                                    onTouchEnd={e => e.stopPropagation()}
                                   >
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
@@ -5592,20 +5594,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mt-0">
-                <label className="text-xs font-medium text-muted-foreground">
-                  {quickAddType === "wod" ? "WOD description" : quickAddType === "run" ? "Run description" : quickAddType === "cycle" ? "Ride description" : quickAddType === "swim" ? "Swim description" : "Exercises"}
-                </label>
-                <button
-                  type="button"
-                  onClick={toggleQuickAddListening}
-                  title={quickAddListening ? "Stop recording" : "Voice input"}
-                  className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${quickAddListening ? "bg-red-500 border-red-500 text-white animate-pulse" : "border-muted text-muted-foreground hover:border-primary/40 hover:text-primary"}`}
-                >
-                  <Mic className="w-3 h-3" />
-                  {quickAddListening ? "Stop" : "Voice"}
-                </button>
-              </div>
+              <label className="text-xs font-medium text-muted-foreground">
+                {quickAddType === "wod" ? "WOD description" : quickAddType === "run" ? "Run description" : quickAddType === "cycle" ? "Ride description" : quickAddType === "swim" ? "Swim description" : "Exercises"}
+              </label>
+              <div className="relative mt-1">
               <textarea
                 value={quickAddListening ? (quickAddInterim || quickAddDesc) : quickAddDesc}
                 onChange={e => setQuickAddDesc(e.target.value)}
@@ -5622,12 +5614,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 }
                 rows={6}
                 autoFocus
-                className="input mt-1 resize-none"
+                className={`input resize-none pr-10 ${quickAddListening ? "ring-2 ring-red-400/50 border-red-300" : ""}`}
                 onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void handleQuickAdd(); } }}
               />
+              <button
+                type="button"
+                onClick={toggleQuickAddListening}
+                title={quickAddListening ? "Stop recording" : "Speak your session"}
+                className={`absolute right-2.5 bottom-2.5 p-1.5 rounded-lg transition-colors ${quickAddListening ? "text-red-500 bg-red-50 dark:bg-red-950" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+              >
+                {quickAddListening
+                  ? <><span className="absolute inset-0 rounded-lg bg-red-400/20 animate-ping" /><Square className="w-3.5 h-3.5 fill-current relative z-10" /></>
+                  : <Mic className="w-3.5 h-3.5" />}
+              </button>
+              </div>
               {quickAddListening && (
-                <p className="text-[11px] text-red-500 mt-1 min-h-[1rem] italic">
-                  {quickAddInterim || "Listening…"}
+                <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  {quickAddInterim || "Listening… speak your session"}
                 </p>
               )}
               {!quickAddListening && (
