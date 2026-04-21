@@ -4227,6 +4227,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     {chip}
                   </button>
                 ))}
+                <button
+                  onClick={() => { setBrainResults([]); setBrainQuery(""); setBrainIntent(null); setBrainOpen(true); }}
+                  className="text-[11px] px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-muted transition-colors text-muted-foreground flex items-center gap-1"
+                >
+                  <BookMarked className="w-3 h-3" />
+                  Build from library
+                </button>
               </div>
             )}
 
@@ -4325,7 +4332,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           </div>
 
           {/* Calendar grid */}
-          <div className="flex-1 overflow-y-auto overflow-x-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-auto overscroll-contain" style={{ WebkitOverflowScrolling: "touch" }}>
             <div className={calendarView === "week" ? "min-w-[560px]" : "min-w-[560px]"}>
               {/* Day headers */}
               <div className="grid grid-cols-7 border-b bg-muted/30 sticky top-0 z-10">
