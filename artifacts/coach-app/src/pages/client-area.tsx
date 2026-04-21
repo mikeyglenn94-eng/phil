@@ -4514,6 +4514,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                         sessionStorage.setItem("session_editor_injected", JSON.stringify(session));
                                         setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
                                       }
+                                    } else if (isTeamSession && mode === "client") {
+                                      const ctsRow = (clientTeamSessionRows ?? []).find(r => r.sessionData.id === session.id);
+                                      if (ctsRow) {
+                                        sessionStorage.setItem("client_cts_inject", JSON.stringify(ctsRow));
+                                        setLocation(`/client/programmes/0/sessions/${session.id}`);
+                                      }
                                     }
                                   }
                                 }}
@@ -4528,8 +4534,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     return;
                                   }
                                   if (isDragActiveRef.current) return;
-                                  if (isPublished) return; // published team sessions are read-only
-                                  if (isTeamSession && mode === "coach") return; // coaches cannot edit published team sessions from client view
+                                  if (isTeamSession && mode === "coach") return;
                                   if (prog) {
                                     if (mode === "client") {
                                       setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
@@ -4537,6 +4542,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                       sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
                                       sessionStorage.setItem("session_editor_injected", JSON.stringify(session));
                                       setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
+                                    }
+                                  } else if (isTeamSession && mode === "client") {
+                                    const ctsRow = (clientTeamSessionRows ?? []).find(r => r.sessionData.id === session.id);
+                                    if (ctsRow) {
+                                      sessionStorage.setItem("client_cts_inject", JSON.stringify(ctsRow));
+                                      setLocation(`/client/programmes/0/sessions/${session.id}`);
                                     }
                                   }
                                 }}

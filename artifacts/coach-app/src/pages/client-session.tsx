@@ -365,22 +365,48 @@ export default function ClientSession() {
   const programmeId = parseInt(params?.programmeId || "0", 10);
   const sessionId = params?.sessionId;
 
+  // CTS (client_team_session) injection — used when programmeId === 0
+  const ctsDataRef = useRef<{ id: number; teamId: number; teamName: string; clientId: number; sessionData: Session; date: string } | null>(
+    (() => {
+      const stored = sessionStorage.getItem("client_cts_inject");
+      if (stored) { sessionStorage.removeItem("client_cts_inject"); return JSON.parse(stored) as any; }
+      return null;
+    })()
+  );
+
   const { data: programme, isLoading } = useGetProgramme(programmeId, {
     query: { enabled: !!programmeId },
   });
   const updateMutation = useUpdateProgramme();
 
+  // Synthetic programme built from CTS data when there is no real programme
+  const effectiveProgramme = useMemo(() => {
+    if (programme) return programme;
+    const cts = ctsDataRef.current;
+    if (!cts) return null;
+    return {
+      id: 0,
+      clientId: cts.clientId,
+      title: cts.teamName,
+      sessions: [{ ...cts.sessionData, date: cts.date }],
+      blockLength: null,
+      sessionsPerWeek: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as any;
+  }, [programme]);
+
   const session = useMemo<Session | null>(() => {
-    if (!programme?.sessions) return null;
-    return programme.sessions.find((s: Session) => s.id === sessionId) || null;
-  }, [programme, sessionId]);
+    if (!effectiveProgramme?.sessions) return null;
+    return effectiveProgramme.sessions.find((s: Session) => s.id === sessionId) || null;
+  }, [effectiveProgramme, sessionId]);
 
   // Most recent past session with the same name that has any comment data
   const prevSession = useMemo<{ date: string; comment: string | null; exerciseComments: Record<string, string> } | null>(() => {
-    if (!programme?.sessions || !session) return null;
+    if (!effectiveProgramme?.sessions || !session) return null;
     const sessionName = session.name?.toLowerCase().trim() || "";
     if (!sessionName) return null;
-    const past = (programme.sessions as Session[])
+    const past = (effectiveProgramme.sessions as Session[])
       .filter(s => s.id !== sessionId && s.date < session.date && s.name?.toLowerCase().trim() === sessionName)
       .sort((a, b) => b.date.localeCompare(a.date));
     // Prefer a session that has comment data, fall back to any past session
@@ -393,13 +419,13 @@ export default function ClientSession() {
       if (ex.clientComment) exerciseComments[normalizeExerciseName(ex.name)] = ex.clientComment;
     }
     return { date: candidate.date, comment: (candidate as any).clientComment ?? null, exerciseComments };
-  }, [programme, sessionId, session]);
+  }, [effectiveProgramme, sessionId, session]);
 
   // Previous logged results indexed by normalizedName — supports fuzzy matching
   const prevLogsMap = useMemo<Record<string, { date: string; sets: SetLog[]; originalName: string }>>(() => {
-    if (!programme?.sessions || !session) return {};
+    if (!effectiveProgramme?.sessions || !session) return {};
     const map: Record<string, { date: string; sets: SetLog[]; originalName: string }> = {};
-    const pastSessions = (programme.sessions as Session[])
+    const pastSessions = (effectiveProgramme.sessions as Session[])
       .filter(s => s.id !== sessionId && s.date <= session.date)
       .sort((a, b) => b.date.localeCompare(a.date)); // most recent first
     for (const s of pastSessions) {
@@ -419,7 +445,7 @@ export default function ClientSession() {
       }
     }
     return map;
-  }, [programme, sessionId, session]);
+  }, [effectiveProgramme, sessionId, session]);
 
   // Flat index of normalizedKey → originalName for findBestMatch
   const prevLogsCandidates = useMemo<Record<string, string>>(() => {
@@ -467,11 +493,21 @@ export default function ClientSession() {
         ...(preserved.wodResult ? { wodResult: preserved.wodResult } : {}),
         ...(preserved.runLog ? { runLog: preserved.runLog } : {}),
       };
-      const updatedSessions = (programme.sessions || []).map((s: Session) =>
+      const updatedSessions = (effectiveProgramme?.sessions || []).map((s: Session) =>
         s.id !== sessionId ? s : merged
       );
-      await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
-      queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      const _cts = ctsDataRef.current;
+      if (_cts) {
+        const updatedSession = updatedSessions.find((s: Session) => s.id === sessionId) ?? updatedSessions[0];
+        await fetch(`/api/client-team-sessions/${_cts.id}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionData: updatedSession }),
+        });
+        queryClient.invalidateQueries({ queryKey: ["client-team-sessions-for-client", _cts.clientId] });
+      } else {
+        await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
+        queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+      }
       toast({ title: "Workout updated!" });
       setIsEditMode(false);
       setEditDraft(null);
@@ -514,9 +550,9 @@ export default function ClientSession() {
     fetch("/api/session-events", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
-      body: JSON.stringify({ sessionId, programmeId, clientId: programme.clientId, eventType: "started" }),
+      body: JSON.stringify({ sessionId, programmeId, clientId: effectiveProgramme?.clientId ?? ctsDataRef.current?.clientId, eventType: "started" }),
     }).catch(() => {});
-  }, [session, programme, sessionId, programmeId]);
+  }, [session, effectiveProgramme, sessionId, programmeId]);
 
   // Warn the browser if the user tries to close the tab with unsaved changes
   useEffect(() => {
@@ -940,7 +976,7 @@ export default function ClientSession() {
         body: JSON.stringify({
           completedSession: session,
           feedback: feedbackText.trim(),
-          allSessions: programme.sessions || [],
+          allSessions: effectiveProgramme?.sessions || [],
         }),
       });
       const data = await res.json();
@@ -948,10 +984,20 @@ export default function ClientSession() {
       const { updatedSessions, userConfirmation } = data as { updatedSessions: any[]; userConfirmation: string };
       if (updatedSessions.length > 0) {
         const updatedById = new Map(updatedSessions.map((s: any) => [s.id, s]));
-        const merged = (programme.sessions || []).map((s: Session) =>
+        const merged = (effectiveProgramme?.sessions || []).map((s: Session) =>
           updatedById.has(s.id) ? { ...s, ...updatedById.get(s.id) } : s
         );
-        await updateMutation.mutateAsync({ id: programmeId, data: { sessions: merged } });
+        const _ctsFb = ctsDataRef.current;
+        if (_ctsFb) {
+          const updatedSession = merged.find((s: Session) => s.id === sessionId) ?? merged[0];
+          await fetch(`/api/client-team-sessions/${_ctsFb.id}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionData: updatedSession }),
+          });
+          queryClient.invalidateQueries({ queryKey: ["client-team-sessions-for-client", _ctsFb.clientId] });
+        } else {
+          await updateMutation.mutateAsync({ id: programmeId, data: { sessions: merged } });
+        }
         // Immediately update the detail cache so any subsequent autosave reads the correct merged data
         queryClient.setQueryData(getGetProgrammeQueryKey(programmeId), (old: any) =>
           old ? { ...old, sessions: merged } : old
@@ -1240,7 +1286,7 @@ export default function ClientSession() {
   };
 
   const handleSave = async (silent = false) => {
-    if (!programme || !session) return;
+    if (!effectiveProgramme || !session) return;
     setIsSaving(true);
     try {
       const src = (session as any).source as string | undefined;
@@ -1248,7 +1294,7 @@ export default function ClientSession() {
       const isCycleSession = src === "cycle_brain";
       const isSwimSession = src === "swim_brain";
       const isConditioningSession = src === "wod_brain" || isRunSession || isCycleSession || isSwimSession;
-      const updatedSessions = (programme.sessions || []).map((s: Session) => {
+      const updatedSessions = (effectiveProgramme.sessions || []).map((s: Session) => {
         if (s.id !== sessionId) return s;
         if (isConditioningSession) {
           const base = { ...s, clientComment: sessionComment.trim() || null };
@@ -1358,15 +1404,29 @@ export default function ClientSession() {
           }));
         return { ...s, exercises: [...originalExercises, ...extraExercises] };
       });
-      await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
-      queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
-      // Also refresh dashboard analytics so it reflects the newly logged data
-      if (programme?.clientId) {
-        queryClient.invalidateQueries({ queryKey: ["client-analytics", programme.clientId] });
+      const cts = ctsDataRef.current;
+      if (cts) {
+        // CTS path: save to client_team_sessions table
+        const updatedSession = updatedSessions.find((s: Session) => s.id === sessionId) ?? updatedSessions[0];
+        await fetch(`/api/client-team-sessions/${cts.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionData: updatedSession }),
+        });
+        queryClient.invalidateQueries({ queryKey: ["client-team-sessions-for-client", cts.clientId] });
+        queryClient.invalidateQueries({ queryKey: ["client-analytics", cts.clientId] });
+      } else {
+        await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
+        queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+        // Also refresh dashboard analytics so it reflects the newly logged data
+        if (effectiveProgramme?.clientId) {
+          queryClient.invalidateQueries({ queryKey: ["client-analytics", effectiveProgramme.clientId] });
+        }
       }
       // Persist notes to client_notes table (fire-and-forget — doesn't block save)
-      if (programme?.clientId && sessionId) {
-        const noteClientId = programme.clientId;
+      const _clientId = ctsDataRef.current?.clientId ?? effectiveProgramme?.clientId;
+      if (_clientId && sessionId) {
+        const noteClientId = _clientId;
         const noteRequests: Promise<unknown>[] = [];
         if (sessionComment.trim()) {
           noteRequests.push(
@@ -1391,13 +1451,13 @@ export default function ClientSession() {
         void Promise.all(noteRequests);
       }
       // Log completed session event (fire-and-forget)
-      if (programme?.clientId && sessionId) {
+      if (_clientId && sessionId) {
         const tok = localStorage.getItem("axis_auth_token");
         if (tok) {
           fetch("/api/session-events", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
-            body: JSON.stringify({ sessionId, programmeId, clientId: programme.clientId, eventType: "completed" }),
+            body: JSON.stringify({ sessionId, programmeId, clientId: _clientId, eventType: "completed" }),
           }).catch(() => {});
         }
       }
