@@ -4648,7 +4648,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                   </div>
                                 )}
                                 {calendarView === "month" ? (
-                                  <div className="pr-5">
+                                  <div className="pr-8">
                                     {(() => {
                                       const badge = getSessionTypeBadge(session);
                                       return (
