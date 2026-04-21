@@ -4462,6 +4462,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                   const cell = el?.closest("[data-date]") as HTMLElement | null;
                                   setTouchDragOverDate(cell?.dataset.date ?? null);
                                 }}
+                                onPointerUp={e => e.stopPropagation()}
                                 onTouchEnd={e => {
                                   if (longPressTimerRef.current) {
                                     clearTimeout(longPressTimerRef.current);
