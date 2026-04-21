@@ -4648,20 +4648,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                   </div>
                                 )}
                                 {calendarView === "month" ? (
-                                  <>
+                                  <div className="pr-5">
                                     {(() => {
                                       const badge = getSessionTypeBadge(session);
                                       return (
                                         <span className={`inline-block text-[8px] font-semibold leading-none px-1.5 py-0.5 rounded-full mb-2 ${badge.className} ${selectionMode ? "ml-4" : ""}`}>{badge.label}</span>
                                       );
                                     })()}
-                                    <span className={`block truncate font-medium text-[10px] leading-snug ${selectionMode ? "pl-4" : "pr-1"}`}>{session.name || "Session"}</span>
+                                    <span className={`block truncate font-medium text-[10px] leading-snug ${selectionMode ? "pl-4" : ""}`}>{session.name || "Session"}</span>
                                     {isTeamMode && teamMeta && (
                                       <span className={`inline-block text-[7px] font-bold leading-none px-1 py-0.5 rounded-full ${isPublished ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                                         {isPublished ? "PUBLISHED" : "DRAFT"}
                                       </span>
                                     )}
-                                  </>
+                                  </div>
                                 ) : (
                                   <>
                                     <span className="block font-semibold pr-5 leading-snug mb-1 line-clamp-2">{session.name || "Session"}</span>
