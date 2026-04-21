@@ -4434,13 +4434,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                     }, 450);
                                   } else if (!selectionMode && prog) {
                                     longPressTimerRef.current = setTimeout(() => {
-                                      touchDragRef.current = { sessionId: session.id, programmeId: prog.id };
-                                      isDragActiveRef.current = true;
-                                      setTouchDraggingActive(true);
-                                      setTouchGhostLabel(session.name || "Session");
-                                      setTouchGhostPos({ x: touch.clientX, y: touch.clientY });
                                       if (navigator.vibrate) navigator.vibrate(50);
-                                    }, 450);
+                                      setSelectionMode(true);
+                                      toggleSelectSession(session.id);
+                                    }, 500);
                                   }
                                 }}
                                 onTouchMove={e => {
@@ -4566,7 +4563,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                 )}
                                 {!selectionMode && !(isTeamSession && mode === "coach") && (
                                   <div
-                                    className="absolute top-0 right-0 z-20"
+                                    className="absolute top-0 right-0 z-20 hidden sm:block"
                                     onClick={e => e.stopPropagation()}
                                     onPointerDown={e => e.stopPropagation()}
                                     onTouchStart={e => e.stopPropagation()}
@@ -4960,6 +4957,29 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
+                    {selectedSessionIds.size === 1 && (() => {
+                      const selId = [...selectedSessionIds][0];
+                      const selProg = (clientProgrammes ?? []).find(p => (p.sessions as Session[]).some(s => s.id === selId));
+                      const selSess = selProg ? (selProg.sessions as Session[]).find(s => s.id === selId) : null;
+                      if (!selProg || !selSess) return null;
+                      return (
+                        <>
+                          <DropdownMenuItem onClick={() => {
+                            exitSelectionMode();
+                            if (mode === "client") {
+                              setLocation(`/client/programmes/${selProg.id}/sessions/${selSess.id}`);
+                            } else {
+                              sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
+                              sessionStorage.setItem("session_editor_injected", JSON.stringify(selSess));
+                              setLocation(`/programmes/${selProg.id}/sessions/${selSess.id}`);
+                            }
+                          }}>
+                            <Pencil className="w-3.5 h-3.5 mr-2" />Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      );
+                    })()}
                     {showPublishOpts && (
                       <>
                         <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
