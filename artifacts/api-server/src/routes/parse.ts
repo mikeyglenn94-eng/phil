@@ -1386,7 +1386,7 @@ Response format:
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      ...(mode === "parse" ? { max_tokens: 800 } : {}),
+      max_tokens: 2000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Session name (optional): ${name?.trim() || "(auto-generate)"}\n\nDescription:\n${description.trim()}` },
@@ -1841,7 +1841,7 @@ Response format — EMOM example:
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
-      ...(mode === "parse" ? { max_tokens: 800 } : {}),
+      max_tokens: 2000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Session name (optional): ${name?.trim() || "(auto-generate)"}\n\nDescription:\n${description.trim()}` },
@@ -2012,7 +2012,7 @@ Response format:
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      ...(mode === "parse" ? { max_tokens: 800 } : {}),
+      max_tokens: 2000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Session name (optional): ${name?.trim() || "(auto-generate)"}\n\nDescription:\n${description.trim()}` },
