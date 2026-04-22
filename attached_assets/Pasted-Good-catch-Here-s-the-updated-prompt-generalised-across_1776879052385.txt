@@ -1,0 +1,50 @@
+Good catch. Here's the updated prompt, generalised across all session types:
+
+Bug: Phil is skipping conversational intake across ALL session types (strength, run, and presumably any future session types)
+When a user asks Phil to add a session of any kind (strength, run, conditioning, mobility, etc.), he's jumping straight to a "Here's what I'm going to build" preview card with a "Build this" CTA, using hardcoded-looking defaults (e.g. "45 min / full body focus / 5 exercises / straight sets, compound-first / moderate volume" for strength). No questions were asked first. This happens regardless of session type, so it's app-wide, not session-specific.
+Expected behaviour:
+Session building is supposed to be conversational. Before Phil proposes any session to build, he should gather context through natural back-and-forth. The specific intake slots vary by session type, but the principle is the same across all of them: ask first, propose second.
+At minimum, for any session type Phil should understand:
+
+Goal/focus — what's the intent of this session
+Environment/equipment — where and with what (home, commercial gym, garden studio, outdoors, treadmill, road, trails, etc.)
+Length — how long has the user got
+Session-type-specific context — e.g. for a run: type of run (easy, intervals, tempo, long), terrain, pace targets; for strength: body part focus, fatigue/recovery state, any niggles; for conditioning: modality preference, intensity tolerance
+
+The preview card with "Build this" should only appear after Phil has gathered enough context to make an informed proposal. Right now it's firing immediately on any session request and filling in default assumptions the user never specified.
+What I need you to do:
+
+Do not rewrite the session builder, preview card, or any session-type-specific generators. Those components are fine — they're being triggered too early across the board.
+Find the shared code path that handles "user wants to add a session" across all session types. Likely candidates:
+
+The intent classifier is routing any session-creation intent directly to a build-spec generator, bypassing intake
+The system prompt is instructing Phil to produce a build spec immediately on any session keyword
+A tool/function for session creation is being invoked too eagerly, before conversation has happened
+
+
+Log Phil's actual system prompt and his tool-use decisions for a failing turn on both a strength request and a run request. Confirm it's the same mechanism firing for both.
+The fix should be applied at the shared layer so it works for every session type, current and future. Phil should:
+
+On any session-creation intent, enter an intake state and ask clarifying questions in natural conversation (one or two at a time, not a form dump)
+Track which intake slots have been filled, with required slots varying by session type
+Only generate the "Here's what I'm going to build" preview once the required slots for that session type are filled, OR once the user explicitly short-circuits it ("just build it", "surprise me", "you pick", etc.)
+If a new session type is added later, it should plug into the same intake framework by declaring its required slots, not by reimplementing the flow
+
+
+Keep Phil's voice consistent: gruff, direct, dry humour, no em dashes, never "easy run," contractions written in full subject-verb form ("I've" not "been"). Intake questions should sound like Phil asking, not a survey.
+
+Constraints:
+
+Don't touch the render-layer strength session bug — separate fix.
+Don't over-engineer. A simple structured check on conversation state plus a per-session-type list of required slots is enough. No new DB tables.
+If the intake is being skipped because of an explicit instruction in the system prompt (e.g. an example output showing an immediate build spec), fix the prompt rather than wrapping code around it. Grep for the hardcoded-looking defaults first ("45 min", "full body focus", "straight sets", "compound-first", "moderate volume") — if they're sitting in the prompt as an example, that's your culprit and the model is copying them verbatim.
+If you find yourself rewriting the whole Phil prompt, stop and show me what you've got first.
+
+Verification:
+In a fresh chat, send each of the following separately and confirm Phil responds conversationally with intake questions, NOT a build spec:
+
+"add a strength session"
+"add a run"
+"give me a session for tomorrow"
+
+After answering 2-3 intake questions in each case, the preview should appear with values reflecting what the user actually said. Then verify the short-circuit still works: send "just build me something quick" and confirm Phil produces a sensible session without grilling the user.
