@@ -1,0 +1,27 @@
+Here's a prompt for your Replit agent. I've kept it focused on the symptom and the likely culprits without prescribing the fix, so the agent doesn't go off on a tangent:
+
+Bug: Strength session view only renders the first exercise
+When a strength session is added (via Phil or Quick Add), the session detail screen renders the header pane and the first exercise card only. No subsequent exercises appear, no "Add exercise" control is visible, and the page appears stuck at the top pane.
+What's working (so don't touch):
+
+The brain/generation is fine. The preview step shows the full workout correctly with all exercises.
+The underlying session data is being created and saved correctly. This is a display-only bug on the session detail screen.
+
+What I need you to do:
+
+Do NOT start refactoring or rewriting components. Read first, then make a minimal fix.
+Start by inspecting the actual data the session detail screen is receiving. Log the full session object (or the exercises array it's iterating over) at the point of render. Confirm whether the component is receiving all exercises or just one.
+Based on what you find, the bug is in one of two places — do not guess, verify which:
+
+Data layer: the API/query returning the session is only hydrating the first exercise (e.g. a broken join, a limit, a wrong select, or stripping in a serializer).
+Render layer: the component is receiving all exercises but only rendering exercises[0] instead of mapping over the array. Check for a missing .map, an accidental early return, a container with overflow: hidden + fixed height, or a conditional that short-circuits after the first item.
+
+
+Once you've identified which layer is broken, fix only that. Do not touch the preview component, the generation flow, or Quick Add — they work.
+After the fix, verify by adding a strength session with 4+ exercises and confirming all exercises render and the "Add exercise" control is visible.
+
+Constraints:
+
+Single-file fix where possible. No new abstractions.
+Don't modify the copy-with-progression rules, intent classifier, or session schema.
+If you find yourself changing more than ~30 lines or touching more than 2 files, stop and tell me what you found before continuing.

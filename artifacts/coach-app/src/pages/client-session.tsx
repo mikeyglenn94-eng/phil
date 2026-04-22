@@ -1619,7 +1619,7 @@ export default function ClientSession() {
   }, 0);
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="h-screen overflow-y-auto bg-background pb-32">
       {/* Sticky header */}
       <div className="sticky top-0 z-20 bg-background border-b shadow-sm">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
