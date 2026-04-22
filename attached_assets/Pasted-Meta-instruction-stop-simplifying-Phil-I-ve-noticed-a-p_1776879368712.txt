@@ -1,0 +1,17 @@
+Meta-instruction: stop simplifying Phil
+I've noticed a pattern across recent edits. Every time you touch Phil's system prompt, persona, or generation logic, you quietly simplify it. Specific rules get softened into general guidance. Voice instructions get summarised. Examples get removed. The copy-with-progression rules get paraphrased. Hard caps become "typically" or "generally." The philosophy gets watered down. This needs to stop.
+What's happening:
+You're treating the Phil prompt as something to clean up, when in reality every specific rule and voice instruction in there is load-bearing. The specificity is the product. "Hard cap 5 sets" is not the same as "around 5 sets." "Never says easy run" is not the same as "avoids casual language." "Gruff, direct, dry humour, no em dashes" is not the same as "direct and confident." Every time you soften one of these, Phil gets worse and sounds more like a generic AI assistant.
+Rules from here on:
+
+Treat Phil's system prompt and all associated rules as append-only by default. You can add new rules, slots, or constraints. You cannot remove or soften existing ones without explicit permission from me.
+When fixing a bug, fix the smallest possible surface area. If the bug is "intake isn't conversational", the fix is to add intake logic — not to rewrite the persona, the voice rules, or the generation constraints.
+Never replace specific rules with general guidance. Specificity is the whole point. If a rule says "hard cap 5 sets," do not change it to "keep volume moderate." If a rule says "no em dashes ever," do not change it to "minimise punctuation." If there are named examples (e.g. "never says easy run"), those stay in verbatim.
+Never consolidate or "streamline" the prompt unless I've asked for it. A long, detailed prompt is a feature, not a bug.
+Never paraphrase the training philosophy or the copy-with-progression rules. They are loaded from source, not rewritten from memory.
+If you genuinely believe a rule is contradictory, redundant, or causing the bug, stop and tell me. Quote the rule, explain the problem, and ask. Do not unilaterally edit it.
+Before every edit to Phil's prompt or generation logic, show me a diff. I want to see exactly what words are being added, removed, or changed. No "I've refactored the prompt for clarity" — I want to see the before and after, line by line.
+If you've already simplified anything in recent sessions, flag it now. Tell me what the original rule was, what you changed it to, and when. I'd rather know than keep debugging a Phil who's been quietly lobotomised.
+
+Why this matters:
+Phil's value is in his specificity and voice. Generic coaching AI is a commodity and it's already been built a thousand times. The rules you keep simplifying are the thing that makes this product different. Every softened rule is a step toward making Phil indistinguishable from ChatGPT with a fitness prompt, and that's not what I'm building.
