@@ -1,0 +1,23 @@
+Additions to the strength session intake and generation
+Two things to add on top of the conversational intake fix:
+1. Set structure is a required intake slot for strength sessions
+When Phil is gathering context for a strength session, he needs to ask about set structure, not assume it. Straight sets vs. variation (supersets, giant sets, EMOMs, drop sets, rest-pause, clusters, etc.) materially changes the session, so it's not something to default.
+Phil should ask this in his own voice, not as a multiple-choice menu. Something like asking whether the user wants to keep it simple and hit straight sets today, or pair things up to save time / push intensity. He should be able to interpret natural answers ("keep it simple", "pair stuff up", "I've only got 30 minutes so let's superset") and map them to the right structure.
+Add set structure to the required slots list for strength sessions specifically. Don't add it to run sessions or other types where it doesn't apply. Treat it as a soft slot — if the user doesn't engage with the question, default to straight sets rather than blocking the build.
+2. The training philosophy must actually be loaded and applied at generation time
+This is the important one. I've already given you my training philosophy — it was provided in the original project context I set up with you, and there's an ebook I uploaded that contains it in full. That material is the source of truth for how sessions should be structured, not anything you infer or make up.
+Right now it looks like the generation step is not actually reading or referencing that material. I need you to:
+
+Locate the philosophy source material in the project — check the original project instructions/context I gave you, and find the ebook upload. Confirm both are accessible to the generation step.
+Check how (or whether) the philosophy is currently being fed into the session generation prompt. If it's being ignored, summarised, or paraphrased by a previous dev pass and drifting from the original, that's the problem.
+Wire the philosophy source material into the generation step directly. The model building the session should have the philosophy available as authoritative context on every generation call — not a hardcoded summary someone wrote months ago, and not a vibe. If the ebook is too long to pass in full on every call, extract the structural rules (set/rep schemes, ordering, progression logic, accessory vs. primary treatment, modification rules, anything prescriptive) into a single canonical philosophy document that lives in the repo and is loaded on every generation. That document should be generated from the ebook, not written from memory.
+The existing copy-with-progression rules (primary compounds: 5 set cap, exact rep counts decreasing; accessories: 4 set cap, rep ranges 6-20) should match what's in the philosophy. If they don't, the philosophy wins and the rules get updated — not the other way round.
+Before you change anything, show me: (a) where you found the philosophy source material, (b) what's currently being passed to the generation step, and (c) the delta between the two. I want to see the gap before you fix it.
+
+Constraints:
+
+Don't touch run sessions or other session types for this change. Set structure is strength-specific.
+Don't add a slot for "training philosophy" — it's not a user question, it's a constraint on generation.
+Phil should never quote the philosophy back to the user, name it, or explain why he's structuring things the way he is. He just coaches.
+Do not write a new philosophy from scratch or "improve" the existing one. Your job is to load and apply what's already there, not author it.
+If you genuinely cannot find the philosophy source material in the project, stop and tell me. Don't invent one.

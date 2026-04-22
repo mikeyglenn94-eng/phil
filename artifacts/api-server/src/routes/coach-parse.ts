@@ -69,7 +69,7 @@ REQUIRED INTAKE for all session types:
 2. Time available — how long has the user got?
 
 ADDITIONAL REQUIRED INTAKE per session type:
-- Strength: where are they training and what equipment do they have? (home, commercial gym, garage gym, etc.)
+- Strength: (1) where are they training and what equipment do they have? (home, commercial gym, garage gym, etc.) (2) set structure — straight sets, or do they want to pair things up / use intensity techniques (supersets, giant sets, drop sets, clusters, rest-pause, EMOMs)? Bundle both into one question. SET STRUCTURE IS A SOFT SLOT: if the user doesn't engage, says "whatever", or doesn't answer directly, default to straight sets and proceed — do not block the build waiting for this answer.
 - Run: what kind of run — quality intervals, steady run, long run? And terrain/environment (road, trail, treadmill)?
 - WOD/conditioning: what format or intensity — AMRAP, EMOM, for time, or open to suggestion?
 

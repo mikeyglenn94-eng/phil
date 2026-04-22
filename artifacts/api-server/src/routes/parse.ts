@@ -1965,6 +1965,12 @@ Generate a complete, well-programmed session matching the equipment, muscle grou
 - Exception 1 — Big 4 (Back Squat, Bench Press, Deadlift, Strict Press) in a pure STRENGTH context: fixed number is correct (e.g. 5×5, 3×3). Use a specific number, not a range.
 - Exception 2 — Olympic lifts (Snatch, Clean & Jerk, Power Snatch, Hang Clean etc.): always fixed rep number, never a range. Programme as singles, doubles, or triples.
 
+### Practical exercise selection for strength sessions
+**Lower body compound (choose 1–2 per session):** Back Squat, Front Squat, Goblet Squat, Romanian Deadlift, Deadlift, Sumo Deadlift, Trap Bar Deadlift, Hip Thrust, Bulgarian Split Squat, Step-up, Leg Press
+**Upper body push (choose 1–2):** Bench Press, Incline Bench Press, Close Grip Bench, Overhead Press, Dumbbell Press, Dips
+**Upper body pull (choose 1–2):** Barbell Row, Pendlay Row, Pull-up, Lat Pulldown, Cable Row, Face Pull, Dumbbell Row
+**Accessory (choose 1–2 to address weaknesses):** RDL, Good Morning, Nordic Curl, Leg Curl, Leg Extension, Dumbbell Lateral Raise, Bicep Curl, Tricep Extension, Core work
+
 ### Exercise selection and ordering
 - Compound barbell movements first (Squat, Deadlift, RDL, Bench, OHP, Barbell Row) — highest overload, most important
 - Dumbbell compound work second
@@ -1972,6 +1978,20 @@ Generate a complete, well-programmed session matching the equipment, muscle grou
 - 4–6 exercises per session — no more, no less
 - Every exercise must have a clear purpose. No random or gimmick exercises (no BOSU balls, oscillating bars)
 - Match exercise selection to the equipment mentioned
+
+### Strength session structure
+- Open with 1–2 compound barbell movements (these receive the most volume and intensity)
+- Follow with 1–2 compound assistance movements
+- Close with 1–2 isolation or accessory exercises (lower fatigue cost)
+- Total exercises per session: 4–6
+- Do NOT programme intensity techniques (drop sets, supersets, failure) unless the session description explicitly asks for them
+
+### Set structure — read from description
+- If the description says "straight sets" or does not specify: use straight sets throughout (default)
+- If the description says "supersets", "pair things up", "superset to save time", "giant sets": pair exercises together. In the notes field of paired exercises write "Superset with [partner exercise name]". All other session rules still apply.
+- If the description says "drop sets": note "Drop set" on the relevant accessory exercise
+- If the description says "rest-pause", "clusters", "EMOM": apply as described and note it on the relevant exercise
+- Never apply intensity techniques unless the description explicitly asks for them
 
 ### Loading and intensity
 - Default to hard and purposeful — not easy filler
@@ -1981,11 +2001,11 @@ Generate a complete, well-programmed session matching the equipment, muscle grou
 - Leave weight as null unless the user specifies it
 
 ### Compound vs Accessory sets and reps — STRICT RULE
-**Primary compounds** (Squat, Bench Press, Deadlift, Strict Press / OHP, and their close variations):
+**Primary compounds** (Back Squat, Front Squat, Bench Press, Close Grip Bench, Incline Bench Press, Deadlift, Romanian Deadlift used as main lift, Strict Press, Overhead Press):
 - Sets: 3–5. Sub-6 rep prescriptions are only appropriate here.
 - Reps: prescribe an EXACT number (e.g. "5", "4", "3", "8", "6") — never a range on a true compound main lift.
 
-**All other exercises** (rows, curls, lunges, push-downs, RDL as accessory, lat pulldown, etc.):
+**All other exercises** (rows, curls, lunges, push-downs, lateral raises, leg press, RDL as accessory, lat pulldown, etc.):
 - Sets: maximum 4. NEVER prescribe 5 sets on an accessory or secondary movement.
 - Reps: ALWAYS a range, never a single number — e.g. "12-15", "15-20", "8-12". Ranges may go up to 20.
 - NEVER prescribe fewer than 6 reps or more than 4 sets on accessory work.
