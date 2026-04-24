@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
-  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2,
+  Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2, MoreVertical, Mail,
   Pencil, ChevronDown,
 } from "lucide-react";
 import {
@@ -25,6 +25,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   useGetProgramme,
   useUpdateProgramme,
@@ -523,6 +537,11 @@ export default function ClientSession() {
   const [logs, setLogs] = useState<LogState>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // ── Message Mikey sheet ──────────────────────────────────────────
+  const [messageMikeyOpen, setMessageMikeyOpen] = useState(false);
+  const [messageMikeyText, setMessageMikeyText] = useState("");
+  const [messageMikeySending, setMessageMikeySending] = useState(false);
   const autosaveTimerRef_cs = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSaveRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
   const savedRef = useRef(true);
@@ -1618,6 +1637,80 @@ export default function ClientSession() {
     return acc + (logs[ex.id] || []).filter(l => l.weight !== null || l.reps !== null).length;
   }, 0);
 
+  // ── Build session context for "Message Mikey" email ──────────────
+  function buildMikeyContext() {
+    const allExercises = [...(session?.exercises ?? []), ...addedExercises];
+    const exercisesLogged = allExercises.map(ex => {
+      const setLogs = logs[ex.id] || [];
+      const sets = setLogs
+        .filter(l => l.weight !== null || l.reps !== null)
+        .map(l => ({ weight: l.weight, reps: l.reps }));
+      return { name: nameOverrides[ex.id] || ex.name, sets };
+    }).filter(ex => ex.sets.length > 0 || allExercises.length <= 12);
+    return {
+      sessionName: session?.name ?? null,
+      sessionDate: session?.date ? format(parseISO(session.date), "EEEE, d MMMM yyyy") : null,
+      sessionType: ((session as any)?.source as string | undefined) ?? null,
+      exercisesLogged,
+      sessionComment: sessionComment?.trim() || null,
+    };
+  }
+
+  async function handleSendMessageMikey() {
+    const text = messageMikeyText.trim();
+    if (!text || messageMikeySending) return;
+    const clientId = effectiveProgramme?.clientId ?? ctsDataRef.current?.clientId;
+    if (!clientId) {
+      toast({ title: "Could not send", description: "Missing client info. Try again from your dashboard.", variant: "destructive" });
+      return;
+    }
+    setMessageMikeySending(true);
+    try {
+      const tok = localStorage.getItem("axis_auth_token");
+      const res = await fetch(`/api/clients/${clientId}/coach-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+        body: JSON.stringify({ message: text, context: buildMikeyContext() }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: string }));
+        const reason = body?.error;
+        if (reason === "email_not_configured") {
+          // Fallback: open user's mail client with context pre-filled
+          const ctx = buildMikeyContext();
+          const lines: string[] = [text, "", "— Session context —"];
+          if (ctx.sessionName) lines.push(`Session: ${ctx.sessionName}`);
+          if (ctx.sessionDate) lines.push(`Date: ${ctx.sessionDate}`);
+          if (ctx.sessionComment) lines.push(`Note: ${ctx.sessionComment}`);
+          if (ctx.exercisesLogged.length) {
+            lines.push("", "Exercises logged:");
+            ctx.exercisesLogged.forEach(e => {
+              const setsTxt = (e.sets ?? [])
+                .map((s, i) => `Set ${i + 1}: ${s.weight ?? "—"}kg × ${s.reps ?? "—"}`)
+                .join(" · ");
+              lines.push(`• ${e.name}${setsTxt ? ` (${setsTxt})` : ""}`);
+            });
+          }
+          const subject = encodeURIComponent(ctx.sessionName ? `Re: ${ctx.sessionName}` : "Message from athlete");
+          const body = encodeURIComponent(lines.join("\n"));
+          window.location.href = `mailto:mikeyglenn94@gmail.com?subject=${subject}&body=${body}`;
+          setMessageMikeyOpen(false);
+          setMessageMikeyText("");
+          return;
+        }
+        throw new Error(reason || `Server error ${res.status}`);
+      }
+      toast({ title: "Sent to Mikey", description: "Your message is on its way." });
+      setMessageMikeyOpen(false);
+      setMessageMikeyText("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast({ title: "Could not send", description: msg, variant: "destructive" });
+    } finally {
+      setMessageMikeySending(false);
+    }
+  }
+
   return (
     <div className="h-screen overflow-y-auto bg-background pb-32">
       {/* Sticky header */}
@@ -1665,6 +1758,24 @@ export default function ClientSession() {
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
                   {saved ? "Saved" : "Save"}
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="rounded-xl text-muted-foreground hover:text-foreground"
+                      title="More options"
+                      aria-label="More options"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem onClick={() => setMessageMikeyOpen(true)} className="gap-2">
+                      <Mail className="w-4 h-4" />
+                      Message Mikey
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             )}
           </div>
@@ -2913,19 +3024,6 @@ export default function ClientSession() {
           <Share2 className="w-4 h-4" /> Share workout
         </button>
 
-        {/* Email Coach */}
-        <div className="pt-4 pb-2 flex justify-center">
-          <a
-            href="mailto:hello@mikeyglenncoaching.com"
-            className="inline-flex items-center gap-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-2xl px-6 py-3.5 text-sm shadow-md hover:shadow-lg transition-all"
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-current stroke-2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-              <rect width="20" height="16" x="2" y="4" rx="2"/>
-              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-            </svg>
-            Email Your Coach
-          </a>
-        </div>
       </div>
       )}
 
@@ -3250,6 +3348,51 @@ export default function ClientSession() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Message Mikey sheet ─────────────────────────────────────── */}
+      <Sheet open={messageMikeyOpen} onOpenChange={(v) => { if (!messageMikeySending) setMessageMikeyOpen(v); }}>
+        <SheetContent side="bottom" className="rounded-t-2xl p-0 overflow-hidden max-h-[88vh] flex flex-col">
+          <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0 text-left">
+            <SheetTitle className="text-base font-semibold">Message Mikey</SheetTitle>
+            <SheetDescription className="text-sm text-muted-foreground">
+              Your feedback tunes Phil every week.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            <Textarea
+              value={messageMikeyText}
+              onChange={(e) => setMessageMikeyText(e.target.value)}
+              placeholder="What's on your mind?"
+              rows={6}
+              maxLength={4000}
+              disabled={messageMikeySending}
+              autoFocus
+              className="resize-none text-sm"
+            />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Session details (name, date, exercises logged, your notes) are attached automatically.
+            </p>
+          </div>
+          <div className="shrink-0 px-5 pb-6 pt-3 border-t bg-background flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setMessageMikeyOpen(false)}
+              disabled={messageMikeySending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleSendMessageMikey()}
+              disabled={!messageMikeyText.trim() || messageMikeySending}
+              className="gap-2"
+            >
+              {messageMikeySending
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+                : <><Send className="w-4 h-4" /> Send</>}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

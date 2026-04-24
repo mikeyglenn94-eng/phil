@@ -6,8 +6,92 @@ import { randomUUID } from "crypto";
 import { format, addDays, parseISO } from "date-fns";
 import { logApiCost, logPhilInteraction, detectPhilInteractionType } from "../lib/log-api-cost";
 import { extractAuth } from "../middlewares/require-auth";
+import { sendCoachMessage, type CoachMessageContext } from "../lib/email";
 
 const router: IRouter = Router();
+
+// ── POST /clients/:clientId/coach-message ─────────────────────────
+// Athlete-initiated message to the head coach (Mikey).
+// Sends via Resend with optional session context attached as metadata.
+router.post("/clients/:clientId/coach-message", async (req, res): Promise<void> => {
+  extractAuth(req);
+
+  // AuthZ: caller must be authenticated.
+  if (!req.auth) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId) || clientId <= 0) {
+    res.status(400).json({ error: "invalid clientId" });
+    return;
+  }
+
+  // AuthZ: athletes may only send for their own clientId. Coaches/admins are allowed.
+  const isStaff = req.auth.roles.some(r => r === "coach" || r === "admin");
+  if (!isStaff && req.auth.clientId !== clientId) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+
+  const { message, context, fromEmail } = req.body as {
+    message?: string;
+    context?: CoachMessageContext;
+    fromEmail?: string;
+  };
+
+  if (!message?.trim()) {
+    res.status(400).json({ error: "message is required" });
+    return;
+  }
+  if (message.length > 4000) {
+    res.status(400).json({ error: "message too long" });
+    return;
+  }
+
+  // Size-limit context fields to prevent oversized payload abuse.
+  let safeContext: CoachMessageContext | undefined;
+  if (context && typeof context === "object") {
+    const cap = (s: unknown, n: number) => typeof s === "string" ? s.slice(0, n) : null;
+    safeContext = {
+      sessionName: cap(context.sessionName, 200),
+      sessionDate: cap(context.sessionDate, 60),
+      sessionType: cap(context.sessionType, 40),
+      sessionComment: cap(context.sessionComment, 2000),
+      exercisesLogged: Array.isArray(context.exercisesLogged)
+        ? context.exercisesLogged.slice(0, 30).map(ex => ({
+            name: typeof ex?.name === "string" ? ex.name.slice(0, 120) : "Exercise",
+            sets: Array.isArray(ex?.sets)
+              ? ex.sets.slice(0, 20).map(s => ({
+                  weight: typeof s?.weight === "number" ? s.weight : null,
+                  reps: typeof s?.reps === "number" ? s.reps : null,
+                }))
+              : [],
+          }))
+        : [],
+    };
+  }
+
+  let fromName = "Athlete";
+  try {
+    const [c] = await db.select().from(clientsTable).where(eq(clientsTable.id, clientId));
+    if (c?.name) fromName = c.name;
+  } catch { /* non-fatal */ }
+
+  const result = await sendCoachMessage({
+    fromName,
+    fromEmail: fromEmail?.trim() || null,
+    message: message.trim(),
+    context: safeContext,
+  });
+
+  if (!result.ok) {
+    res.status(502).json({ error: result.reason ?? "send_failed" });
+    return;
+  }
+  res.json({ ok: true });
+});
 
 // ── POST /api/clients/:clientId/coaching ──────────────────────────
 // Accepts a natural-language question + structured dashboard context.
