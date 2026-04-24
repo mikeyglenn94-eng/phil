@@ -3,6 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import html2canvas from "html2canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
   Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2, MoreVertical, Mail,
@@ -44,7 +45,6 @@ import {
   useUpdateProgramme,
   getListProgrammesQueryKey,
   getGetProgrammeQueryKey,
-  parseLog,
   parseTranscript,
   transcribeAudio,
 } from "@workspace/api-client-react";
@@ -605,13 +605,6 @@ export default function ClientSession() {
   const [isParsingAdd, setIsParsingAdd] = useState(false);
   const addRecRef = useRef<any>(null);
 
-  // Voice log state
-  const [listeningFor, setListeningFor] = useState<string | null>(null);
-  const [interimText, setInterimText] = useState("");
-  const [logAccText, setLogAccText] = useState(""); // accumulated finals shown in live transcript
-  const [parsingFor, setParsingFor] = useState<string | null>(null);
-  const logRecRef = useRef<any>(null);
-
   // Comment state (per-exercise)
   const [comments, setComments] = useState<Record<string, string>>({});
   // Tracks which exercises have their per-exercise note textarea expanded.
@@ -934,143 +927,6 @@ export default function ClientSession() {
     };
     sessionCommentRecRef.current = r;
     try { r.start(); } catch { sessionCommentActiveRef.current = false; setSessionCommentListening(false); }
-  }
-
-  // ── Log voice (Web Speech for preview + Whisper for accuracy) ────────────
-  const logAccRef = useRef("");
-  const logExIdRef = useRef("");
-  const logActiveRef = useRef(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaChunksRef = useRef<Blob[]>([]);
-  const usingMediaRecorderRef = useRef(false);
-
-  // Final processing: tries Whisper first, falls back to Web Speech transcript
-  async function processLogRecording(exId: string, audioBlob: Blob | null) {
-    let transcript = logAccRef.current.trim();
-    setListeningFor(null); setInterimText(""); setLogAccText("");
-    logAccRef.current = "";
-
-    if (!exId || !session) return;
-    const ex = session.exercises?.find((e: Exercise) => e.id === exId);
-    if (!ex) return;
-
-    setParsingFor(exId);
-
-    // Whisper pass — much better in noisy environments
-    if (audioBlob && audioBlob.size > 1500) {
-      try {
-        const result = await transcribeAudio({ audio: audioBlob });
-        if (result.transcript?.trim()) transcript = result.transcript.trim();
-      } catch {
-        // Whisper unavailable — fall back to Web Speech text
-      }
-    }
-
-    if (!transcript) { setParsingFor(null); return; }
-
-    try {
-      const result = await parseLog({ transcript, exerciseName: nameOverrides[exId] || ex.name, totalSets: ex.sets || 0 });
-      setLogs(prev => {
-        const current = [...(prev[exId] || [])];
-        for (const s of result.sets) {
-          if (s.setIndex < current.length) {
-            current[s.setIndex] = {
-              weight: s.weight !== undefined ? s.weight : current[s.setIndex]?.weight ?? null,
-              reps: s.reps !== undefined ? s.reps : current[s.setIndex]?.reps ?? null,
-            };
-          }
-        }
-        return { ...prev, [exId]: current };
-      });
-      setSaved(false);
-      scheduleClientAutosave();
-      toast({ title: "Log parsed!" });
-    } catch {
-      toast({ title: "Couldn't parse log — try again", variant: "destructive" });
-    } finally { setParsingFor(null); }
-  }
-
-  function stopLogRecording() {
-    logActiveRef.current = false;
-    stopRef(logRecRef);
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop(); // onstop → processLogRecording
-    } else if (!usingMediaRecorderRef.current) {
-      // MediaRecorder never started — onend will call processLogRecording
-    }
-  }
-
-  const startLogListening = (exId: string) => {
-    if (logActiveRef.current) { stopLogRecording(); return; }
-
-    logAccRef.current = "";
-    logExIdRef.current = exId;
-    logActiveRef.current = true;
-    usingMediaRecorderRef.current = false;
-    setListeningFor(exId);
-    setInterimText("");
-    setLogAccText("");
-
-    // Start MediaRecorder for Whisper (async — Web Speech starts immediately below)
-    if (navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-        .then(stream => {
-          if (!logActiveRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
-          const mimeType = ["audio/webm", "audio/mp4", "audio/ogg"].find(t => MediaRecorder.isTypeSupported(t)) ?? "";
-          const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-          mediaChunksRef.current = [];
-          mr.ondataavailable = e => { if (e.data.size > 0) mediaChunksRef.current.push(e.data); };
-          mr.onstop = async () => {
-            stream.getTracks().forEach(t => t.stop());
-            usingMediaRecorderRef.current = false;
-            const blob = new Blob(mediaChunksRef.current, { type: mimeType || "audio/webm" });
-            await processLogRecording(logExIdRef.current, blob);
-          };
-          mr.start(500);
-          mediaRecorderRef.current = mr;
-          usingMediaRecorderRef.current = true;
-        })
-        .catch(() => { /* mic denied or unavailable — Web Speech only */ });
-    }
-
-    spawnLogRec();
-  };
-
-  function spawnLogRec() {
-    const r = makeSR();
-    if (!r) { logActiveRef.current = false; setListeningFor(null); return; }
-    r.onresult = (e: any) => {
-      let fin = ""; let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      if (fin) {
-        logAccRef.current = (logAccRef.current + " " + fin).trim();
-        setLogAccText(logAccRef.current);
-        setInterimText("");
-      } else {
-        setInterimText(interim);
-      }
-    };
-    r.onerror = (e: any) => {
-      if (e.error === "not-allowed" || e.error === "audio-capture") {
-        logActiveRef.current = false;
-        setListeningFor(null); setInterimText("");
-      }
-    };
-    r.onend = async () => {
-      if (logActiveRef.current) { setTimeout(spawnLogRec, 100); return; }
-      // Stopped by user — if MediaRecorder is handling it, just clear visuals
-      if (usingMediaRecorderRef.current) {
-        setListeningFor(null); setInterimText(""); setLogAccText("");
-      } else {
-        // No MediaRecorder — process now with Web Speech text
-        await processLogRecording(logExIdRef.current, null);
-      }
-    };
-    logRecRef.current = r;
-    try { r.start(); } catch { logActiveRef.current = false; setListeningFor(null); }
   }
 
   // ── Swap voice ────────────────────────────────────────────────────────────
@@ -1739,45 +1595,6 @@ export default function ClientSession() {
         </div>
       )}
 
-      {/* Log voice listening banner */}
-      {listeningFor && (() => {
-        const listeningExName = session?.exercises?.find((e: Exercise) => e.id === listeningFor)
-          ? (nameOverrides[listeningFor] || session.exercises!.find((e: Exercise) => e.id === listeningFor)!.name)
-          : null;
-        const hasWords = logAccText || interimText;
-        return (
-          <div className="max-w-lg mx-auto px-4 pt-4">
-            <div className="bg-primary/5 border border-primary/30 rounded-2xl overflow-hidden shadow-sm">
-              {/* Header */}
-              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-primary/20">
-                <span className="relative shrink-0">
-                  <span className="absolute inset-0 rounded-full bg-red-400/40 animate-ping" />
-                  <Mic className="w-4 h-4 text-red-500 relative z-10" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-primary uppercase tracking-wide leading-none">Recording</p>
-                  {listeningExName && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{listeningExName}</p>}
-                </div>
-                <Button size="sm" variant="outline" className="shrink-0 rounded-xl h-8 px-3 text-xs" onClick={stopLogRecording}>
-                  <Square className="w-3 h-3 mr-1.5 fill-current" />Done
-                </Button>
-              </div>
-              {/* Live transcript */}
-              <div className="px-4 py-3 min-h-[56px]">
-                {hasWords ? (
-                  <p className="text-sm leading-relaxed text-foreground">
-                    {logAccText && <span>{logAccText} </span>}
-                    {interimText && <span className="text-muted-foreground/70 italic">{interimText}</span>}
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground/50 italic">Say your sets… e.g. "60kg 3 sets of 8"</p>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Conditioning session (WOD Brain / Run Brain / Endurance Cycle) */}
       {((session as any).source === "wod_brain" || (session as any).source === "run_brain" || (session as any).source === "endurance_cycle" || (session as any).source === "cycle_brain" || (session as any).source === "swim_brain") && (() => {
         const src = (session as any).source as string;
@@ -2390,8 +2207,6 @@ export default function ClientSession() {
         {(session.exercises || []).filter(ex => !deletedExIds.has(ex.id)).map((ex, exIdx) => {
           const setsCount = setCountOverrides[ex.id] ?? ex.sets ?? 0;
           const exLogs = logs[ex.id] || [];
-          const isListening = listeningFor === ex.id;
-          const isParsing = parsingFor === ex.id;
           const isSwapping = swappingExId === ex.id;
           const displayName = nameOverrides[ex.id] || ex.name;
           const wasSwapped = !!nameOverrides[ex.id];
@@ -2400,7 +2215,7 @@ export default function ClientSession() {
           const allLogged = setsCount > 0 && loggedCount === setsCount;
 
           return (
-            <div key={ex.id} className={`exercise transition-all ${isListening ? "ring-2 ring-primary/50" : ""} ${isSwapping ? "ring-2 ring-orange-400/60" : ""}`}>
+            <div key={ex.id} className={`exercise transition-all ${isSwapping ? "ring-2 ring-orange-400/60" : ""}`}>
               {/* Exercise header */}
               <div className="exercise-header">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -2433,10 +2248,22 @@ export default function ClientSession() {
                       href={`https://www.youtube.com/results?search_query=${encodeURIComponent(displayName + " exercise tutorial")}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] text-red-500 hover:text-red-600 font-medium mt-0.5 transition-colors"
+                      className="inline-flex items-center gap-1 text-[13px] text-neutral-500 hover:text-neutral-700 font-medium mt-0.5 transition-colors"
                     >
-                      <PlayCircle className="w-3 h-3" /> Watch demo
+                      <PlayCircle className="w-3.5 h-3.5" /> Watch demo
                     </a>
+                    {/* Bodyweight load toggle — replaces the BW chip from the actions row */}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Switch
+                        id={`bw-${ex.id}`}
+                        checked={isBw}
+                        onCheckedChange={() => toggleExLoadType(ex.id, ex.name)}
+                        aria-label="Include bodyweight in load"
+                      />
+                      <label htmlFor={`bw-${ex.id}`} className="text-xs text-muted-foreground cursor-pointer select-none">
+                        Include bodyweight in load
+                      </label>
+                    </div>
                     {wasSwapped && (
                       <p className="text-[10px] text-orange-600 font-medium flex items-center gap-1 mt-0.5">
                         <ArrowLeftRight className="w-2.5 h-2.5" /> swapped from {ex.name}
@@ -2445,40 +2272,14 @@ export default function ClientSession() {
                   </div>
                 </div>
                 <div className="exercise-actions">
-                  {!isSwapping && (
-                    <button
-                      type="button"
-                      onClick={() => toggleExLoadType(ex.id, ex.name)}
-                      title={isBw ? "Bodyweight — tap to add weight" : "Mark as bodyweight"}
-                      className={`h-8 px-2 rounded-xl text-[10px] font-bold border transition-colors ${
-                        isBw ? "bg-blue-100 text-blue-700 border-blue-300" : "text-muted-foreground border-border hover:border-blue-300 hover:text-blue-600"
-                      }`}
-                    >
-                      BW
-                    </button>
-                  )}
                   <Button
                     size="sm" variant="ghost"
                     className={`rounded-xl gap-1 h-8 px-2 text-xs ${isSwapping ? "text-orange-600 bg-orange-50" : "text-muted-foreground hover:text-foreground"}`}
                     onClick={() => { if (isSwapping) { cancelSwap(); } else { setSwappingExId(ex.id); setSwapText(""); } }}
-                    disabled={isParsing || (!!listeningFor && !isListening)}
                   >
                     {isSwapping ? <X className="w-3.5 h-3.5" /> : <ArrowLeftRight className="w-3.5 h-3.5" />}
                     {isSwapping ? "Cancel" : "Swap"}
                   </Button>
-                  {!isSwapping && (
-                    <Button
-                      size="sm"
-                      variant={isListening ? "default" : "outline"}
-                      className={`rounded-xl gap-1.5 h-8 px-3 text-xs ${isListening ? "bg-destructive hover:bg-destructive/90 text-white border-0" : ""}`}
-                      onClick={() => startLogListening(ex.id)}
-                      disabled={isParsing || (!!listeningFor && !isListening)}
-                    >
-                      {isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
-                        isListening ? <><Square className="w-3 h-3 fill-current" /> Stop</> :
-                        <><Mic className="w-3.5 h-3.5" /> Log</>}
-                    </Button>
-                  )}
                   {!isSwapping && (
                     <Button
                       size="sm"
@@ -2598,11 +2399,7 @@ export default function ClientSession() {
 
               {/* Set rows */}
               <div className="mt-3">
-                {isParsing ? (
-                  <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />Parsing your log...
-                  </div>
-                ) : setsCount === 0 ? (
+                {setsCount === 0 ? (
                   <>
                   <p className="text-xs text-muted-foreground italic text-center py-2">No sets defined</p>
                   <button
@@ -2650,7 +2447,7 @@ export default function ClientSession() {
                               placeholder="—"
                               value={log.weight ?? ""}
                               onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
-                              className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
+                              className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
                             />
                           )}
                           <div className="relative">
@@ -2659,7 +2456,7 @@ export default function ClientSession() {
                               placeholder={perSetTarget != null ? String(perSetTarget) : safeReps(ex.reps) || "—"}
                               value={log.reps ?? ""}
                               onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
-                              className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
+                              className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
                             />
                             {perSetTarget && (
                               <span className="absolute -bottom-3.5 left-0 right-0 text-center text-[9px] text-primary/50 font-semibold pointer-events-none">
@@ -2817,14 +2614,14 @@ export default function ClientSession() {
                             placeholder="—"
                             value={log.weight ?? ""}
                             onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
-                            className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
+                            className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
                           />
                           <Input
                             type="number" inputMode="numeric" step="1" min="0"
                             placeholder={safeReps(ex.reps) || "—"}
                             value={log.reps ?? ""}
                             onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
-                            className={`h-10 text-center text-base font-bold border-0 shadow-none bg-transparent focus:bg-background rounded-lg ${isDone ? "text-primary" : ""}`}
+                            className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
                           />
                         </div>
                       );
