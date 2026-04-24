@@ -1,0 +1,70 @@
+Prompt 8 (revised) — Unified voice logging for strength, run, and cycling sessionsBuild a single voice logging feature that works identically across strength, run, and cycling sessions in the workout logger. One voice button, one flow, one backend infrastructure. The only difference between session types is what gets parsed out of the transcript.Design principle: Build this as a reusable module. One capture component, one backend handler, one parser that dispatches based on session type. Do not write three separate implementations.Voice input button (same across all session types):
+
+Position: at the top of the logger page, above the first exercise/section
+Size: 64px tall, full-width minus 32px padding
+Style: bg-black text-white with a Mic icon from lucide-react
+Label: "Log by voice"
+Subtext below in 12px text-neutral-500: "Just talk, Phil will sort the details"
+Capture flow (identical across session types):
+
+On tap, request mic permission if not already granted
+Start recording with a visible pulsing waveform or animated mic indicator
+Show a big "Done" button below while recording
+On "Done", send audio to transcription (OpenAI Whisper via existing infrastructure, or add it if not present, check artifacts/api-server/src/routes/ first)
+Send transcript + session type to the parsing endpoint
+Return parsed fields, populate the logger's structured fields visibly
+Show a "Here's what I heard" card with the parsed data and an "Edit" button for corrections
+Save the original transcript as a note on the session
+Backend: one handler at /sessions/:id/log-voice (no /api prefix). Takes { transcript, sessionType } and returns structured fields. The handler dispatches to the right parser based on sessionType.Parsers (one per session type, sharing the same LLM infrastructure):Strength parser extracts:
+
+Per exercise mentioned: exercise name, sets, reps per set (or rep range), weight, RPE if mentioned, any notes
+Matches spoken exercise names loosely to the session's programmed exercises ("bench" → "Bench Press")
+If the athlete says "3 sets of 5 at 100 kilos, felt strong on the last one", parse all three sets with 100kg × 5 and tag RPE higher on the last set
+If the athlete says "same as set 1" or "same across", fill remaining sets with set 1's values
+Run parser extracts:
+
+Distance (km, convert from miles if needed: 1 mile = 1.609 km)
+Duration (minutes)
+Pace if mentioned or calculable
+Perceived effort: easy / steady / hard / max
+Route, weather, subjective notes
+Any niggles or pain flagged separately for Phil's attention
+Cycling parser extracts:
+
+Distance (km, convert from miles if needed)
+Duration (minutes)
+Average speed or pace if mentioned
+Elevation gain if mentioned
+Perceived effort: easy / steady / hard / max
+Route, weather, subjective notes
+Indoor vs outdoor if clear from context ("on the turbo" / "did a loop")
+Any niggles or pain flagged separately
+Shared parsing rules across all types:
+
+Never output "easy" in parsed labels or summaries. If the athlete says "easy", parse effort as "easy" internally but in the summary card say "aerobic base" or "zone 2"
+Parse tolerantly, athletes speak naturally. "About 8k" → 8.0 km. "Did around 40 minutes" → 40 min. "3 by 5 at a ton" → 3 sets × 5 reps × 100kg
+If a required field is missing, leave it blank and surface it as "needs detail" in the summary card rather than guessing
+Any mention of pain, niggles, injury, or body-part discomfort gets extracted as a separate flags field for Phil to notice
+Respect the existing product rules: primary compound cap 5 sets, accessory cap 4 sets, never below 6 reps on accessories
+"Here's what I heard" summary card (same component, different content by type):Style: rounded card with a subtle border, appears inline where the voice button was. Phil's voice throughout: gruff, short, no em dashes, no corporate language.Examples:
+
+Strength: "Bench: 3 × 100 × 5, RPE 8. Squat: 4 × 140 × 5. Logged."
+Run: "8k, 45 minutes, steady. Logged."
+Cycling: "30k, 1h 5m, turbo. Logged."
+With a niggle flagged: "Got it. 10k in 52. Left knee grumbled, flagged that for later."
+Every card has an "Edit" button that expands into the structured fields for manual correction.Graceful degradation:
+
+If mic permission is denied, hide the voice button and show a small one-line toast: "No mic access, tap fields to log manually." Do not keep prompting.
+If transcription fails (network, API error), show an inline retry with the recorded audio preserved. Don't lose the recording.
+If parsing returns nothing usable, show: "Couldn't parse that, try again or log manually."
+Extensibility:
+
+Structure the parser module so adding a new session type later (swim, yoga, HIIT, rowing) is a matter of adding a new parser function, not restructuring the whole module
+Parsers should live in artifacts/api-server/src/lib/voice-parsers/ (strength.ts, run.ts, cycling.ts) with a shared parseVoiceLog(transcript, sessionType) dispatcher
+The frontend voice capture component lives in artifacts/coach-app/src/components/voice-logger.tsx and is imported into the logger regardless of session type, it reads the session type from context and passes it to the backend
+Permission handling:
+
+Ask for mic permission only on first tap of the voice button, not on page load
+If granted, remember via localStorage and don't ask again
+If denied, the button stays visible but on tap shows the one-line toast above
+Show me the full diff before committing. Specifically confirm: (1) session-type detection is reading from the existing session schema not hardcoded, (2) the parsers are separate files dispatched from one endpoint, (3) no em dashes or "easy" in any user-facing copy.
