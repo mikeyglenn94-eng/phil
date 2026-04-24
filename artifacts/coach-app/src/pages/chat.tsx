@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useChat } from "@/contexts/chat-context";
 import { useClientContext } from "@/contexts/client-context";
 import { QuickReplyChips, type QuickReply } from "@/components/chat/quick-reply-chips";
+import { FeedbackPromptBubble } from "@/components/chat/bubbles/feedback-prompt-bubble";
+import { useToast } from "@/hooks/use-toast";
 import { buildAiContext, getSuggestedPrompts } from "@/components/coaching-sheet";
 import type { AnalyticsData } from "@/pages/dashboard-tab";
 
@@ -66,7 +68,8 @@ export default function ChatPage() {
   const { client } = useClientContext();
   const clientId = client?.id;
 
-  const { messages, loading, ask, chipStateByMsg, setChipState, draft, setDraft } = useChat();
+  const { messages, loading, ask, chipStateByMsg, setChipState, submitFeedback, draft, setDraft } = useChat();
+  const { toast } = useToast();
 
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -204,14 +207,47 @@ export default function ChatPage() {
         )}
 
         <div className="space-y-3">
-          {messages.map(m =>
-            m.role === "user" ? (
-              <div key={m.id} className="flex justify-end">
-                <div className="bg-primary text-primary-foreground text-[14px] px-3.5 py-2.5 rounded-2xl rounded-tr-sm max-w-[85%] leading-relaxed">
-                  {m.content}
+          {messages.map(m => {
+            if (m.role === "user") {
+              return (
+                <div key={m.id} className="flex justify-end">
+                  <div className="bg-primary text-primary-foreground text-[14px] px-3.5 py-2.5 rounded-2xl rounded-tr-sm max-w-[85%] leading-relaxed">
+                    {m.content}
+                  </div>
                 </div>
-              </div>
-            ) : (
+              );
+            }
+            // Phil-side feedback prompt: chip strip + voice-note icon.
+            if (m.kind === "feedback-prompt") {
+              const chipState = chipStateByMsg[m.id];
+              return (
+                <div key={m.id} className="flex justify-start gap-2">
+                  <img
+                    src="/phil.png"
+                    alt="Phil"
+                    className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5"
+                  />
+                  <FeedbackPromptBubble
+                    text={m.content}
+                    replies={m.quickReplies ?? []}
+                    selectedValue={chipState?.selectedValue ?? null}
+                    promoted={chipState?.promoted}
+                    onSelect={(value) => {
+                      void submitFeedback(m.id, value as "smashed" | "clean" | "grim");
+                    }}
+                    onTypeInstead={() => {
+                      setChipState(m.id, { promoted: true });
+                      inputRef.current?.focus();
+                    }}
+                    onVoiceTap={() => {
+                      toast({ title: "Voice notes coming soon", description: "Tap a chip for now." });
+                    }}
+                  />
+                </div>
+              );
+            }
+            // Default Phil text bubble.
+            return (
               <div key={m.id} className="flex justify-start gap-2">
                 <img
                   src="/phil.png"
@@ -222,8 +258,8 @@ export default function ChatPage() {
                   {m.content}
                 </div>
               </div>
-            ),
-          )}
+            );
+          })}
 
           {loading && (
             <div className="flex justify-start gap-2">

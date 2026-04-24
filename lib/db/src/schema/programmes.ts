@@ -26,6 +26,7 @@ export const exerciseSchema = z.object({
   perSetRpe: z.array(z.string().nullable()).optional(), // coach-prescribed RPE per set
   setWeights: z.array(z.number().nullable()).optional(), // kg per set, logged by client
   setReps: z.array(z.number().nullable()).optional(), // actual reps achieved per set, logged by client
+  setRpe: z.array(z.number().nullable()).optional(), // RPE 1-10 per set, logged by client
   canonicalExerciseKey: z.string().optional(), // internal snake_case movement identity key, never shown to user
 });
 
@@ -45,6 +46,7 @@ export const sessionSchema = z.object({
   guidance: z.string().optional(),
   clientComment: z.string().nullable().optional(),
   runLog: z.array(runIntervalSchema).optional(), // logged intervals for run sessions
+  completed: z.boolean().nullable().optional(), // true when athlete taps Finish on the workout logger
   exercises: z.array(exerciseSchema),
 });
 

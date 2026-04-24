@@ -35,10 +35,18 @@ function savePersisted(value: PersistedShape) {
 
 // ── Types ─────────────────────────────────────────────────────────
 
+/** Bubble kinds rendered in the /chat thread. "text" is the default; "feedback-prompt"
+ *  shows a Wave-1 chip strip + a voice-note icon for post-session reactions. */
+export type ChatBubbleKind = "text" | "feedback-prompt";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Bubble variant. Omitted ⇒ "text". Backwards compatible with persisted threads. */
+  kind?: ChatBubbleKind;
+  /** Free-form payload travelling with non-text bubbles (e.g. session/programme ids). */
+  payload?: { sessionId?: string; clientId?: number; programmeId?: number };
   /** Optional chips offered by Phil. Rendered as a row above the composer when this is the latest assistant turn. */
   quickReplies?: QuickReply[];
   /** ms epoch — lets us order/diff stably without depending on array index. */
@@ -60,6 +68,16 @@ interface AskParams {
   clientId: number;
 }
 
+/** Pre-built bubble shape used by injectBubbles — the caller picks ids/timestamps if it cares. */
+export interface InjectableBubble {
+  id?: string;
+  role?: "user" | "assistant";
+  content: string;
+  kind?: ChatBubbleKind;
+  payload?: ChatMessage["payload"];
+  quickReplies?: QuickReply[];
+}
+
 interface ChatContextValue {
   messages: ChatMessage[];
   loading: boolean;
@@ -68,6 +86,10 @@ interface ChatContextValue {
   /** Chip lock state, keyed by message id. */
   chipStateByMsg: Record<string, ChipState>;
   setChipState: (msgId: string, partial: Partial<ChipState>) => void;
+  /** Push pre-built bubbles into the thread (used by the workout-logger Finish flow). */
+  injectBubbles: (bubbles: InjectableBubble[]) => void;
+  /** Persist a feedback chip pick for a feedback-prompt bubble. */
+  submitFeedback: (msgId: string, rating: "smashed" | "clean" | "grim") => Promise<void>;
   /**
    * Transient one-shot draft used by launcher surfaces (e.g. AskPhilDock) to
    * pre-fill the /chat composer. Not persisted to sessionStorage on purpose:
@@ -164,6 +186,44 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setChipStateByMsg(prev => ({ ...prev, [msgId]: { ...prev[msgId], ...partial } }));
   }, []);
 
+  const injectBubbles = useCallback((bubbles: InjectableBubble[]) => {
+    if (!bubbles?.length) return;
+    const now = Date.now();
+    const built: ChatMessage[] = bubbles.map((b, i) => ({
+      id: b.id ?? newId(),
+      role: b.role ?? "assistant",
+      content: b.content,
+      kind: b.kind,
+      payload: b.payload,
+      quickReplies: b.quickReplies,
+      // Tiny offsets so timestamps strictly increase even within the same tick.
+      ts: now + i,
+    }));
+    setMessages(prev => [...prev, ...built]);
+  }, []);
+
+  const submitFeedback = useCallback(async (msgId: string, rating: "smashed" | "clean" | "grim") => {
+    // Lock the chip immediately so the UI feels instant; rollback only if write fails badly.
+    setChipStateByMsg(prev => ({ ...prev, [msgId]: { ...prev[msgId], selectedValue: rating } }));
+    const target = messages.find(m => m.id === msgId);
+    const clientId = target?.payload?.clientId;
+    const sessionId = target?.payload?.sessionId;
+    const programmeId = target?.payload?.programmeId;
+    if (!clientId || !sessionId) return;
+    try {
+      await fetch(`/api/clients/${clientId}/session-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ sessionId, programmeId, rating }),
+      });
+    } catch (err) {
+      // Non-fatal: we keep the chip locked because the user already expressed their pick.
+      // A retry surface can be added later if we see meaningful drop-off in writes.
+      console.warn("[chat] submitFeedback failed:", err);
+    }
+  }, [messages]);
+
   const value = useMemo<ChatContextValue>(() => ({
     messages,
     loading,
@@ -171,9 +231,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     clear,
     chipStateByMsg,
     setChipState,
+    injectBubbles,
+    submitFeedback,
     draft,
     setDraft,
-  }), [messages, loading, ask, clear, chipStateByMsg, setChipState, draft]);
+  }), [messages, loading, ask, clear, chipStateByMsg, setChipState, injectBubbles, submitFeedback, draft]);
 
   return <ChatCtx.Provider value={value}>{children}</ChatCtx.Provider>;
 }

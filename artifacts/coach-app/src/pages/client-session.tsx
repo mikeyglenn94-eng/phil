@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
-  ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
+  ArrowLeft, Loader2, CheckCircle2, Clock, Repeat, Zap, Flag,
   Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2, MoreVertical, Mail,
-  Pencil, ChevronDown, StickyNote,
+  Pencil, ChevronDown, StickyNote, CloudOff, CloudUpload,
 } from "lucide-react";
+import { autosaveSession, subscribeAutosaveState, initAutosaveListener, type AutosaveState } from "@/lib/autosave";
+import { FinishSessionSheet, type FinishSheetExercise } from "@/components/finish-session-sheet";
+import { useChat } from "@/contexts/chat-context";
 import {
   WorkoutPreviewEditorCard,
   type EditableSession,
@@ -57,7 +60,7 @@ import {
   findBestMatch,
 } from "@/lib/exercise-matching";
 
-interface SetLog { weight: number | null; reps: number | null; }
+interface SetLog { weight: number | null; reps: number | null; rpe?: number | null; }
 type LogState = Record<string, SetLog[]>;
 type DistUnit = "km" | "m" | "mi" | "time" | "yards";
 
@@ -538,6 +541,49 @@ export default function ClientSession() {
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Autosave chip state — driven by the central autosave subscription so it
+  // also reflects offline queueing initiated by other tabs/instances.
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>("saved");
+  const [queueDepth, setQueueDepth] = useState<number>(0);
+  useEffect(() => {
+    initAutosaveListener();
+    return subscribeAutosaveState((s, depth) => {
+      setAutosaveState(s);
+      setQueueDepth(depth);
+    });
+  }, []);
+
+  // ── Finish flow state ────────────────────────────────────────────
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [summarySubmitting, setSummarySubmitting] = useState(false);
+  const [summaryPbs, setSummaryPbs] = useState<number | null>(null);
+  // Pass per-call save options (e.g. mark completed) into handleSave without
+  // changing its public signature — keeps existing callers untouched.
+  const finishOptsRef = useRef<{ markCompleted: boolean }>({ markCompleted: false });
+  const { injectBubbles } = useChat();
+
+  // ── Session start timestamp ──────────────────────────────────────
+  // Stored in localStorage keyed by sessionId so it survives reloads. Only
+  // stamped on first user input — opening the page alone does not start the
+  // duration clock.
+  const sessionStartKey = sessionId ? `mg.sessionStart.${sessionId}` : null;
+  function markSessionStartedIfMissing() {
+    if (!sessionStartKey) return;
+    try {
+      if (!localStorage.getItem(sessionStartKey)) {
+        localStorage.setItem(sessionStartKey, String(Date.now()));
+      }
+    } catch { /* noop */ }
+  }
+  function readSessionStartedAt(): number | null {
+    if (!sessionStartKey) return null;
+    try {
+      const raw = localStorage.getItem(sessionStartKey);
+      const n = raw ? parseInt(raw, 10) : NaN;
+      return isFinite(n) ? n : null;
+    } catch { return null; }
+  }
+
   // ── Message Mikey sheet ──────────────────────────────────────────
   const [messageMikeyOpen, setMessageMikeyOpen] = useState(false);
   const [messageMikeyText, setMessageMikeyText] = useState("");
@@ -683,6 +729,7 @@ export default function ClientSession() {
       initial[ex.id] = Array.from({ length: count }, (_, i) => ({
         weight: ex.setWeights?.[i] ?? null,
         reps: ex.setReps?.[i] ?? null,
+        rpe: ex.setRpe?.[i] ?? null,
       }));
     }
     setLogs(initial);
@@ -1009,7 +1056,7 @@ export default function ClientSession() {
       // Init empty logs for each new exercise
       const newLogs: LogState = {};
       for (const ex of newExercises) {
-        newLogs[ex.id] = Array.from({ length: ex.sets || 0 }, () => ({ weight: null, reps: null }));
+        newLogs[ex.id] = Array.from({ length: ex.sets || 0 }, () => ({ weight: null, reps: null, rpe: null }));
       }
       setAddedExercises(prev => [...prev, ...newExercises]);
       setLogs(prev => ({ ...prev, ...newLogs }));
@@ -1043,7 +1090,7 @@ export default function ClientSession() {
     // Reset logs for this exercise since it's a different exercise
     setLogs(prev => {
       const setsCount = session?.exercises?.find((e: Exercise) => e.id === exId)?.sets || 0;
-      return { ...prev, [exId]: Array.from({ length: setsCount }, () => ({ weight: null, reps: null })) };
+      return { ...prev, [exId]: Array.from({ length: setsCount }, () => ({ weight: null, reps: null, rpe: null })) };
     });
     setSaved(false);
     scheduleClientAutosave();
@@ -1054,14 +1101,22 @@ export default function ClientSession() {
 
   const cancelSwap = () => { setSwappingExId(null); setSwapText(""); setSwapInterim(""); swapRecRef.current?.stop(); };
 
-  const handleFieldChange = (exId: string, setIdx: number, field: "weight" | "reps", raw: string) => {
+  const handleFieldChange = (exId: string, setIdx: number, field: "weight" | "reps" | "rpe", raw: string) => {
     const num = raw === "" ? null : parseFloat(raw);
-    const value = isNaN(num as number) ? null : num;
+    let value = isNaN(num as number) ? null : num;
+    // RPE is 1–10 only; clamp silently so a stray "11" doesn't write garbage.
+    if (field === "rpe" && value != null) {
+      if (value < 1) value = 1;
+      if (value > 10) value = 10;
+    }
     setLogs(prev => {
       const current = [...(prev[exId] || [])];
       current[setIdx] = { ...current[setIdx], [field]: value };
       return { ...prev, [exId]: current };
     });
+    // First user input — stamp the session start time so the Finish sheet's
+    // duration readout is accurate even if the page was opened earlier.
+    markSessionStartedIfMissing();
     // If the user clears either field of set 1, allow the Autofill chip to re-appear
     // once they've filled set 1 again (per spec).
     if (setIdx === 0 && value == null && autofillCompletedFor.has(exId)) {
@@ -1175,13 +1230,13 @@ export default function ClientSession() {
   // Keep ref always pointing to latest handleSave (so debounced timers have fresh state)
   const scheduleClientAutosave = () => {
     if (autosaveTimerRef_cs.current) clearTimeout(autosaveTimerRef_cs.current);
-    autosaveTimerRef_cs.current = setTimeout(() => { handleSaveRef.current?.(true); }, 800);
+    autosaveTimerRef_cs.current = setTimeout(() => { handleSaveRef.current?.(true); }, 400);
   };
 
   const addSetToExercise = (exId: string, currentSets: number) => {
     const newCount = currentSets + 1;
     setSetCountOverrides(prev => ({ ...prev, [exId]: newCount }));
-    setLogs(prev => ({ ...prev, [exId]: [...(prev[exId] || []), { weight: null, reps: null }] }));
+    setLogs(prev => ({ ...prev, [exId]: [...(prev[exId] || []), { weight: null, reps: null, rpe: null }] }));
     setSaved(false);
     scheduleClientAutosave();
   };
@@ -1292,6 +1347,7 @@ export default function ClientSession() {
             sets: setCountOverrides[ex.id] ?? ex.sets,
             setWeights: (logs[ex.id] || []).map(l => l.weight),
             setReps: (logs[ex.id] || []).map(l => l.reps),
+            setRpe: (logs[ex.id] || []).map(l => l.rpe ?? null),
             clientComment: comments[ex.id] || null,
           }));
         const extraExercises = addedExercises
@@ -1301,27 +1357,37 @@ export default function ClientSession() {
             sets: setCountOverrides[ex.id] ?? ex.sets,
             setWeights: (logs[ex.id] || []).map(l => l.weight),
             setReps: (logs[ex.id] || []).map(l => l.reps),
+            setRpe: (logs[ex.id] || []).map(l => l.rpe ?? null),
             clientComment: comments[ex.id] || null,
           }));
-        return { ...s, exercises: [...originalExercises, ...extraExercises] };
+        const baseSession = { ...s, exercises: [...originalExercises, ...extraExercises] };
+        return finishOptsRef.current.markCompleted ? { ...baseSession, completed: true } : baseSession;
       });
       const cts = ctsDataRef.current;
+      // Route every save through autosaveSession so a fetch failure (offline,
+      // flaky wifi mid-set) is captured to IndexedDB and replayed on reconnect.
       if (cts) {
-        // CTS path: save to client_team_sessions table
         const updatedSession = updatedSessions.find((s: Session) => s.id === sessionId) ?? updatedSessions[0];
-        await fetch(`/api/client-team-sessions/${cts.id}`, {
+        const state = await autosaveSession({
+          url: `/api/client-team-sessions/${cts.id}`,
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionData: updatedSession }),
+          body: { sessionData: updatedSession },
         });
-        queryClient.invalidateQueries({ queryKey: ["client-team-sessions-for-client", cts.clientId] });
-        queryClient.invalidateQueries({ queryKey: ["client-analytics", cts.clientId] });
+        if (state === "saved") {
+          queryClient.invalidateQueries({ queryKey: ["client-team-sessions-for-client", cts.clientId] });
+          queryClient.invalidateQueries({ queryKey: ["client-analytics", cts.clientId] });
+        }
       } else {
-        await updateMutation.mutateAsync({ id: programmeId, data: { sessions: updatedSessions } });
-        queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
-        // Also refresh dashboard analytics so it reflects the newly logged data
-        if (effectiveProgramme?.clientId) {
-          queryClient.invalidateQueries({ queryKey: ["client-analytics", effectiveProgramme.clientId] });
+        const state = await autosaveSession({
+          url: `/api/programmes/${programmeId}`,
+          method: "PUT",
+          body: { sessions: updatedSessions },
+        });
+        if (state === "saved") {
+          queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
+          if (effectiveProgramme?.clientId) {
+            queryClient.invalidateQueries({ queryKey: ["client-analytics", effectiveProgramme.clientId] });
+          }
         }
       }
       // Persist notes to client_notes table (fire-and-forget — doesn't block save)
@@ -1512,6 +1578,97 @@ export default function ClientSession() {
     }
   }
 
+  // ── Finish flow handlers ─────────────────────────────────────────
+  function buildFinishExercises(): FinishSheetExercise[] {
+    const all = [...(session?.exercises ?? []), ...addedExercises];
+    return all
+      .filter(ex => !deletedExIds.has(ex.id))
+      .map(ex => {
+        const setLogs = logs[ex.id] || [];
+        return {
+          name: nameOverrides[ex.id] || ex.name,
+          sets: setLogs
+            .filter(l => l.weight != null || l.reps != null || l.rpe != null)
+            .map(l => ({ weight: l.weight, reps: l.reps, rpe: l.rpe ?? null })),
+        };
+      });
+  }
+  function openFinishSheet() {
+    setSummaryPbs(null);
+    setFinishOpen(true);
+  }
+  async function handleFinish() {
+    if (!session || !sessionId) return;
+    setSummarySubmitting(true);
+    // Always-reset finish flag so a crash mid-save doesn't poison subsequent
+    // autosaves with a stale completed=true. Try/finally guarantees reset.
+    finishOptsRef.current = { markCompleted: true };
+    try {
+      // 1) Persist `completed: true` via the existing save path so we keep one
+      //    source of truth. finishOptsRef is read inside handleSave.
+      await handleSaveRef.current?.(true);
+
+      // 2) Ask the API for Phil's commentary + PB tally. We pass the raw set
+      //    payload — the server does the Epley math against client_one_rms.
+      const _clientId = ctsDataRef.current?.clientId ?? effectiveProgramme?.clientId;
+      if (!_clientId) {
+        toast({ title: "Missing client context", variant: "destructive" });
+        return;
+      }
+      const startedAt = readSessionStartedAt();
+      const durationSec = startedAt ? Math.max(1, Math.round((Date.now() - startedAt) / 1000)) : 0;
+      const payload = {
+        sessionId,
+        sessionName: session.name || "Workout",
+        durationSec,
+        programmeId: effectiveProgramme?.id ?? null,
+        exercises: buildFinishExercises(),
+      };
+      const tok = localStorage.getItem("axis_auth_token");
+      const res = await fetch(`/api/clients/${_clientId}/session-summary`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`session-summary ${res.status}`);
+      const data = await res.json() as {
+        summary?: { pbsHit?: number };
+        bubbles: {
+          kind: "text" | "feedback-prompt";
+          content: string;
+          quickReplies?: { label: string; value: string }[];
+          payload?: { sessionId?: string; clientId?: number; programmeId?: number };
+        }[];
+      };
+      setSummaryPbs(typeof data.summary?.pbsHit === "number" ? data.summary.pbsHit : null);
+
+      // 3) Inject Phil's bubbles into the chat thread, then navigate.
+      //    The server already attaches payload; we just pass through verbatim.
+      injectBubbles(
+        (data.bubbles || []).map(b => ({
+          kind: b.kind,
+          content: b.content,
+          quickReplies: b.quickReplies,
+          payload: b.payload ?? { sessionId, clientId: _clientId, programmeId: effectiveProgramme?.id ?? undefined },
+        }))
+      );
+
+      // 4) Clear the session-start stamp so reopening starts a fresh clock.
+      if (sessionStartKey) { try { localStorage.removeItem(sessionStartKey); } catch { /* noop */ } }
+      setFinishOpen(false);
+      setLocation("/chat");
+    } catch (e) {
+      console.error("[finish-session] failed", e);
+      toast({ title: "Couldn't finish session — try again", variant: "destructive" });
+    } finally {
+      finishOptsRef.current = { markCompleted: false };
+      setSummarySubmitting(false);
+    }
+  }
+
   const safeDate = session.date || format(new Date(), "yyyy-MM-dd");
   const dateLabel = format(parseISO(safeDate), "EEEE, d MMMM yyyy");
   const totalSets = (session.exercises || []).reduce((acc, ex) => acc + (ex.sets || 0), 0);
@@ -1633,13 +1790,36 @@ export default function ClientSession() {
                 >
                   <Pencil className="w-4 h-4" />
                 </Button>
-                <Button
-                  onClick={handleSave} disabled={isSaving}
-                  className={`rounded-xl px-5 gap-2 ${saved ? "bg-green-600 hover:bg-green-700" : ""}`}
+                {/* Autosave status chip — replaces the old "Save" button.
+                    Compact pill so it sits comfortably with Finish + the kebab. */}
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={[
+                    "inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-xs font-medium border select-none",
+                    autosaveState === "saving"
+                      ? "bg-muted text-muted-foreground border-border"
+                      : autosaveState === "queued"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-green-50 text-green-700 border-green-200",
+                  ].join(" ")}
+                  title={autosaveState === "queued" ? `${queueDepth} change${queueDepth === 1 ? "" : "s"} waiting to sync` : undefined}
                 >
-                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                  {saved ? "Saved" : "Save"}
-                </Button>
+                  {autosaveState === "saving" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {autosaveState === "queued" && <CloudOff className="w-3.5 h-3.5" />}
+                  {autosaveState === "saved" && <CloudUpload className="w-3.5 h-3.5" />}
+                  {autosaveState === "saving" ? "Saving…" : autosaveState === "queued" ? "Offline, queued" : "Saved"}
+                </div>
+                {loggedSets >= 1 && (
+                  <Button
+                    onClick={openFinishSheet}
+                    className="rounded-xl px-4 gap-2 bg-primary"
+                    aria-label="Finish session"
+                  >
+                    <Flag className="w-4 h-4" />
+                    Finish
+                  </Button>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -2536,7 +2716,8 @@ export default function ClientSession() {
                   </>
                 ) : (
                   <>
-                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-2 mb-1">
+                    {/* 4-col grid: Set | Weight | Reps | RPE — narrow RPE column to keep the row compact */}
+                    <div className="grid grid-cols-[3rem_1fr_1fr_3.25rem] gap-2 px-2 mb-1">
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Set</span>
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">
                         {isBw ? "Load" : "Weight (kg)"}
@@ -2549,6 +2730,7 @@ export default function ClientSession() {
                           <span className="block text-[10px] text-primary/60 font-semibold normal-case tracking-normal -mt-0.5">target: {safeReps(ex.reps)}</span>
                         ) : null}
                       </div>
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">RPE</span>
                     </div>
                     {/* Autofill chip visibility: set 1 is "filled enough" (BW: reps; weighted: weight+reps);
                         chip stays gone after one use until set 1 is cleared. We always wrap set 1 in the
@@ -2610,6 +2792,15 @@ export default function ClientSession() {
                                     </span>
                                   )}
                                 </div>
+                                {/* RPE column — optional 1–10 self-report. Narrow input keeps the row mobile-friendly. */}
+                                <Input
+                                  type="number" inputMode="numeric" step="1" min="1" max="10"
+                                  placeholder={perSetRpeTarget ? String(perSetRpeTarget) : "—"}
+                                  value={log.rpe ?? ""}
+                                  aria-label={`Set ${setIdx + 1} RPE (1–10)`}
+                                  onChange={e => handleFieldChange(ex.id, setIdx, "rpe", e.target.value)}
+                                  className={`min-h-11 h-11 px-1 text-center text-sm font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${log.rpe != null ? "text-primary" : "text-muted-foreground"}`}
+                                />
                               </div>
                             );
                             if (setIdx === 0 && reserveChipSpace) {
@@ -2759,7 +2950,7 @@ export default function ClientSession() {
                   <p className="text-xs text-muted-foreground italic text-center py-2">No sets defined</p>
                 ) : (
                   <>
-                    <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-2 mb-1">
+                    <div className="grid grid-cols-[3rem_1fr_1fr_3.25rem] gap-2 px-2 mb-1">
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Set</span>
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Weight (kg)</span>
                       <div className="text-center">
@@ -2770,9 +2961,10 @@ export default function ClientSession() {
                           </span>
                         )}
                       </div>
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">RPE</span>
                     </div>
                     {Array.from({ length: setsCount }, (_, setIdx) => {
-                      const log = exLogs[setIdx] || { weight: null, reps: null };
+                      const log = exLogs[setIdx] || { weight: null, reps: null, rpe: null };
                       const isDone = log.weight !== null || log.reps !== null;
                       return (
                         <div key={setIdx} className={`set-row transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
@@ -2792,6 +2984,14 @@ export default function ClientSession() {
                             value={log.reps ?? ""}
                             onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
                             className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
+                          />
+                          <Input
+                            type="number" inputMode="numeric" step="1" min="1" max="10"
+                            placeholder="—"
+                            value={log.rpe ?? ""}
+                            aria-label={`Set ${setIdx + 1} RPE (1–10)`}
+                            onChange={e => handleFieldChange(ex.id, setIdx, "rpe", e.target.value)}
+                            className={`min-h-11 h-11 px-1 text-center text-sm font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${log.rpe != null ? "text-primary" : "text-muted-foreground"}`}
                           />
                         </div>
                       );
@@ -3282,6 +3482,20 @@ export default function ClientSession() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <FinishSessionSheet
+        open={finishOpen}
+        onOpenChange={setFinishOpen}
+        sessionName={session.name || "Workout"}
+        sessionStartedAt={readSessionStartedAt()}
+        programmedSets={totalSets}
+        loggedSets={loggedSets}
+        exercises={buildFinishExercises()}
+        pbsHit={summaryPbs}
+        submitting={summarySubmitting}
+        onFinish={() => void handleFinish()}
+        onKeepLogging={() => setFinishOpen(false)}
+      />
     </div>
   );
 }

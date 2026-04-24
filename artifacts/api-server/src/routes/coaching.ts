@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { openai } from "@workspace/integrations-openai-ai-server";
-import { db, clientGoalsTable, clientBaselinesTable, programmesTable, clientsTable } from "@workspace/db";
+import { db, clientGoalsTable, clientBaselinesTable, programmesTable, clientsTable, clientOneRMsTable, sessionFeedbackTable } from "@workspace/db";
 import { randomUUID } from "crypto";
 import { format, addDays, parseISO } from "date-fns";
 import { logApiCost, logPhilInteraction, detectPhilInteractionType } from "../lib/log-api-cost";
@@ -91,6 +91,255 @@ router.post("/clients/:clientId/coach-message", async (req, res): Promise<void> 
     return;
   }
   res.json({ ok: true });
+});
+
+// ── POST /clients/:clientId/session-feedback ─────────────────────
+// Persist a Smashed/Clean/Grim chip pick (and optional notes / voice URL)
+// against a finished session. Mounted under /api by app.ts.
+router.post("/clients/:clientId/session-feedback", async (req, res): Promise<void> => {
+  extractAuth(req);
+  if (!req.auth) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId) || clientId <= 0) {
+    res.status(400).json({ error: "invalid clientId" });
+    return;
+  }
+  const isStaff = req.auth.roles.some(r => r === "coach" || r === "admin");
+  if (!isStaff && req.auth.clientId !== clientId) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+
+  const { sessionId, programmeId, rating, notes, voiceNoteUrl } = req.body as {
+    sessionId?: string;
+    programmeId?: number | null;
+    rating?: "smashed" | "clean" | "grim";
+    notes?: string | null;
+    voiceNoteUrl?: string | null;
+  };
+  if (!sessionId || typeof sessionId !== "string") {
+    res.status(400).json({ error: "sessionId is required" });
+    return;
+  }
+  if (rating !== "smashed" && rating !== "clean" && rating !== "grim") {
+    res.status(400).json({ error: "rating must be smashed | clean | grim" });
+    return;
+  }
+
+  try {
+    // Idempotent: if the athlete double-taps a chip or the request is retried,
+    // upsert keeps a single canonical row per (client, session) pair.
+    const [row] = await db.insert(sessionFeedbackTable).values({
+      clientId,
+      sessionId: sessionId.slice(0, 200),
+      programmeId: typeof programmeId === "number" ? programmeId : null,
+      rating,
+      notes: typeof notes === "string" ? notes.slice(0, 4000) : null,
+      voiceNoteUrl: typeof voiceNoteUrl === "string" ? voiceNoteUrl.slice(0, 1000) : null,
+    }).onConflictDoUpdate({
+      target: [sessionFeedbackTable.clientId, sessionFeedbackTable.sessionId],
+      set: {
+        rating,
+        notes: typeof notes === "string" ? notes.slice(0, 4000) : null,
+        voiceNoteUrl: typeof voiceNoteUrl === "string" ? voiceNoteUrl.slice(0, 1000) : null,
+        programmeId: typeof programmeId === "number" ? programmeId : null,
+      },
+    }).returning({ id: sessionFeedbackTable.id });
+    res.json({ ok: true, id: row?.id });
+  } catch (err) {
+    console.error("[session-feedback] insert failed:", err);
+    res.status(500).json({ error: "failed_to_save_feedback" });
+  }
+});
+
+// ── POST /clients/:clientId/session-summary ──────────────────────
+// Build the two post-Finish bubbles: a short Phil commentary (LLM) + a
+// feedback prompt with chips and a voice-note affordance. The handler also
+// tallies PBs hit by comparing each working set's Epley est-1RM against the
+// athlete's stored 1RM history.
+
+type WorkingSet = { weight: number | null; reps: number | null; rpe?: number | null };
+type ExerciseSummary = { name: string; sets: WorkingSet[] };
+
+function epley1RM(weight: number, reps: number): number {
+  if (!weight || !reps) return 0;
+  return weight * (1 + reps / 30);
+}
+
+router.post("/clients/:clientId/session-summary", async (req, res): Promise<void> => {
+  extractAuth(req);
+  if (!req.auth) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  const clientId = parseInt(req.params.clientId, 10);
+  if (isNaN(clientId) || clientId <= 0) {
+    res.status(400).json({ error: "invalid clientId" });
+    return;
+  }
+  const isStaff = req.auth.roles.some(r => r === "coach" || r === "admin");
+  if (!isStaff && req.auth.clientId !== clientId) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+
+  const {
+    sessionId,
+    sessionName,
+    durationSec,
+    programmeId,
+    exercises,
+  } = req.body as {
+    sessionId?: string;
+    sessionName?: string;
+    durationSec?: number;
+    programmeId?: number | null;
+    exercises?: ExerciseSummary[];
+  };
+
+  if (!sessionId) {
+    res.status(400).json({ error: "sessionId is required" });
+    return;
+  }
+  const safeExercises: ExerciseSummary[] = Array.isArray(exercises)
+    ? exercises.slice(0, 50).map(ex => ({
+        name: typeof ex?.name === "string" ? ex.name.slice(0, 120) : "Exercise",
+        sets: Array.isArray(ex?.sets)
+          ? ex.sets.slice(0, 20).map(s => ({
+              weight: typeof s?.weight === "number" ? s.weight : null,
+              reps: typeof s?.reps === "number" ? s.reps : null,
+              rpe: typeof s?.rpe === "number" ? s.rpe : null,
+            }))
+          : [],
+      }))
+    : [];
+
+  // Tally totals client-side already, but recompute server-side to trust the numbers.
+  let totalVolume = 0;
+  let loggedSets = 0;
+  const rpeValues: number[] = [];
+  for (const ex of safeExercises) {
+    for (const s of ex.sets) {
+      if (s.weight != null && s.reps != null) {
+        totalVolume += s.weight * s.reps;
+        loggedSets += 1;
+      }
+      if (typeof s.rpe === "number" && s.rpe > 0) rpeValues.push(s.rpe);
+    }
+  }
+  const avgRpe = rpeValues.length ? rpeValues.reduce((a, b) => a + b, 0) / rpeValues.length : null;
+
+  // PB tally: for each lift name in this session, find the athlete's best stored 1RM
+  // and check whether any working set's Epley estimate exceeds it.
+  let pbsHit = 0;
+  try {
+    const oneRms = await db
+      .select()
+      .from(clientOneRMsTable)
+      .where(eq(clientOneRMsTable.clientId, clientId));
+    const bestByName = new Map<string, number>();
+    for (const r of oneRms) {
+      const key = r.exerciseName.trim().toLowerCase();
+      const w = parseFloat(String(r.weightKg));
+      if (!isFinite(w)) continue;
+      const prior = bestByName.get(key) ?? 0;
+      if (w > prior) bestByName.set(key, w);
+    }
+    for (const ex of safeExercises) {
+      const key = ex.name.trim().toLowerCase();
+      const baseline = bestByName.get(key);
+      if (baseline == null) continue;
+      for (const s of ex.sets) {
+        if (s.weight == null || s.reps == null) continue;
+        if (epley1RM(s.weight, s.reps) > baseline) {
+          pbsHit += 1;
+          break; // count one PB per lift, not per set
+        }
+      }
+    }
+  } catch (err) {
+    // PB enrichment is best-effort — we still want to send the bubbles.
+    console.warn("[session-summary] 1RM lookup failed:", err);
+  }
+
+  // Build a tight summary for the model. Trim aggressively — Phil is concise.
+  const minutes = Math.round((durationSec ?? 0) / 60);
+  const summaryLines: string[] = [
+    sessionName ? `Session: ${sessionName}` : `Session: workout`,
+    `Sets logged: ${loggedSets}`,
+    `Total volume: ${Math.round(totalVolume)} kg`,
+    `PBs hit: ${pbsHit}`,
+    avgRpe != null ? `Avg RPE: ${avgRpe.toFixed(1)}` : "Avg RPE: not logged",
+    minutes > 0 ? `Duration: ${minutes} min` : "",
+  ].filter(Boolean);
+
+  const systemPrompt = `You are Phil, a no-nonsense strength coach.
+
+Persona rules:
+- 12 words max. One or two short sentences only.
+- Direct, observant, never hype. No flattery.
+- Never say "easy". Never use em dashes (use a comma or full stop).
+- React to what actually happened in the data: volume, PBs, RPE, sets.
+- If PBs were hit, acknowledge them plainly. If RPE was high, note it.
+- Plain English. No emojis. No coach cliches.`;
+
+  const userPrompt = `Post-session data:\n${summaryLines.join("\n")}\n\nGive your one-line take.`;
+
+  let commentary = "Logged. Onto the next one.";
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 80,
+      temperature: 0.4,
+    });
+    void logApiCost({ userId: req.auth?.userId, endpoint: "session-summary", model: "gpt-4o-mini", usage: completion.usage });
+    const raw = completion.choices[0]?.message?.content?.trim();
+    if (raw) {
+      // Strip em dashes defensively in case the model slips.
+      let cleaned = raw.replace(/[—–]/g, ",").trim();
+      // Phil voice rule: never use the word "easy" in user-facing copy. Swap to "smooth".
+      cleaned = cleaned.replace(/\beasy\b/gi, (m) => (m[0] === m[0].toUpperCase() ? "Smooth" : "smooth"));
+      commentary = cleaned;
+    }
+  } catch (err) {
+    console.warn("[session-summary] LLM error, falling back:", err);
+  }
+
+  res.json({
+    summary: {
+      sessionId,
+      sessionName: sessionName ?? null,
+      durationSec: durationSec ?? null,
+      loggedSets,
+      totalVolume: Math.round(totalVolume),
+      pbsHit,
+      avgRpe,
+    },
+    bubbles: [
+      {
+        kind: "text" as const,
+        content: commentary,
+        payload: { sessionId, clientId, programmeId: programmeId ?? undefined },
+      },
+      {
+        kind: "feedback-prompt" as const,
+        content: "How'd it feel?",
+        quickReplies: [
+          { label: "Smashed", value: "smashed" },
+          { label: "Clean", value: "clean" },
+          { label: "Grim", value: "grim" },
+        ],
+        payload: { sessionId, clientId, programmeId: programmeId ?? undefined },
+      },
+    ],
+  });
 });
 
 // ── POST /api/clients/:clientId/coaching ──────────────────────────

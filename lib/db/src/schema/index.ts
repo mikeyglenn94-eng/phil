@@ -30,3 +30,4 @@ export * from "./client-notes";
 export * from "./admin-analytics";
 export * from "./conversations";
 export * from "./messages";
+export * from "./session-feedback";
