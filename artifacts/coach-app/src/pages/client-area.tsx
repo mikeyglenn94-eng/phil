@@ -23,7 +23,15 @@ import {
 import type { NutritionEntry, Programme, Session } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import DashboardTab, { type AnalyticsData } from "./dashboard-tab";
-import { QuickReplyChips, type QuickReply } from "@/components/chat/quick-reply-chips";
+import { type QuickReply } from "@/components/chat/quick-reply-chips";
+import {
+  BubbleRenderer,
+  type BubbleKind,
+  type BubblePayload,
+  type BubbleState,
+  type QuickLogResult,
+  type SessionCardPayload,
+} from "@/components/chat/bubbles";
 import { useToast } from "@/hooks/use-toast";
 import {
   WorkoutPreviewEditorCard,
@@ -873,6 +881,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     quickReplies?: QuickReply[];
     /** Defaults true. When false, the input is hidden — chips are the only way to reply. */
     allowTyping?: boolean;
+    /** Bubble kind. Defaults to "text" — backward-compatible with W1 messages. */
+    kind?: BubbleKind;
+    /** Bubble-specific data. Shape depends on `kind`. Ignored for kind === "text". */
+    payload?: BubblePayload;
     action?: {
       type: "save_session";
       session: any;
@@ -893,12 +905,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const philInputRef = useRef<HTMLInputElement>(null);
   const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
 
-  // Chip state per Phil message:
-  // - selected: the chip value the user picked (locks the chip group, only that chip stays highlighted)
-  // - promoted: user chose to type instead (or focused the input) — chips grey out but stay visible
-  // Both default to absent. State is keyed by msg.id so older chip groups stay in their final state
-  // even after newer messages arrive.
-  const [chipStateByMsg, setChipStateByMsg] = useState<Record<string, { selected?: string; promoted?: boolean }>>({});
+  // Per-Phil-message bubble state. Shape covers all bubble kinds:
+  // - selected: chip value picked (text + plan-preview chips) — locks the chip group
+  // - promoted: user chose to type instead — chips grey out but stay visible
+  // - rpe: pill picked on an RPE bubble — locks the bubble
+  // - log: { weight, reps, ... } submitted on a quick-log bubble — locks the bubble
+  // All fields default to absent. Keyed by msg.id so older bubbles stay in their final state.
+  const [chipStateByMsg, setChipStateByMsg] = useState<Record<string, BubbleState>>({});
 
   // ── Injury flow state ─────────────────────────────────────────────────────
   interface InjuryFlowState { phase: "severity" | "choice"; context: Record<string, any>; }
@@ -2144,16 +2157,20 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     }
   };
 
-  // Find the most recent Phil message that has unanswered, un-promoted chips.
-  // This is the chip group that should drive input fading + focus-promotion behaviour.
+  // Find the most recent Phil message that's still awaiting a chip-style reply.
+  // Drives input fading + focus-promotion behaviour. Covers both the W1 text+chips
+  // pattern and the W4.1 plan-preview bubble (whose chips behave the same way).
+  // Quick-log, RPE, and session-card bubbles never block the input — typing always
+  // sends the message through the normal path, regardless of those bubbles.
   const activeChipMsgId = (() => {
     for (let i = philMessages.length - 1; i >= 0; i--) {
       const m = philMessages[i];
-      if (m.sender !== "phil" || !m.quickReplies?.length) continue;
+      if (m.sender !== "phil") continue;
+      const hasChips = !!m.quickReplies?.length || m.kind === "plan-preview";
+      if (!hasChips) continue;
       const st = chipStateByMsg[m.id];
       if (!st?.selected && !st?.promoted) return m.id;
-      // We found the latest Phil message with chips, but it's already settled.
-      // No older chip group should be considered "active" — return null.
+      // Latest chip-bearing Phil message is already settled — older groups stay quiet.
       return null;
     }
     return null;
@@ -2173,10 +2190,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const handleChipSelect = (msgId: string, value: string) => {
     // Lock the chip group to this selection (visual + input affordance change).
     setChipStateByMsg(prev => ({ ...prev, [msgId]: { ...prev[msgId], selected: value } }));
-    // Pipe the chip value into the same submit path typing uses.
-    setPhilPanelInput(value);
-    // Defer one tick so React commits the input value before submit reads it.
-    setTimeout(() => { void handlePhilPanelSubmit(); }, 0);
+    // Submit the chip value directly — bypasses the input so any draft is preserved.
+    void handlePhilPanelSubmit(value);
   };
 
   const handleChipTypeInstead = (msgId: string) => {
@@ -2187,10 +2202,36 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setTimeout(() => { philInputRef.current?.focus(); }, 0);
   };
 
-  const handlePhilPanelSubmit = async () => {
-    const input = philPanelInput.trim();
+  // ── W4.1 typed-bubble handlers ──────────────────────────────────────────────
+  // Each handler locks the bubble visually and then pipes a plain-text representation
+  // through the existing chat submit path so Phil's next turn can acknowledge.
+  // Persistence to a session/set is the parent's responsibility — the bubble emits
+  // the structured result and any future wiring can hook in here without touching UI.
+
+  const handleQuickLogSubmit = (msgId: string, result: QuickLogResult) => {
+    setChipStateByMsg(prev => ({ ...prev, [msgId]: { ...prev[msgId], log: result } }));
+    const summary = `Logged ${result.weight}${result.unit} × ${result.reps} on ${result.exerciseName}`;
+    // Submit directly via override so the user's typed draft (if any) is preserved.
+    void handlePhilPanelSubmit(summary);
+  };
+
+  const handleRpeSelect = (msgId: string, rpe: number) => {
+    setChipStateByMsg(prev => ({ ...prev, [msgId]: { ...prev[msgId], rpe } }));
+    void handlePhilPanelSubmit(`RPE ${rpe}`);
+  };
+
+  const handleSessionCardOpen = (payload: SessionCardPayload) => {
+    const programmeId = payload.programmeId ?? "0";
+    setLocation(`/client/programmes/${programmeId}/sessions/${payload.sessionId}`);
+  };
+
+  // overrideText lets chip/bubble handlers submit without touching the input field —
+  // so any half-typed draft the user has in the input is preserved.
+  const handlePhilPanelSubmit = async (overrideText?: string) => {
+    const fromInput = overrideText === undefined;
+    const input = (fromInput ? philPanelInput : overrideText).trim();
     if (!input) return;
-    setPhilPanelInput("");
+    if (fromInput) setPhilPanelInput("");
     setPhilExpanded(true);
     setPhilUnread(false);
 
@@ -4888,25 +4929,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 {philMessages.length === 0 && !cmdParsing && (
                   <p className="text-xs text-muted-foreground text-center mt-6">Ask Phil anything.</p>
                 )}
-                {philMessages.map(msg => (
-                  <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                    {msg.sender === "phil" && (
-                      <img src="/phil.png" alt="Phil" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
-                    )}
-                    <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
-                      {msg.text && <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>}
-                      {/* Quick-reply chips: tap-first answers for short-question Phil replies.
-                          Backward-compatible — only renders when the message includes quickReplies. */}
-                      {msg.sender === "phil" && msg.quickReplies && msg.quickReplies.length > 0 && (
-                        <QuickReplyChips
-                          replies={msg.quickReplies}
-                          selectedValue={chipStateByMsg[msg.id]?.selected ?? null}
-                          promoted={chipStateByMsg[msg.id]?.promoted}
-                          onSelect={(value) => handleChipSelect(msg.id, value)}
-                          onTypeInstead={() => handleChipTypeInstead(msg.id)}
-                        />
-                      )}
-                      {/* Build-this button when Phil has gathered enough plan context */}
+                {philMessages.map(msg => {
+                  // Action affordances rendered inside text bubbles. Only relevant for kind === "text"
+                  // (or undefined, which defaults to text). Specialised bubble kinds ignore these.
+                  const textActions = (
+                    <>
                       {msg.coachParseData?.hasEnough && (
                         <Button
                           size="sm"
@@ -4917,7 +4944,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                           Build this
                         </Button>
                       )}
-                      {/* Save a single generated session */}
                       {msg.action?.type === "save_session" && (
                         <Button
                           size="sm"
@@ -4929,7 +4955,6 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                           Save to calendar. {format(parseISO((msg.action as any).date), "EEE d MMM")}
                         </Button>
                       )}
-                      {/* WOD option picker */}
                       {msg.action?.type === "pick_wod" && (
                         <div className="mt-2 space-y-1.5">
                           {(msg.action as any).options.map((opt: any, i: number) => (
@@ -4947,9 +4972,27 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                           ))}
                         </div>
                       )}
+                    </>
+                  );
+
+                  return (
+                    <div key={msg.id} className={`flex gap-2 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                      {msg.sender === "phil" && (
+                        <img src="/phil.png" alt="Phil" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
+                      )}
+                      <BubbleRenderer
+                        message={msg}
+                        state={chipStateByMsg[msg.id]}
+                        onChipSelect={(value) => handleChipSelect(msg.id, value)}
+                        onChipTypeInstead={() => handleChipTypeInstead(msg.id)}
+                        onQuickLogSubmit={(result) => handleQuickLogSubmit(msg.id, result)}
+                        onRpeSelect={(rpe) => handleRpeSelect(msg.id, rpe)}
+                        onSessionCardOpen={(payload) => handleSessionCardOpen(payload)}
+                        textActions={textActions}
+                      />
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {cmdParsing && (
                   <div className="flex gap-2 justify-start">
                     <img src="/phil.png" alt="Phil" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />

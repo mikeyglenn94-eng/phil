@@ -1,0 +1,29 @@
+W4.1 (revised) — Typed bubbles for rich in-chat interactionsExtends the Wave 1 chip-first pattern with structurally distinct bubble types for content that can't be expressed as text-with-chips.Already handled by Wave 1, do not rebuild:
+
+Simple chip responses (post-session feedback, confirmations, state-of-self) are already emitted as text messages with quickReplies. Do not create separate FeedbackPromptBubble or ConfirmBubble components.
+New bubble types to build (these have custom layouts that chips can't express):
+PlanPreviewBubble — horizontally scrollable 7-day card strip. Each card: day name, session type chip, session title, 2-3 key exercises. Inline chip row on the bubble: "Tweak", "Build full block", "Not yet". The chips use the Wave 1 QuickReplyChips component for consistency, but the preview content above them is custom.
+
+QuickLogBubble — inline weight (number) and reps (number) inputs plus a "Log" button. Used when Phil asks for a quick in-chat log ("What did you hit on bench?"). On submit, persists to the associated session and Phil acknowledges.
+
+RpeBubble — the 5-pill emoji selector (😌 6 / 🙂 7 / 😐 8 / 😬 9 / 🫠 10) as a standalone bubble for ad-hoc asks in chat ("How did that last set feel?"). Distinct from set-inline RPE in the logger.
+
+SessionCardBubble — tappable card referencing a calendar session. Shows date, session type chip, title, "View session" affordance. Tap opens the session view.
+Schema extension (backward-compatible):Current message shape (Wave 1): { id, role, text, quickReplies? }Extend to: { id, role, kind, text?, quickReplies?, payload? }
+kind defaults to "text" when not specified (so existing messages keep rendering as text bubbles with optional chips)
+payload carries bubble-specific data (e.g., the 7-day plan preview for PlanPreviewBubble, the exercise/set context for QuickLogBubble, the session reference for SessionCardBubble)
+text remains the primary message copy, bubbles can display text above their custom content
+Rendering:Create a BubbleRenderer component that switches on message.kind:
+
+"text" (default) → existing text bubble with quickReplies if present
+"plan-preview" → PlanPreviewBubble
+"quick-log" → QuickLogBubble
+"rpe" → RpeBubble
+"session-card" → SessionCardBubble
+Put bubble components in artifacts/coach-app/src/components/chat/bubbles/.Backend changes:Update artifacts/api-server/src/routes/coaching.ts (no /api prefix in handler) to emit kind and payload when the intent warrants. Current behaviour (text + quickReplies) stays as the default for simple conversational turns. Only use specialised bubbles when the structured content adds real value over text + chips:
+
+Plan preview when Phil builds a Week 1 plan
+Quick log when Phil proactively asks for a set's numbers
+RPE when Phil asks specifically about perceived effort for an ad-hoc lift
+Session card when Phil references a specific calendar session
+Persona consistency:All bubbles respect Phil's voice: no em dashes, no "easy" in training copy, no corporate phrasing. Short lines. Bubble button labels use Phil's voice too: "Build full block" not "Generate program", "Tweak" not "Modify", "Not yet" not "Skip for now".Show the diff. Specifically confirm: (1) existing Wave 1 text+chip messages render unchanged, (2) the kind field defaults correctly so no migration is needed on old messages, (3) the coaching route only emits specialised bubbles for the four use cases above, not reflexively.

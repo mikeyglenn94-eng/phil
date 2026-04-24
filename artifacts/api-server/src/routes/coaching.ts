@@ -242,8 +242,8 @@ You can:
 - Answer general training and nutrition questions.
 - If asked to build a programme, adjust the calendar, or anything requiring the training calendar, respond conversationally first (e.g. "Let's go to your training calendar for that.") and return navigateTo: "training" in your JSON.
 
-Respond ONLY with a JSON object: { "reply": "...", "navigateTo": "training" | null, "quickReplies": [{ "label": "...", "value": "..." }] | null }
-Do not include navigateTo if no navigation is needed. Include quickReplies per the QUICK REPLIES section above.`;
+Respond ONLY with a JSON object: { "reply": "...", "navigateTo": "training" | null, "quickReplies": [...] | null, "kind": "text" | "plan-preview" | "quick-log" | "rpe" | "session-card" | null, "payload": {...} | null }
+Do not include navigateTo if no navigation is needed. Include quickReplies per the QUICK REPLIES section above. Include kind+payload per the TYPED BUBBLES section.`;
   } else if (currentTab === "nutrition") {
     const ctx = nutritionContext ? JSON.stringify(nutritionContext, null, 2) : "No nutrition data for today.";
     tabSection = `
@@ -258,15 +258,15 @@ You can:
 - Explain macros, calories, and targets.
 - If asked about training or calendar changes, respond conversationally first (e.g. "Let's go to your training calendar for that.") and return navigateTo: "training".
 
-Respond ONLY with a JSON object: { "reply": "...", "navigateTo": "training" | null, "action": { "type": "log_food", "description": "..." } | null, "quickReplies": [{ "label": "...", "value": "..." }] | null }
-Only include action if logging food. Only include navigateTo if navigating. Include quickReplies per the QUICK REPLIES section above.`;
+Respond ONLY with a JSON object: { "reply": "...", "navigateTo": "training" | null, "action": { "type": "log_food", "description": "..." } | null, "quickReplies": [...] | null, "kind": "text" | "plan-preview" | "quick-log" | "rpe" | "session-card" | null, "payload": {...} | null }
+Only include action if logging food. Only include navigateTo if navigating. Include quickReplies per the QUICK REPLIES section above. Include kind+payload per the TYPED BUBBLES section.`;
   } else {
     // Training tab or unspecified — standard Phil behaviour
     tabSection = `
 You are on the user's TRAINING tab. Handle training, scheduling, and programme questions as normal.
 
-Respond ONLY with a JSON object: { "reply": "...", "quickReplies": [{ "label": "...", "value": "..." }] | null }
-Include quickReplies per the QUICK REPLIES section above.`;
+Respond ONLY with a JSON object: { "reply": "...", "quickReplies": [...] | null, "kind": "text" | "plan-preview" | "quick-log" | "rpe" | "session-card" | null, "payload": {...} | null }
+Include quickReplies per the QUICK REPLIES section above. Include kind+payload per the TYPED BUBBLES section.`;
   }
 
   // ─ QUICK REPLIES (chip-first) ─────────────────────────────────────────────
@@ -316,6 +316,43 @@ Each chip object has:
 
 Keep chip labels under ~14 characters. Never include em dashes. Never include the word "Easy" in any chip label outside the internal effort scale.`;
 
+  // ─ TYPED BUBBLES (W4.1) ──────────────────────────────────────────────────
+  // Specialised bubble layouts for content that text + chips can't express.
+  // The frontend defaults kind to "text" — every existing reply still works.
+  // Only emit a non-text kind when the structured layout adds real value.
+  const typedBubblesSection = `
+TYPED BUBBLES (specialised layouts):
+
+DEFAULT to omitting kind+payload. Plain text + quickReplies handles 95% of turns.
+
+Only emit a non-text kind when the structured content adds real value over text + chips. The four kinds:
+
+1) "plan-preview" — when you have just outlined a Week 1 training plan and want the client to react.
+   payload: { "days": [ { "dayName": "Mon", "sessionType": "Strength", "title": "Lower body", "exercises": ["Squat 5x5", "RDL 3x8", "Walking lunge 3x10"] }, ... up to 7 days ] }
+   The bubble renders a horizontally scrollable card strip with three chips below: "Build full block", "Tweak", "Not yet". Use Phil's voice in the reply text above (short, direct).
+
+2) "quick-log" — when you proactively ask the client to log a single set's numbers.
+   payload: { "exerciseName": "Bench press", "setLabel": "Set 3", "unit": "kg" }
+   The bubble renders weight + reps inputs and a "Log" button. Use only when you genuinely want a number back. setLabel and unit are optional.
+
+3) "rpe" — when you ask specifically about perceived effort for a recent set or lift (ad-hoc, not the in-logger RPE).
+   payload: { "contextLabel": "Last set of bench" }
+   The bubble renders the 5-pill emoji selector (6–10). Use only when you want an RPE number. contextLabel is optional.
+
+4) "session-card" — when you reference one specific session on the client's calendar.
+   payload: { "sessionId": "<id>", "programmeId": "<id>", "date": "2026-04-25", "sessionType": "Strength", "title": "Lower body session" }
+   The bubble renders a tappable card linking to that session.
+
+NEVER emit a typed bubble for:
+- Generic acknowledgements, summaries, or open questions.
+- Anything you can already express with text + quickReplies.
+- A plan you have not actually outlined yet.
+- A session whose id you do not know.
+
+When you emit kind+payload, your reply text stays SHORT (1-2 sentences) and sits above the bubble's structured content. The bubble's own buttons carry their own labels — do not repeat them in the reply text.
+
+Phil's voice in bubble copy: no em dashes, never "easy" outside the internal effort scale, short lines.`;
+
   const systemPrompt = `You are Phil, the lead coach at MG Coaching. You are direct, knowledgeable, and results-driven. You speak like a real coach: concise, slightly opinionated, practical. Never robotic or over-hyped.
 
 Keep replies SHORT (1-3 sentences max). Be warm but efficient.
@@ -329,6 +366,8 @@ Never use em dashes in any response. Use a full stop, a comma, or rewrite the se
 
 ${quickRepliesSection}
 
+${typedBubblesSection}
+
 ${tabSection}`;
 
   const msgs: { role: "user" | "assistant"; content: string }[] = [];
@@ -341,7 +380,9 @@ ${tabSection}`;
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "system", content: systemPrompt }, ...msgs],
-      max_tokens: 150,
+      // Bumped from 150 to give plan-preview payloads (7 days × 3 exercises) headroom.
+      // Plain text replies still come back short — Phil's voice keeps them concise.
+      max_tokens: 350,
       temperature: 0.6,
     });
 
@@ -400,7 +441,85 @@ ${tabSection}`;
       if (cleaned.length > 0) quickReplies = cleaned;
     }
 
-    res.json({ reply, navigateTo, action, quickReplies });
+    // ── Normalise W4.1 typed-bubble fields (kind + payload) ────────────────
+    // The frontend defaults missing/invalid kind to "text" — backward-compatible
+    // with W1 messages. We strip anything that does not match the documented schema
+    // for each kind so the bubble renderer never sees malformed data.
+    const VALID_KINDS = new Set(["text", "plan-preview", "quick-log", "rpe", "session-card"]);
+    const rawKind = (parsed as { kind?: unknown }).kind;
+    const rawPayload = (parsed as { payload?: unknown }).payload;
+    let kind: string | undefined;
+    let payload: Record<string, unknown> | undefined;
+
+    if (typeof rawKind === "string" && VALID_KINDS.has(rawKind) && rawKind !== "text") {
+      // Validate payload shape per kind. Drop the bubble entirely if the payload is
+      // missing or wrong-shaped — Phil's text reply still renders normally.
+      if (rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)) {
+        const p = rawPayload as Record<string, unknown>;
+
+        if (rawKind === "plan-preview") {
+          const days = Array.isArray(p.days) ? p.days : null;
+          if (days && days.length > 0) {
+            const cleanedDays = days
+              .map((d: unknown) => {
+                if (!d || typeof d !== "object") return null;
+                const dd = d as Record<string, unknown>;
+                const dayName = typeof dd.dayName === "string" ? dd.dayName.slice(0, 12) : "";
+                const sessionType = typeof dd.sessionType === "string" ? dd.sessionType.slice(0, 24) : "";
+                const title = typeof dd.title === "string" ? dd.title.slice(0, 60) : "";
+                const exercises = Array.isArray(dd.exercises)
+                  ? dd.exercises.filter((e): e is string => typeof e === "string").slice(0, 3).map(e => e.slice(0, 60))
+                  : [];
+                if (!dayName || !title) return null;
+                return { dayName, sessionType, title, exercises };
+              })
+              .filter((d): d is { dayName: string; sessionType: string; title: string; exercises: string[] } => d !== null)
+              .slice(0, 7);
+            if (cleanedDays.length > 0) {
+              kind = "plan-preview";
+              payload = { days: cleanedDays };
+            }
+          }
+        } else if (rawKind === "quick-log") {
+          const exerciseName = typeof p.exerciseName === "string" ? p.exerciseName.trim().slice(0, 60) : "";
+          if (exerciseName) {
+            kind = "quick-log";
+            payload = {
+              exerciseName,
+              ...(typeof p.setLabel === "string" && p.setLabel.trim() ? { setLabel: p.setLabel.trim().slice(0, 24) } : {}),
+              ...(p.unit === "kg" || p.unit === "lb" ? { unit: p.unit } : {}),
+              ...(typeof p.sessionId === "string" ? { sessionId: p.sessionId } : {}),
+              ...(typeof p.setId === "string" ? { setId: p.setId } : {}),
+            };
+          }
+        } else if (rawKind === "rpe") {
+          kind = "rpe";
+          payload = {
+            ...(typeof p.contextLabel === "string" && p.contextLabel.trim() ? { contextLabel: p.contextLabel.trim().slice(0, 60) } : {}),
+          };
+        } else if (rawKind === "session-card") {
+          const sessionId = typeof p.sessionId === "string" ? p.sessionId : "";
+          const date = typeof p.date === "string" ? p.date : "";
+          const title = typeof p.title === "string" ? p.title.trim().slice(0, 80) : "";
+          if (sessionId && date && title) {
+            kind = "session-card";
+            payload = {
+              sessionId,
+              date,
+              title,
+              sessionType: typeof p.sessionType === "string" ? p.sessionType.slice(0, 24) : "",
+              ...(typeof p.programmeId === "string" ? { programmeId: p.programmeId } : {}),
+            };
+          }
+        }
+      } else if (rawKind === "rpe") {
+        // RPE is the only kind whose payload is fully optional — accept with no payload.
+        kind = "rpe";
+        payload = {};
+      }
+    }
+
+    res.json({ reply, navigateTo, action, quickReplies, kind, payload });
   } catch (err) {
     console.error("[phil-chat] OpenAI error:", err);
     res.status(500).json({ error: "Failed to generate response" });
