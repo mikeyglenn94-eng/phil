@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation, Link, useSearch } from "wouter";
-import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, MapPin, Lock, Send, Eye, MoreVertical, EyeOff, RefreshCw, TrendingUp } from "lucide-react";
+import { ArrowLeft, Dumbbell, Utensils, Loader2, Mic, Square, Plus, Trash2, CalendarDays, ChevronRight, ChevronLeft, Calendar, KeyRound, Target, X, Brain, Zap, Sparkles, LogOut, Pencil, Check, Info, ChevronDown, ChevronUp, Camera, CheckSquare, MousePointer2, BookMarked, Globe, CalendarPlus, Copy, Clipboard, Undo2, Redo2, BarChart3, MapPin, Lock, Send, Eye, MoreVertical, MoreHorizontal, EyeOff, RefreshCw, TrendingUp, MessageSquare, Settings as SettingsIcon } from "lucide-react";
 import { useClientContext } from "@/contexts/client-context";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 
 type Tab = "dashboard" | "training" | "nutrition" | "irl";
 
@@ -350,6 +358,49 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       toast({ title: "Failed to reset password", variant: "destructive" });
     } finally {
       setResettingPassword(false);
+    }
+  }
+
+  // ── Message Mikey sheet (athlete → coach) ───────────────────────
+  const [messageMikeyOpen, setMessageMikeyOpen] = useState(false);
+  const [messageMikeyText, setMessageMikeyText] = useState("");
+  const [messageMikeySending, setMessageMikeySending] = useState(false);
+  async function handleSendMessageMikey() {
+    const text = messageMikeyText.trim();
+    if (!text || messageMikeySending) return;
+    if (!clientId) {
+      toast({ title: "Could not send", description: "Missing client info.", variant: "destructive" });
+      return;
+    }
+    setMessageMikeySending(true);
+    try {
+      const tok = localStorage.getItem("axis_auth_token");
+      const res = await fetch(`/api/clients/${clientId}/coach-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+        body: JSON.stringify({ message: text, context: null }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: string }));
+        const reason = body?.error;
+        if (reason === "email_not_configured") {
+          const subject = encodeURIComponent("Message from athlete");
+          const mailBody = encodeURIComponent(text);
+          window.location.href = `mailto:mikeyglenn94@gmail.com?subject=${subject}&body=${mailBody}`;
+          setMessageMikeyOpen(false);
+          setMessageMikeyText("");
+          return;
+        }
+        throw new Error(reason || `Server error ${res.status}`);
+      }
+      toast({ title: "Sent to Mikey", description: "Your message is on its way." });
+      setMessageMikeyOpen(false);
+      setMessageMikeyText("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast({ title: "Could not send", description: msg, variant: "destructive" });
+    } finally {
+      setMessageMikeySending(false);
     }
   }
 
@@ -3439,70 +3490,88 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header — hidden in team mode */}
-      {!isTeamMode && <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
-        <div className="flex items-center gap-3">
-          {mode === "coach" && (
+      {!isTeamMode && <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b">
+        {/* ── Title bar ── */}
+        {mode === "coach" && (
+          <div className="px-6 pt-4 flex items-center gap-3">
             <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setLocation("/clients")}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
-          )}
-          {mode === "client" && (
-            <Link href="/clients">
-              <div className="flex items-center mr-1 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" title="Coach dashboard">
-                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                  <span className="text-white font-black text-lg leading-none" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>M</span>
-                </div>
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
+                {client.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
               </div>
-            </Link>
-          )}
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
-              {client.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+              <h1 className="font-display font-bold text-lg truncate">{client.name}</h1>
             </div>
-            <h1 className="font-display font-bold text-lg truncate">{client.name}</h1>
-          </div>
-          {mode === "coach" && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleResetCredits}
-                disabled={resettingCredits}
-                className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-                title="Refresh client's monthly programme generation credits"
-              >
-                {resettingCredits ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                Credits
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleResetPassword}
-                disabled={resettingPassword}
-                className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-                title="Reset client's portal password"
-              >
-                {resettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
-                Reset PW
-              </Button>
-            </>
-          )}
-          {mode === "client" && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { logout(); clearClient(); setLocation("/"); }}
+              onClick={handleResetCredits}
+              disabled={resettingCredits}
               className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
-              title="Sign out"
+              title="Refresh client's monthly programme generation credits"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              Sign out
+              {resettingCredits ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              Credits
             </Button>
-          )}
-        </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleResetPassword}
+              disabled={resettingPassword}
+              className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1.5 text-xs h-8 px-2.5"
+              title="Reset client's portal password"
+            >
+              {resettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+              Reset PW
+            </Button>
+          </div>
+        )}
+        {mode === "client" && (
+          <div style={{ paddingTop: "env(safe-area-inset-top)" }}>
+            <div className="h-14 px-4 flex items-center justify-between">
+              <div
+                className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm"
+                title={client.name}
+              >
+                {client.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                    title="More"
+                  >
+                    <MoreHorizontal className="w-5 h-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem onClick={() => setMessageMikeyOpen(true)} className="gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Message Mikey
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setLocation("/profile")} className="gap-2">
+                    <SettingsIcon className="w-4 h-4" />
+                    Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => { logout(); clearClient(); setLocation("/"); }}
+                    className="gap-2 text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        )}
 
         {/* Tabs + Phil toggle */}
-        <div className="flex items-center gap-2 mt-4">
+        <div className="flex items-center gap-2 px-6 py-4">
           <div className="tabs flex-1">
             {([
               { id: "dashboard", label: "Dashboard", icon: <BarChart3 className="w-3.5 h-3.5" /> },
@@ -6543,6 +6612,48 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           </div>
         </div>
       )}
+
+      {/* ── Message Mikey sheet (athlete overflow → coach inbox) ── */}
+      <Sheet open={messageMikeyOpen} onOpenChange={(v) => { if (!messageMikeySending) setMessageMikeyOpen(v); }}>
+        <SheetContent side="bottom" className="rounded-t-2xl p-0 overflow-hidden max-h-[88vh] flex flex-col">
+          <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0 text-left">
+            <SheetTitle className="text-base font-semibold">Message Mikey</SheetTitle>
+            <SheetDescription className="text-sm text-muted-foreground">
+              Your feedback tunes Phil every week.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            <Textarea
+              value={messageMikeyText}
+              onChange={(e) => setMessageMikeyText(e.target.value)}
+              placeholder="What's on your mind?"
+              rows={6}
+              maxLength={4000}
+              disabled={messageMikeySending}
+              autoFocus
+              className="resize-none text-sm"
+            />
+          </div>
+          <div className="shrink-0 px-5 pb-6 pt-3 border-t bg-background flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setMessageMikeyOpen(false)}
+              disabled={messageMikeySending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleSendMessageMikey()}
+              disabled={!messageMikeyText.trim() || messageMikeySending}
+              className="gap-2"
+            >
+              {messageMikeySending
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+                : <><Send className="w-4 h-4" /> Send</>}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
