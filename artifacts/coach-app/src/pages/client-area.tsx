@@ -3587,8 +3587,25 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           </div>
         )}
 
-        {/* Top tab pills removed — bottom nav now owns Dashboard/Training/IRL switching.
-            Nutrition is merged into the Dashboard via a pinned strip. */}
+        {/* Top tab pills — Dashboard and Training only. The earlier Nutrition tab
+            was intentionally folded into the Dashboard (pinned macros strip +
+            inline expand) and must NOT be re-added here. */}
+        <div className="flex items-center gap-2 px-6 py-4">
+          <div className="tabs flex-1">
+            {([
+              { id: "dashboard" as Tab, label: "Dashboard", icon: <BarChart3 className="w-3.5 h-3.5" /> },
+              { id: "training" as Tab,  label: "Training",  icon: <Dumbbell className="w-3.5 h-3.5" /> },
+            ]).map(({ id, label, icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`tab gap-1.5${activeTab === id ? " active" : ""}`}
+              >
+                {icon}{label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>}
 
       {/* Dashboard + Nutrition (merged) — single scroll container.
@@ -4992,8 +5009,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         </div>
       )}
 
-      {/* ── Phil Chat Panel — global bottom drawer (all tabs) ────────────────── */}
-      {(
+      {/* Legacy bottom-pinned Phil drawer was removed. The chat now lives at /chat
+          and is launched from the AskPhilDock launcher pinned above the bottom edge. */}
+      {false && (
         <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${
           (activeTab === "training" || isTeamMode)
             ? (philOpen ? "h-[300px]" : "h-0")
