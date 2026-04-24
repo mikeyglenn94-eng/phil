@@ -23,6 +23,8 @@ import CoachDashboard from "./pages/coach-dashboard";
 import { AppSidebar } from "./components/app-sidebar";
 import { ClientProvider, useClientContext } from "./contexts/client-context";
 import { AuthProvider, useAuth } from "./contexts/auth-context";
+import { ChatProvider } from "./contexts/chat-context";
+import ChatPage from "./pages/chat";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -192,6 +194,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
+          <ChatProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Switch>
               {/* Public */}
@@ -216,6 +219,13 @@ function App() {
               <Route path="/client/programmes/:programmeId/sessions/:sessionId" component={ClientSession} />
 
               {/* Athlete portal */}
+              <Route path="/chat">
+                <RequireAuth roles={["athlete", "coach", "admin"]}>
+                  <ClientProvider>
+                    <ClientPortalWrapper><ChatPage /></ClientPortalWrapper>
+                  </ClientProvider>
+                </RequireAuth>
+              </Route>
               <Route path="/client/nutrition">
                 <RequireAuth roles={["athlete", "coach", "admin"]}>
                   <ClientProvider>
@@ -235,6 +245,7 @@ function App() {
               <Route path="*" component={CoachLayout} />
             </Switch>
           </WouterRouter>
+          </ChatProvider>
         </AuthProvider>
         <Toaster />
       </TooltipProvider>

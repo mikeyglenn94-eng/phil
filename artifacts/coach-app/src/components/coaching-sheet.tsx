@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Send, Sparkles, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { useChat } from "@/contexts/chat-context";
 import type { AnalyticsData } from "@/pages/dashboard-tab";
 
 // ── Context builder ───────────────────────────────────────────────
@@ -81,7 +82,6 @@ export function getSuggestedPrompts(
   const noSessions = !thisWeekData || thisWeekData.sessionCount === 0;
   const prompts: string[] = [];
 
-  // Score movement
   if (fitnessScore.change !== null && fitnessScore.change < 0) {
     prompts.push("Why did my Fitness Score drop?");
   } else if (fitnessScore.change !== null && fitnessScore.change > 0) {
@@ -90,34 +90,29 @@ export function getSuggestedPrompts(
     prompts.push("Why did my Fitness Score change?");
   }
 
-  // Very low data — guide the first step
   if (totalSessions < 4) {
     prompts.push("What should I log first?");
     prompts.push("How do I get my Fitness Score moving?");
     return prompts.slice(0, 5);
   }
 
-  // Adherence
   const { completed, planned } = adherence.thisWeek;
   if (planned > 0 && completed < planned) {
     prompts.push("Am I being consistent enough?");
   }
 
-  // No current-week sessions
   if (noSessions) {
     prompts.push("What should I focus on this week?");
   } else if (!adherence.bothModalities) {
     prompts.push("Should I add a run this week?");
   }
 
-  // Running
   if (!runMetrics.estimated5K.current) {
     prompts.push("How is my 5K calculated?");
   } else {
     prompts.push("How do I improve my 5K time?");
   }
 
-  // Strength stalls
   const lifts: [string, typeof strengthMetrics.squat][] = [
     ["squat", strengthMetrics.squat],
     ["bench", strengthMetrics.bench],
@@ -130,15 +125,12 @@ export function getSuggestedPrompts(
     }
   }
 
-  // Balance nudge
   if (adherence.streak === 0) {
     prompts.push("What is holding back my progress?");
   }
 
-  // Always include a "next week" prompt
   prompts.push("What should next week look like?");
 
-  // Deduplicate and cap at 5
   return [...new Set(prompts)].slice(0, 5);
 }
 
@@ -152,12 +144,7 @@ function getFollowUps(): string[] {
   ];
 }
 
-// ── Types ─────────────────────────────────────────────────────────
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
+// ── Props ─────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean;
@@ -169,65 +156,41 @@ interface Props {
   oneRMLines?: string[];
 }
 
-// ── Main component ────────────────────────────────────────────────
+// ── Sheet (deep-link surface) ─────────────────────────────────────
+//
+// This is no longer the primary chat surface — that lives at /chat. The Sheet
+// is preserved for in-context deep links (e.g. "Talk to Phil about this session"
+// from the dashboard). Both surfaces share the same ChatContext so the thread
+// stays continuous: open the sheet, ask a question, switch to /chat → same thread.
 
 export default function CoachingSheet({ open, onOpenChange, analytics, thisWeekData, lastWeekData, clientId, oneRMLines }: Props) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [phase, setPhase] = useState<"prompts" | "answer">("prompts");
+  const { messages, loading, ask, clear } = useChat();
+
+  const [input, setInput] = React.useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const suggestedPrompts = getSuggestedPrompts(analytics, thisWeekData);
   const aiContext = buildAiContext(analytics, thisWeekData, lastWeekData, oneRMLines);
 
-  // Reset when sheet closes
-  useEffect(() => {
-    if (!open) {
-      setMessages([]);
-      setInput("");
-      setPhase("prompts");
-      setLoading(false);
-    }
-  }, [open]);
+  // Sheet UX: show the static prompt chips when the thread is empty, otherwise
+  // show the latest exchange. The thread itself is NOT cleared on close any
+  // more — it persists in the ChatContext so users can resume on /chat.
+  const phase: "prompts" | "answer" = messages.length === 0 ? "prompts" : "answer";
 
   useEffect(() => {
     if (phase === "answer") {
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
     }
-  }, [messages, phase]);
+  }, [messages.length, phase]);
 
-  async function ask(question: string) {
-    if (!question.trim() || loading) return;
-    const trimmed = question.trim();
-
-    const history = messages.slice(-2);
-    const newMessages: Message[] = [...messages, { role: "user", content: trimmed }];
-    setMessages(newMessages);
+  const send = async (question: string) => {
+    const text = question.trim();
+    if (!text || loading) return;
     setInput("");
-    setPhase("answer");
-    setLoading(true);
-
-    try {
-      const res = await fetch(`/api/clients/${clientId}/coaching`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmed, context: aiContext, history }),
-      });
-      const data = await res.json();
-      if (data.answer) {
-        setMessages(prev => [...prev, { role: "assistant", content: data.answer }]);
-      } else {
-        setMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
-      }
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "Could not reach the coaching service. Check your connection." }]);
-    } finally {
-      setLoading(false);
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }
+    await ask({ question: text, context: aiContext, clientId });
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
 
   const lastAssistantMsg = [...messages].reverse().find(m => m.role === "assistant");
   const lastUserMsg      = [...messages].reverse().find(m => m.role === "user");
@@ -265,7 +228,7 @@ export default function CoachingSheet({ open, onOpenChange, analytics, thisWeekD
                 {suggestedPrompts.map(prompt => (
                   <button
                     key={prompt}
-                    onClick={() => ask(prompt)}
+                    onClick={() => void send(prompt)}
                     className="text-[13px] px-3 py-2 rounded-xl border bg-card hover:bg-muted/60 transition-colors text-left leading-snug"
                   >
                     {prompt}
@@ -312,7 +275,7 @@ export default function CoachingSheet({ open, onOpenChange, analytics, thisWeekD
                       {getFollowUps().map(f => (
                         <button
                           key={f}
-                          onClick={() => ask(f)}
+                          onClick={() => void send(f)}
                           className="text-[12px] px-3 py-1.5 rounded-xl border bg-card hover:bg-muted/60 transition-colors"
                         >
                           {f}
@@ -336,14 +299,14 @@ export default function CoachingSheet({ open, onOpenChange, analytics, thisWeekD
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && ask(input)}
+              onKeyDown={e => e.key === "Enter" && void send(input)}
               placeholder="Ask your own question…"
               disabled={loading}
               className="flex-1 text-[13px] bg-muted/50 border rounded-xl px-3.5 py-2.5 outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/60 disabled:opacity-50"
             />
             <Button
               size="sm"
-              onClick={() => ask(input)}
+              onClick={() => void send(input)}
               disabled={!input.trim() || loading}
               className="rounded-xl h-10 w-10 p-0 shrink-0"
             >
@@ -352,7 +315,7 @@ export default function CoachingSheet({ open, onOpenChange, analytics, thisWeekD
           </div>
           {phase === "answer" && (
             <button
-              onClick={() => { setMessages([]); setPhase("prompts"); }}
+              onClick={clear}
               className="mt-2.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full text-center"
             >
               Start a new question
