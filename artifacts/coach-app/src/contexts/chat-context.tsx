@@ -68,6 +68,14 @@ interface ChatContextValue {
   /** Chip lock state, keyed by message id. */
   chipStateByMsg: Record<string, ChipState>;
   setChipState: (msgId: string, partial: Partial<ChipState>) => void;
+  /**
+   * Transient one-shot draft used by launcher surfaces (e.g. AskPhilDock) to
+   * pre-fill the /chat composer. Not persisted to sessionStorage on purpose:
+   * a stale draft replayed after refresh would surprise the user. The /chat
+   * page reads this on mount and immediately calls setDraft("") to consume it.
+   */
+  draft: string;
+  setDraft: (value: string) => void;
 }
 
 // ── Context ───────────────────────────────────────────────────────
@@ -88,6 +96,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [chipStateByMsg, setChipStateByMsg] = useState<Record<string, ChipState>>(
     () => loadPersisted()?.chipStateByMsg ?? {},
   );
+  // Transient draft pre-fill from launcher surfaces. In-memory only.
+  const [draft, setDraft] = useState<string>("");
 
   // Persist whenever the durable parts of state change. Loading is intentionally
   // NOT persisted — a stale "loading" flag from a previous session would freeze
@@ -161,7 +171,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     clear,
     chipStateByMsg,
     setChipState,
-  }), [messages, loading, ask, clear, chipStateByMsg, setChipState]);
+    draft,
+    setDraft,
+  }), [messages, loading, ask, clear, chipStateByMsg, setChipState, draft]);
 
   return <ChatCtx.Provider value={value}>{children}</ChatCtx.Provider>;
 }

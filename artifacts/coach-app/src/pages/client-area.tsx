@@ -67,6 +67,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { AskPhilDock } from "@/components/ask-phil-dock";
 
 type Tab = "dashboard" | "training" | "nutrition" | "irl";
 
@@ -3605,6 +3606,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           />
         </div>
       )}
+      {!isTeamMode && mode === "client" && activeTab === "dashboard" && (
+        <AskPhilDock context="dashboard" />
+      )}
 
 
       {/* Nutrition Tab */}
@@ -4301,6 +4305,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </div>
           )}
         </div>
+      )}
+
+      {!isTeamMode && mode === "client" && activeTab === "training" && (
+        <AskPhilDock context="calendar" />
       )}
 
       {/* Training Tab */}

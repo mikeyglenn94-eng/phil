@@ -66,12 +66,27 @@ export default function ChatPage() {
   const { client } = useClientContext();
   const clientId = client?.id;
 
-  const { messages, loading, ask, chipStateByMsg, setChipState } = useChat();
+  const { messages, loading, ask, chipStateByMsg, setChipState, draft, setDraft } = useChat();
 
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const listEndRef = useRef<HTMLDivElement>(null);
   const bottomOffset = useKeyboardAwareBottomOffset();
+
+  // One-shot pre-fill from launcher surfaces (e.g. AskPhilDock). The draft is
+  // consumed (cleared) immediately so a subsequent visit to /chat doesn't
+  // resurrect it. We only seed when the local input is empty so we never
+  // clobber what the user is mid-typing.
+  useEffect(() => {
+    if (draft && !input) {
+      setInput(draft);
+      setDraft("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+    // We deliberately depend only on `draft` — running on `input` changes would
+    // re-seed every keystroke after a clear.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
 
   // Pull analytics so the chat has live dashboard context to ground answers in.
   const { data: analytics } = useQuery<AnalyticsData>({
