@@ -643,6 +643,14 @@
     0% { opacity: 0.35; transform: translateY(-2px); }
     100% { opacity: 1; transform: translateY(0); }
   }
+  /* Rest-timer "done" pulse: scale 1 -> 1.04 -> 1, 200ms x 2. */
+  .animate-rest-pulse {
+    animation: rest-pulse 200ms ease-in-out 2;
+  }
+  @keyframes rest-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
   .notes-section {
     margin-top: var(--space-4);
   }

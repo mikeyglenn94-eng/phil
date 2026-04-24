@@ -12,6 +12,8 @@ import {
 import { autosaveSession, subscribeAutosaveState, initAutosaveListener, type AutosaveState } from "@/lib/autosave";
 import { FinishSessionSheet, type FinishSheetExercise } from "@/components/finish-session-sheet";
 import { useChat } from "@/contexts/chat-context";
+import { useRestTimer } from "@/contexts/rest-timer-context";
+import { parseRestSeconds } from "@/lib/parse-rest";
 import {
   WorkoutPreviewEditorCard,
   type EditableSession,
@@ -561,6 +563,16 @@ export default function ClientSession() {
   // changing its public signature — keeps existing callers untouched.
   const finishOptsRef = useRef<{ markCompleted: boolean }>({ markCompleted: false });
   const { injectBubbles } = useChat();
+  const restTimer = useRestTimer();
+  // Tracks (exId::setIdx) pairs we've already auto-started a rest timer for, so
+  // edits to an already-committed row don't restart the timer. Cleared when the
+  // user blanks one of the fields back out.
+  const restFiredRef = useRef<Set<string>>(new Set());
+  // Reset the dedupe set whenever the user opens a different session, otherwise
+  // stale "exId::setIdx" keys from a previous workout can suppress fresh fires.
+  useEffect(() => {
+    restFiredRef.current = new Set();
+  }, [sessionId]);
 
   // ── Session start timestamp ──────────────────────────────────────
   // Stored in localStorage keyed by sessionId so it survives reloads. Only
@@ -1109,6 +1121,36 @@ export default function ClientSession() {
       if (value < 1) value = 1;
       if (value > 10) value = 10;
     }
+    // Auto-start rest timer the first time a set has both weight + reps filled.
+    // Bodyweight exercises commit on reps alone (no weight expected).
+    // Side-effects live OUTSIDE the setLogs updater so the updater stays pure
+    // (StrictMode in dev double-invokes updaters; doing side-effects there
+    // could double-fire the timer or mutate the dedupe ref twice).
+    const ex = (session.exercises || []).find(e => e.id === exId);
+    const isBw = !!ex?.bodyweight;
+    const prevForEx = logs[exId] || [];
+    const prevRow = prevForEx[setIdx] || { weight: null, reps: null };
+    const newRow = { ...prevRow, [field]: value };
+    const isCommitted = isBw ? newRow.reps != null : (newRow.weight != null && newRow.reps != null);
+    const key = `${exId}::${setIdx}`;
+    if (isCommitted && !restFiredRef.current.has(key)) {
+      restFiredRef.current.add(key);
+      const restSec = parseRestSeconds(ex?.rest);
+      if (ex && restSec > 0) {
+        const totalSetsForEx = (ex.perSetReps?.length ?? ex.sets ?? prevForEx.length) || prevForEx.length;
+        restTimer.start({
+          exerciseId: ex.id,
+          exerciseName: ex.name || "Exercise",
+          setIndex: setIdx,
+          totalSets: totalSetsForEx,
+          restSeconds: restSec,
+        });
+      }
+    } else if (!isCommitted && restFiredRef.current.has(key)) {
+      // User cleared the row, allow a fresh commit to re-arm the timer.
+      restFiredRef.current.delete(key);
+    }
+
     setLogs(prev => {
       const current = [...(prev[exId] || [])];
       current[setIdx] = { ...current[setIdx], [field]: value };
@@ -1436,6 +1478,55 @@ export default function ClientSession() {
   };
   // Keep ref current so debounced timers always call the freshest version
   handleSaveRef.current = handleSave;
+
+  // ── Next-set sync for the rest-timer floating pill ──────────────
+  // Find the first unlogged set across all exercises (in order). Push it to the
+  // RestTimerProvider so the pill knows what to label and where to scroll.
+  // Must live ABOVE the early returns below to keep hook order stable.
+  // Note: depend only on stable primitives + the memoised setNextSet callback,
+  // NOT the whole restTimer object (it's a fresh ref each provider render and
+  // would cause an infinite update loop).
+  const restActive = restTimer.active;
+  const restSetNextSet = restTimer.setNextSet;
+  useEffect(() => {
+    if (!restActive || !session) return;
+    const exercises = session.exercises || [];
+    type Hit = { ex: typeof exercises[number]; setIdx: number };
+    let next: Hit | null = null;
+    for (const ex of exercises) {
+      const setsCount = (ex.perSetReps?.length ?? ex.sets ?? 0) as number;
+      const exLogs = logs[ex.id] || [];
+      for (let i = 0; i < setsCount; i++) {
+        const s = exLogs[i];
+        // A row is considered logged only when it matches the commit rule: both
+        // weight AND reps for normal sets, reps alone for bodyweight. Using OR
+        // here would skip past partially filled rows.
+        const filled = !!s && (ex.bodyweight ? s.reps != null : (s.weight != null && s.reps != null));
+        if (!filled) { next = { ex, setIdx: i }; break; }
+      }
+      if (next) break;
+    }
+    if (!next) {
+      restSetNextSet(null);
+      return;
+    }
+    const target = next;
+    restSetNextSet({
+      label: `Set ${target.setIdx + 1} · ${target.ex.name || "Exercise"}`,
+      scrollAndFocus: () => {
+        const sel = `[data-set-row="${CSS.escape(target.ex.id)}-${target.setIdx}"]`;
+        const row = document.querySelector(sel) as HTMLElement | null;
+        if (!row) return;
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Focus the weight input shortly after scroll begins so the keyboard
+        // pops without fighting the scroll animation.
+        setTimeout(() => {
+          const input = row.querySelector('[data-set-input="weight"]') as HTMLInputElement | null;
+          input?.focus();
+        }, 320);
+      },
+    });
+  }, [logs, session, restActive, restSetNextSet]);
 
   if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!session) return (
@@ -2760,7 +2851,7 @@ export default function ClientSession() {
                             const perSetRpeTarget = ex.perSetRpe?.[setIdx];
                             const isAutofillAnim = autofillAnimSet[ex.id]?.has(setIdx);
                             const setRow = (
-                              <div className={`set-row transition-all ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"} ${isAutofillAnim ? "animate-autofill-fade" : ""}`}>
+                              <div data-set-row={`${ex.id}-${setIdx}`} className={`set-row transition-all ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"} ${isAutofillAnim ? "animate-autofill-fade" : ""}`}>
                                 <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
                                   <div>{setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}</div>
                                   {perSetRpeTarget && <div className="text-[9px] font-semibold text-muted-foreground normal-case">RPE {perSetRpeTarget}</div>}
@@ -2774,6 +2865,7 @@ export default function ClientSession() {
                                     type="number" inputMode="decimal" step="0.5" min="0"
                                     placeholder="—"
                                     value={log.weight ?? ""}
+                                    data-set-input="weight"
                                     onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
                                     className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
                                   />
@@ -2967,7 +3059,7 @@ export default function ClientSession() {
                       const log = exLogs[setIdx] || { weight: null, reps: null, rpe: null };
                       const isDone = log.weight !== null || log.reps !== null;
                       return (
-                        <div key={setIdx} className={`set-row transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
+                        <div key={setIdx} data-set-row={`${ex.id}-${setIdx}`} className={`set-row transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
                           <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
                             {setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}
                           </div>
@@ -2975,6 +3067,7 @@ export default function ClientSession() {
                             type="number" inputMode="decimal" step="0.5" min="0"
                             placeholder="—"
                             value={log.weight ?? ""}
+                            data-set-input="weight"
                             onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
                             className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
                           />

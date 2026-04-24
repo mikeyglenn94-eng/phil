@@ -24,6 +24,7 @@ import { AppSidebar } from "./components/app-sidebar";
 import { ClientProvider, useClientContext } from "./contexts/client-context";
 import { AuthProvider, useAuth } from "./contexts/auth-context";
 import { ChatProvider } from "./contexts/chat-context";
+import { RestTimerProvider } from "./contexts/rest-timer-context";
 import ChatPage from "./pages/chat";
 
 const queryClient = new QueryClient({
@@ -195,6 +196,7 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <ChatProvider>
+          <RestTimerProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Switch>
               {/* Public */}
@@ -245,6 +247,7 @@ function App() {
               <Route path="*" component={CoachLayout} />
             </Switch>
           </WouterRouter>
+          </RestTimerProvider>
           </ChatProvider>
         </AuthProvider>
         <Toaster />
