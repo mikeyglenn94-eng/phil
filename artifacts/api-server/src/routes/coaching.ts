@@ -242,8 +242,8 @@ You can:
 - Answer general training and nutrition questions.
 - If asked to build a programme, adjust the calendar, or anything requiring the training calendar, respond conversationally first (e.g. "Let's go to your training calendar for that.") and return navigateTo: "training" in your JSON.
 
-Respond ONLY with a JSON object: { "reply": "...", "navigateTo": "training" | null }
-Do not include navigateTo if no navigation is needed.`;
+Respond ONLY with a JSON object: { "reply": "...", "navigateTo": "training" | null, "quickReplies": [{ "label": "...", "value": "..." }] | null }
+Do not include navigateTo if no navigation is needed. Include quickReplies per the QUICK REPLIES section above.`;
   } else if (currentTab === "nutrition") {
     const ctx = nutritionContext ? JSON.stringify(nutritionContext, null, 2) : "No nutrition data for today.";
     tabSection = `
@@ -258,15 +258,63 @@ You can:
 - Explain macros, calories, and targets.
 - If asked about training or calendar changes, respond conversationally first (e.g. "Let's go to your training calendar for that.") and return navigateTo: "training".
 
-Respond ONLY with a JSON object: { "reply": "...", "navigateTo": "training" | null, "action": { "type": "log_food", "description": "..." } | null }
-Only include action if logging food. Only include navigateTo if navigating.`;
+Respond ONLY with a JSON object: { "reply": "...", "navigateTo": "training" | null, "action": { "type": "log_food", "description": "..." } | null, "quickReplies": [{ "label": "...", "value": "..." }] | null }
+Only include action if logging food. Only include navigateTo if navigating. Include quickReplies per the QUICK REPLIES section above.`;
   } else {
     // Training tab or unspecified — standard Phil behaviour
     tabSection = `
 You are on the user's TRAINING tab. Handle training, scheduling, and programme questions as normal.
 
-Respond ONLY with a JSON object: { "reply": "..." }`;
+Respond ONLY with a JSON object: { "reply": "...", "quickReplies": [{ "label": "...", "value": "..." }] | null }
+Include quickReplies per the QUICK REPLIES section above.`;
   }
+
+  // ─ QUICK REPLIES (chip-first) ─────────────────────────────────────────────
+  // Phil's questions should default to chips when the answer is short. Typing and
+  // voice remain available as escape hatches. The frontend renders these as a
+  // tappable chip row below the message; do NOT surface "Easy" as user-facing copy
+  // outside the internal effort scale.
+  const quickRepliesSection = `
+QUICK REPLIES (chip-first responses):
+
+Default to offering 3–5 quick-reply chips whenever your reply ends with a short-answer question (any answer that fits in under 5 words).
+
+DO NOT include quickReplies when:
+- You are making a statement, summary, or confirmation (no question).
+- You are asking an open-ended question that needs detail (e.g. "Tell me about the niggle", "What's different this week?", "Why?").
+- You are asking the client to provide free-form text (a name, a number outside a fixed range, a description).
+
+DO include quickReplies when the question fits one of the standard patterns below. Use these presets verbatim where they apply so the experience stays consistent:
+
+- State of self ("How's the body?" / "How are you holding up?"):
+  [{"label":"💪 Strong","value":"strong"},{"label":"👌 Steady","value":"steady"},{"label":"😮‍💨 Tired","value":"tired"},{"label":"🤕 Beat up","value":"beat up"}]
+
+- Post-session feedback ("How'd that go?" / "How was it?"):
+  [{"label":"💪 Smashed","value":"smashed"},{"label":"👌 Clean","value":"clean"},{"label":"😬 Grim","value":"grim"}]
+
+- Duration ("How long have you got?"):
+  [{"label":"30 min","value":"30 min"},{"label":"45 min","value":"45 min"},{"label":"60 min","value":"60 min"},{"label":"90 min","value":"90 min"}]
+
+- Effort / intensity (internal scale only, never surface "Easy" as copy elsewhere):
+  [{"label":"Easy","value":"easy"},{"label":"Moderate","value":"moderate"},{"label":"Hard","value":"hard"},{"label":"All out","value":"all out"}]
+
+- Binary decision (when proposing one path):
+  [{"label":"Yes","value":"yes"},{"label":"Tweak it","value":"tweak it"}]
+  or [{"label":"Do it","value":"do it"},{"label":"Not today","value":"not today"}]
+
+- Energy today ("How's the energy?"):
+  [{"label":"Full beans","value":"full beans"},{"label":"Average","value":"average"},{"label":"Flat","value":"flat"}]
+
+For other short-answer questions, generate 3–5 chips that fit the answer space. Match the chip count to the question:
+- Binary decision → 2 chips
+- State-of-self → 4 chips
+- Duration → 4–5 chips
+
+Each chip object has:
+- label: the visible text, may include a leading emoji (e.g. "💪 Smashed")
+- value: the plain-text reply that gets sent on tap (lowercase, no emoji)
+
+Keep chip labels under ~14 characters. Never include em dashes. Never include the word "Easy" in any chip label outside the internal effort scale.`;
 
   const systemPrompt = `You are Phil, the lead coach at MG Coaching. You are direct, knowledgeable, and results-driven. You speak like a real coach: concise, slightly opinionated, practical. Never robotic or over-hyped.
 
@@ -278,6 +326,8 @@ Reference the client's goals when relevant.
 Never generate a full programme here.
 Never expose technical error language.
 Never use em dashes in any response. Use a full stop, a comma, or rewrite the sentence instead.${goalContext}${baselineContext}
+
+${quickRepliesSection}
 
 ${tabSection}`;
 
@@ -327,7 +377,30 @@ ${tabSection}`;
     const navigateTo = parsed.navigateTo && typeof parsed.navigateTo === "string" ? parsed.navigateTo : undefined;
     const action = parsed.action && parsed.action.type ? parsed.action : undefined;
 
-    res.json({ reply, navigateTo, action });
+    // Normalise quickReplies coming back from the LLM into a strict shape the
+    // frontend can render predictably. Bad shapes are silently dropped — the
+    // chat falls back to typing/voice as the input affordances.
+    type RawQuickReply = { label?: unknown; value?: unknown; emoji?: unknown };
+    const rawQuickReplies = (parsed as { quickReplies?: unknown }).quickReplies;
+    let quickReplies: { label: string; value: string; emoji?: string }[] | undefined;
+    if (Array.isArray(rawQuickReplies) && rawQuickReplies.length > 0) {
+      const cleaned = rawQuickReplies
+        .map((r: unknown): { label: string; value: string; emoji?: string } | null => {
+          if (!r || typeof r !== "object") return null;
+          const rr = r as RawQuickReply;
+          const label = typeof rr.label === "string" ? rr.label.trim() : "";
+          const value = typeof rr.value === "string" ? rr.value.trim() : label.trim();
+          if (!label || !value) return null;
+          const emoji = typeof rr.emoji === "string" && rr.emoji.trim() ? rr.emoji.trim() : undefined;
+          // Hard cap label length so styling never breaks.
+          return { label: label.slice(0, 40), value: value.slice(0, 80), ...(emoji ? { emoji } : {}) };
+        })
+        .filter((r): r is { label: string; value: string; emoji?: string } => r !== null)
+        .slice(0, 8);
+      if (cleaned.length > 0) quickReplies = cleaned;
+    }
+
+    res.json({ reply, navigateTo, action, quickReplies });
   } catch (err) {
     console.error("[phil-chat] OpenAI error:", err);
     res.status(500).json({ error: "Failed to generate response" });

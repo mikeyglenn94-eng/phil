@@ -1,0 +1,74 @@
+Prompt 9 — Chip-first responses in Phil chat
+Rework how Phil asks questions in the chat interface so that the default response input is tap chips, with typing and voice available as escape hatches for when the athlete needs to give detail.
+The principle: if Phil's question can be answered in under 5 words, chips come first. Typing and voice are available but secondary. Typing is not the default input for most Phil questions.
+Component: QuickReplyChips
+Create artifacts/coach-app/src/components/chat/quick-reply-chips.tsx. This component renders below Phil's message when he's asked a chip-answerable question.
+Spec:
+
+Horizontal scrollable row of chips (no wrapping, swipe left-right on overflow)
+Each chip: rounded-full, bg-neutral-100 text-neutral-900 border border-neutral-200, min height 44px (tap target), 14px text, 16px horizontal padding, gap 8px between chips
+Active/selected state: bg-black text-white border-black
+On tap: chip becomes selected, sends the chip's value as the user's reply in the chat, triggers Phil's next turn
+Chips support optional emoji prefix: "💪 Smashed", "😬 Grim"
+Every chip row includes an "Other" or "Type instead" chip at the far right that, when tapped, promotes the text input to focus and hides the chips. The input keeps the normal typing and voice affordances.
+Chips are disabled after selection (can't change answer retroactively, Phil moves on)
+
+Message schema change
+Extend the chat message schema to include an optional quickReplies field on assistant messages:
+tstype QuickReply = {
+  label: string;        // "Strong", "💪 Smashed", "45 min"
+  value: string;        // what gets sent as the user reply (can match label)
+  emoji?: string;       // optional, for display
+};
+
+type AssistantMessage = {
+  // ... existing fields
+  quickReplies?: QuickReply[];
+  allowTyping?: boolean;  // defaults true, set false only for forced-chip interactions
+};
+When quickReplies is present, render the QuickReplyChips component below the message. When absent, chat behaves as normal (typing and voice only).
+Update Phil's system prompt and response format
+In artifacts/api-server/src/routes/coaching.ts (remember: no /api prefix in handlers), update the coaching LLM's system prompt so Phil returns chip-eligible replies in a structured format the backend can parse. Suggested approach: the LLM returns JSON like:
+json{
+  "text": "How's the body today?",
+  "quickReplies": [
+    { "label": "💪 Strong", "value": "strong" },
+    { "label": "👌 Steady", "value": "steady" },
+    { "label": "😮‍💨 Tired", "value": "tired" },
+    { "label": "🤕 Beat up", "value": "beat up" }
+  ]
+}
+Phil's prompt should include explicit rules:
+
+Default to offering 3-5 chips when asking short-answer questions
+Do NOT offer chips when asking open-ended questions that need detail ("Tell me about the niggle", "What's different this week?")
+Do NOT offer chips when Phil is making a statement or confirming something
+Match chip count to the answer space: binary decisions get 2 chips, state-of-self gets 4, duration questions get 4-5
+
+Required chip patterns (build these as presets Phil uses consistently):
+
+State-of-self: [💪 Strong / 👌 Steady / 😮‍💨 Tired / 🤕 Beat up]
+Post-session feedback: [💪 Smashed / 👌 Clean / 😬 Grim]
+Duration: [30 min / 45 min / 60 min / 90 min]
+Effort/intensity: [Easy / Moderate / Hard / All out]  (internal only, never surface "Easy" as copy elsewhere)
+Binary decision: [Yes / Tweak it] or [Do it / Not today]
+Energy today: [Full beans / Average / Flat]
+
+These patterns should be documented in the coaching route so Phil uses them consistently and the frontend can render them predictably.
+Voice and typing stay available
+When chips are offered, the text input is still visible below the chip row, but faded slightly (opacity-70) with placeholder "or type instead". The voice mic icon remains in the input. Tapping the input or mic disables the chips (they grey out but stay visible for reference) and promotes typed/voice reply.
+Persona consistency
+Phil's questions preceding chips stay in his voice:
+
+"How's the body?" not "How are you feeling today?"
+"How long have you got?" not "How much time do you have?"
+"How'd that go?" not "How did the session go?"
+No em dashes. No "I'd be happy to". Gruff, direct, dry.
+
+Accessibility
+
+Chips are keyboard-navigable (tab, enter to select)
+aria-label on each chip reads the full label
+When a chip is selected, announce the choice via aria-live
+
+Show me the full diff before committing. Specifically confirm: (1) the schema change is backward-compatible with existing assistant messages that don't have chips, (2) the coaching route reliably produces chip-eligible responses for short-answer questions, (3) typing and voice still work when the user chooses "Other" or ignores the chips.

@@ -23,6 +23,7 @@ import {
 import type { NutritionEntry, Programme, Session } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import DashboardTab, { type AnalyticsData } from "./dashboard-tab";
+import { QuickReplyChips, type QuickReply } from "@/components/chat/quick-reply-chips";
 import { useToast } from "@/hooks/use-toast";
 import {
   WorkoutPreviewEditorCard,
@@ -867,6 +868,11 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     text: string;
     ts: Date;
     coachParseData?: CoachParseResult;
+    /** Optional tap-first chip replies. When present and Phil is asking a short-answer
+     *  question, the chips render below the message. Typing/voice still work. */
+    quickReplies?: QuickReply[];
+    /** Defaults true. When false, the input is hidden — chips are the only way to reply. */
+    allowTyping?: boolean;
     action?: {
       type: "save_session";
       session: any;
@@ -886,6 +892,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const philScrollRef = useRef<HTMLDivElement>(null);
   const philInputRef = useRef<HTMLInputElement>(null);
   const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
+
+  // Chip state per Phil message:
+  // - selected: the chip value the user picked (locks the chip group, only that chip stays highlighted)
+  // - promoted: user chose to type instead (or focused the input) — chips grey out but stay visible
+  // Both default to absent. State is keyed by msg.id so older chip groups stay in their final state
+  // even after newer messages arrive.
+  const [chipStateByMsg, setChipStateByMsg] = useState<Record<string, { selected?: string; promoted?: boolean }>>({});
 
   // ── Injury flow state ─────────────────────────────────────────────────────
   interface InjuryFlowState { phase: "severity" | "choice"; context: Record<string, any>; }
@@ -2131,6 +2144,49 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     }
   };
 
+  // Find the most recent Phil message that has unanswered, un-promoted chips.
+  // This is the chip group that should drive input fading + focus-promotion behaviour.
+  const activeChipMsgId = (() => {
+    for (let i = philMessages.length - 1; i >= 0; i--) {
+      const m = philMessages[i];
+      if (m.sender !== "phil" || !m.quickReplies?.length) continue;
+      const st = chipStateByMsg[m.id];
+      if (!st?.selected && !st?.promoted) return m.id;
+      // We found the latest Phil message with chips, but it's already settled.
+      // No older chip group should be considered "active" — return null.
+      return null;
+    }
+    return null;
+  })();
+
+  // Promotes the active chip group to the demoted/typed state. Used by both the
+  // explicit "Type instead" chip and the input's onFocus/onChange handlers.
+  const promoteActiveChips = () => {
+    if (!activeChipMsgId) return;
+    setChipStateByMsg(prev => ({
+      ...prev,
+      [activeChipMsgId]: { ...prev[activeChipMsgId], promoted: true },
+    }));
+  };
+
+  // Selects a chip and submits its value as the user's reply.
+  const handleChipSelect = (msgId: string, value: string) => {
+    // Lock the chip group to this selection (visual + input affordance change).
+    setChipStateByMsg(prev => ({ ...prev, [msgId]: { ...prev[msgId], selected: value } }));
+    // Pipe the chip value into the same submit path typing uses.
+    setPhilPanelInput(value);
+    // Defer one tick so React commits the input value before submit reads it.
+    setTimeout(() => { void handlePhilPanelSubmit(); }, 0);
+  };
+
+  const handleChipTypeInstead = (msgId: string) => {
+    setChipStateByMsg(prev => ({
+      ...prev,
+      [msgId]: { ...prev[msgId], promoted: true },
+    }));
+    setTimeout(() => { philInputRef.current?.focus(); }, 0);
+  };
+
   const handlePhilPanelSubmit = async () => {
     const input = philPanelInput.trim();
     if (!input) return;
@@ -2196,7 +2252,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         }),
       });
       const data = await res.json();
-      addPhilMsg(data.reply ?? "What would you like to work on today?");
+      // Quick-reply chips are optional and backward-compatible — older messages
+      // (and routes that don't return them) simply render with typing/voice only.
+      const quickReplies = Array.isArray(data.quickReplies) && data.quickReplies.length > 0
+        ? data.quickReplies as QuickReply[]
+        : undefined;
+      addPhilMsg(data.reply ?? "What would you like to work on today?", quickReplies ? { quickReplies } : undefined);
 
       // Handle tab navigation
       if (data.navigateTo === "training" || data.navigateTo === "nutrition" || data.navigateTo === "dashboard") {
@@ -4834,6 +4895,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     )}
                     <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
                       {msg.text && <p className="whitespace-pre-wrap leading-snug">{msg.text}</p>}
+                      {/* Quick-reply chips: tap-first answers for short-question Phil replies.
+                          Backward-compatible — only renders when the message includes quickReplies. */}
+                      {msg.sender === "phil" && msg.quickReplies && msg.quickReplies.length > 0 && (
+                        <QuickReplyChips
+                          replies={msg.quickReplies}
+                          selectedValue={chipStateByMsg[msg.id]?.selected ?? null}
+                          promoted={chipStateByMsg[msg.id]?.promoted}
+                          onSelect={(value) => handleChipSelect(msg.id, value)}
+                          onTypeInstead={() => handleChipTypeInstead(msg.id)}
+                        />
+                      )}
                       {/* Build-this button when Phil has gathered enough plan context */}
                       {msg.coachParseData?.hasEnough && (
                         <Button
@@ -4891,15 +4963,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   </div>
                 )}
               </div>
-              {/* Input */}
-              <div className="shrink-0 px-3 py-2.5 border-t">
+              {/* Input — fades to opacity-70 with a softer placeholder when chips are active.
+                  Focusing or typing into the input promotes (greys out) the active chip group. */}
+              <div className={`shrink-0 px-3 py-2.5 border-t transition-opacity ${activeChipMsgId ? "opacity-70" : "opacity-100"}`}>
                 <div className="flex gap-2">
                   <input
                     ref={philInputRef}
                     value={philPanelInput}
-                    onChange={e => setPhilPanelInput(e.target.value)}
+                    onChange={e => { setPhilPanelInput(e.target.value); if (activeChipMsgId && e.target.value) promoteActiveChips(); }}
+                    onFocus={() => { if (activeChipMsgId) promoteActiveChips(); }}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
-                    placeholder="Message Phil…"
+                    placeholder={activeChipMsgId ? "or type instead" : "Message Phil…"}
                     className="flex-1 min-w-0 h-8 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <Button

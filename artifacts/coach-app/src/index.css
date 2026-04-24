@@ -627,6 +627,14 @@
   .set-row + .set-row {
     margin-top: 6px;
   }
+  /* Hides scrollbar on horizontally scrollable rows (e.g. chip rows) while keeping scroll. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
   /* Autofill fade — applied to a set-row for 150ms when filled by the Autofill chip. */
   .animate-autofill-fade {
     animation: autofill-fade 150ms ease-out;
