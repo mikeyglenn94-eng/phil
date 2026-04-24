@@ -680,6 +680,74 @@ export default function ClientSession() {
     };
   }, []);
 
+  // RPE chip selector state. Wave 1 replaces the numeric RPE input with a 5-pill
+  // emoji selector that briefly opens below the row when a set commits, then auto-collapses.
+  // Key shape: `${exId}::${setIdx}`. Auto-close fires after RPE_CHIPS_AUTOCLOSE_MS.
+  const RPE_CHIPS_AUTOCLOSE_MS = 3000;
+  const [rpeChipsOpen, setRpeChipsOpen] = useState<Set<string>>(new Set());
+  const rpeChipTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  useEffect(() => {
+    return () => {
+      rpeChipTimersRef.current.forEach(t => clearTimeout(t));
+      rpeChipTimersRef.current.clear();
+    };
+  }, []);
+  const scheduleRpeChipsAutoClose = (key: string) => {
+    const existing = rpeChipTimersRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const id = setTimeout(() => {
+      rpeChipTimersRef.current.delete(key);
+      setRpeChipsOpen(prev => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }, RPE_CHIPS_AUTOCLOSE_MS);
+    rpeChipTimersRef.current.set(key, id);
+  };
+  const openRpeChipsFor = (key: string) => {
+    setRpeChipsOpen(prev => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+    scheduleRpeChipsAutoClose(key);
+  };
+  const closeRpeChipsFor = (key: string) => {
+    const id = rpeChipTimersRef.current.get(key);
+    if (id) {
+      clearTimeout(id);
+      rpeChipTimersRef.current.delete(key);
+    }
+    setRpeChipsOpen(prev => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  };
+  const handleRpeChipPick = (exId: string, setIdx: number, value: number) => {
+    setLogs(prev => {
+      const current = [...(prev[exId] || [])];
+      current[setIdx] = { ...(current[setIdx] || { weight: null, reps: null, rpe: null }), rpe: value };
+      return { ...prev, [exId]: current };
+    });
+    closeRpeChipsFor(`${exId}::${setIdx}`);
+    setSaved(false);
+    scheduleClientAutosave();
+  };
+  // 5-pill scale, low-to-high. Emojis chosen for instant emotional read on a 6–10 RPE band.
+  const RPE_PILLS: { value: number; emoji: string; label: string }[] = [
+    { value: 6, emoji: "😌", label: "Easy 6" },
+    { value: 7, emoji: "🙂", label: "Comfortable 7" },
+    { value: 8, emoji: "😐", label: "Working 8" },
+    { value: 9, emoji: "😬", label: "Hard 9" },
+    { value: 10, emoji: "🫠", label: "Maximal 10" },
+  ];
+  const clampRpe6to10 = (n: number) => Math.max(6, Math.min(10, Math.round(n)));
+
   // Comment state (per-exercise)
   const [comments, setComments] = useState<Record<string, string>>({});
   // Tracks which exercises have their per-exercise note textarea expanded.
@@ -1129,9 +1197,23 @@ export default function ClientSession() {
     const ex = (session.exercises || []).find(e => e.id === exId);
     const isBw = !!ex?.bodyweight;
     const prevForEx = logs[exId] || [];
-    const prevRow = prevForEx[setIdx] || { weight: null, reps: null };
+    const prevRow = prevForEx[setIdx] || { weight: null, reps: null, rpe: null };
     const newRow = { ...prevRow, [field]: value };
     const isCommitted = isBw ? newRow.reps != null : (newRow.weight != null && newRow.reps != null);
+    const wasCommitted = isBw ? prevRow.reps != null : (prevRow.weight != null && prevRow.reps != null);
+    const justCommitted = isCommitted && !wasCommitted;
+    // When a set commits for the first time, drop in the programmed RPE (per-set or
+    // exercise-level, clamped to the 6–10 chip range) so it gets recorded even when
+    // the athlete doesn't tap. The chip selector then opens so they can override.
+    // We only auto-fill when the row's RPE is still null, so a previous tap is preserved
+    // if the athlete edits weight/reps after first commit.
+    let defaultRpeToWrite: number | null = null;
+    if (justCommitted && field !== "rpe" && newRow.rpe == null) {
+      const programmed = ex?.perSetRpe?.[setIdx] ?? ex?.rpe ?? null;
+      if (programmed != null && !isNaN(programmed)) {
+        defaultRpeToWrite = clampRpe6to10(programmed);
+      }
+    }
     const key = `${exId}::${setIdx}`;
     if (isCommitted && !restFiredRef.current.has(key)) {
       restFiredRef.current.add(key);
@@ -1153,9 +1235,17 @@ export default function ClientSession() {
 
     setLogs(prev => {
       const current = [...(prev[exId] || [])];
-      current[setIdx] = { ...current[setIdx], [field]: value };
+      const updated = { ...current[setIdx], [field]: value };
+      if (defaultRpeToWrite != null && updated.rpe == null) {
+        updated.rpe = defaultRpeToWrite;
+      }
+      current[setIdx] = updated;
       return { ...prev, [exId]: current };
     });
+    // Open the inline RPE chip selector for this row (auto-collapses after 3s).
+    if (justCommitted) {
+      openRpeChipsFor(key);
+    }
     // First user input — stamp the session start time so the Finish sheet's
     // duration readout is accurate even if the page was opened earlier.
     markSessionStartedIfMissing();
@@ -1265,6 +1355,40 @@ export default function ClientSession() {
       });
     }, totalAnimMs + 1500);
 
+    setSaved(false);
+    scheduleClientAutosave();
+  };
+
+  // "Same as last time" chip — copies the last session's per-set numbers
+  // (weight + reps) into every CURRENTLY EMPTY row of this exercise. Already
+  // filled rows are never overwritten. If last time had fewer sets than today,
+  // only the first N rows get prefilled and the rest stay empty.
+  // RPE is intentionally untouched. Does NOT auto-fire the rest timer (the
+  // athlete didn't actively commit anything; they just pulled in numbers).
+  const handleFillFromLastTime = (exId: string, prevSets: SetLog[], isBw: boolean) => {
+    if (!prevSets || prevSets.length === 0) return;
+    setLogs(prev => {
+      const current = [...(prev[exId] || [])];
+      let touched = false;
+      for (let i = 0; i < prevSets.length; i++) {
+        const existing = current[i] || { weight: null, reps: null, rpe: null };
+        const isEmpty = isBw
+          ? existing.reps == null
+          : (existing.weight == null && existing.reps == null);
+        if (!isEmpty) continue;
+        const src = prevSets[i];
+        // BW exercises: only copy reps; weight stays null.
+        current[i] = {
+          ...existing,
+          weight: isBw ? existing.weight : (src.weight ?? existing.weight),
+          reps: src.reps ?? existing.reps,
+        };
+        touched = true;
+      }
+      if (!touched) return prev;
+      return { ...prev, [exId]: current };
+    });
+    markSessionStartedIfMissing();
     setSaved(false);
     scheduleClientAutosave();
   };
@@ -2713,12 +2837,26 @@ export default function ClientSession() {
                   normalizeExerciseName(matchResult.matchedFrom) !== normalizeExerciseName(displayName);
                 return (
                   <div className="flex flex-col gap-0.5 mb-1 ml-8">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3 h-3 text-blue-400 shrink-0" />
-                      <p className="text-[11px] text-muted-foreground">
-                        <span className="font-semibold text-blue-500">Last time · {format(parseISO(prev.date), "d MMM")}:</span>{" "}
-                        {setsText}
-                      </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Clock className="w-3 h-3 text-blue-400 shrink-0" />
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          <span className="font-semibold text-blue-500">Last time · {format(parseISO(prev.date), "d MMM")}:</span>{" "}
+                          {setsText}
+                        </p>
+                      </div>
+                      {/* "Same as last time" chip — bulk-prefills empty rows from the
+                           prior session. Only renders when prev data exists (we already
+                           returned null above if it doesn't). */}
+                      <button
+                        type="button"
+                        onClick={() => handleFillFromLastTime(ex.id, prev.sets, isBw)}
+                        aria-label={`Same as last time, prefill empty sets from ${format(parseISO(prev.date), "d MMM")}`}
+                        className="shrink-0 inline-flex items-center h-7 px-1.5 rounded-full bg-neutral-100 text-neutral-700 text-xs font-medium hover:bg-neutral-200 active:scale-95 transition-all"
+                        style={{ fontFamily: '"Outfit", system-ui, sans-serif', fontWeight: 500 }}
+                      >
+                        Same as last time
+                      </button>
                     </div>
                     {showMatchedFrom && (
                       <p className="text-[10px] text-muted-foreground/55 ml-[18px] italic leading-tight">
@@ -2884,38 +3022,73 @@ export default function ClientSession() {
                                     </span>
                                   )}
                                 </div>
-                                {/* RPE column — optional 1–10 self-report. Narrow input keeps the row mobile-friendly. */}
-                                <Input
-                                  type="number" inputMode="numeric" step="1" min="1" max="10"
-                                  placeholder={perSetRpeTarget ? String(perSetRpeTarget) : "—"}
-                                  value={log.rpe ?? ""}
-                                  aria-label={`Set ${setIdx + 1} RPE (1–10)`}
-                                  onChange={e => handleFieldChange(ex.id, setIdx, "rpe", e.target.value)}
-                                  className={`min-h-11 h-11 px-1 text-center text-sm font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${log.rpe != null ? "text-primary" : "text-muted-foreground"}`}
-                                />
+                                {/* RPE chip trigger — opens the 5-pill selector below the row. */}
+                                {(() => {
+                                  const rowKey = `${ex.id}::${setIdx}`;
+                                  const chipsOpen = rpeChipsOpen.has(rowKey);
+                                  const currentPill = log.rpe != null ? RPE_PILLS.find(p => p.value === log.rpe) : null;
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => chipsOpen ? closeRpeChipsFor(rowKey) : openRpeChipsFor(rowKey)}
+                                      aria-label={`Set ${setIdx + 1} RPE ${log.rpe ?? "not set"}`}
+                                      aria-expanded={chipsOpen}
+                                      className={`min-h-11 h-11 w-full px-1 rounded-lg bg-white border border-neutral-200 inline-flex items-center justify-center gap-0.5 text-sm font-bold transition-colors ${log.rpe != null ? "text-primary" : "text-muted-foreground"} ${chipsOpen ? "ring-1 ring-black border-black" : ""}`}
+                                    >
+                                      {currentPill && <span className="text-base leading-none">{currentPill.emoji}</span>}
+                                      <span>{log.rpe ?? (perSetRpeTarget ? String(perSetRpeTarget) : "—")}</span>
+                                    </button>
+                                  );
+                                })()}
                               </div>
                             );
+                            const rowKey = `${ex.id}::${setIdx}`;
+                            const chipsOpen = rpeChipsOpen.has(rowKey);
+                            const rpeSelector = chipsOpen ? (
+                              <div className="mt-1 flex items-center justify-between gap-1 px-1" role="radiogroup" aria-label={`Set ${setIdx + 1} RPE selector`}>
+                                {RPE_PILLS.map(pill => {
+                                  const selected = log.rpe === pill.value;
+                                  return (
+                                    <button
+                                      key={pill.value}
+                                      type="button"
+                                      role="radio"
+                                      aria-checked={selected}
+                                      aria-label={`RPE ${pill.label}`}
+                                      onClick={() => handleRpeChipPick(ex.id, setIdx, pill.value)}
+                                      className={`min-w-11 min-h-11 px-1 rounded-full inline-flex flex-col items-center justify-center border transition-colors ${selected ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50 active:scale-95"}`}
+                                    >
+                                      <span className="text-lg leading-none">{pill.emoji}</span>
+                                      <span className="text-[10px] font-bold leading-none mt-0.5">{pill.value}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : null;
                             if (setIdx === 0 && reserveChipSpace) {
                               return (
-                                <div key={setIdx} className="flex items-center gap-2">
-                                  <div className="flex-1 min-w-0">{setRow}</div>
-                                  {/* Chip space is always reserved for set 1 (when there's >1 set) so input
-                                      width is stable. We toggle visibility/pointer-events instead of mounting. */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAutofill(ex.id, setsCount, isBw)}
-                                    aria-hidden={!showChip}
-                                    tabIndex={showChip ? 0 : -1}
-                                    aria-label={filledShowing ? "Autofill complete" : "Autofill remaining sets from set 1"}
-                                    className={`shrink-0 bg-neutral-900 text-white rounded-full px-1.5 py-1 text-[12px] font-medium inline-flex items-center gap-1 hover:bg-neutral-800 active:scale-95 transition-opacity whitespace-nowrap shadow-sm ${showChip ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-                                  >
-                                    <Copy className="w-3.5 h-3.5" />
-                                    {filledShowing ? "Filled" : "Autofill"}
-                                  </button>
+                                <div key={setIdx} className="space-y-0">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 min-w-0">{setRow}</div>
+                                    {/* Chip space is always reserved for set 1 (when there's >1 set) so input
+                                        width is stable. We toggle visibility/pointer-events instead of mounting. */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAutofill(ex.id, setsCount, isBw)}
+                                      aria-hidden={!showChip}
+                                      tabIndex={showChip ? 0 : -1}
+                                      aria-label={filledShowing ? "Autofill complete" : "Autofill remaining sets from set 1"}
+                                      className={`shrink-0 bg-neutral-900 text-white rounded-full px-1.5 py-1 text-[12px] font-medium inline-flex items-center gap-1 hover:bg-neutral-800 active:scale-95 transition-opacity whitespace-nowrap shadow-sm ${showChip ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                      {filledShowing ? "Filled" : "Autofill"}
+                                    </button>
+                                  </div>
+                                  {rpeSelector}
                                 </div>
                               );
                             }
-                            return <div key={setIdx}>{setRow}</div>;
+                            return <div key={setIdx} className="space-y-0">{setRow}{rpeSelector}</div>;
                           })}
                         </div>
                       );
@@ -3058,34 +3231,64 @@ export default function ClientSession() {
                     {Array.from({ length: setsCount }, (_, setIdx) => {
                       const log = exLogs[setIdx] || { weight: null, reps: null, rpe: null };
                       const isDone = log.weight !== null || log.reps !== null;
+                      const perSetRpeTarget = ex.perSetRpe?.[setIdx];
+                      const rowKey = `${ex.id}::${setIdx}`;
+                      const chipsOpen = rpeChipsOpen.has(rowKey);
+                      const currentPill = log.rpe != null ? RPE_PILLS.find(p => p.value === log.rpe) : null;
                       return (
-                        <div key={setIdx} data-set-row={`${ex.id}-${setIdx}`} className={`set-row transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
-                          <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
-                            {setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}
+                        <div key={setIdx} className="space-y-0">
+                          <div data-set-row={`${ex.id}-${setIdx}`} className={`set-row transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
+                            <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
+                              {setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}
+                            </div>
+                            <Input
+                              type="number" inputMode="decimal" step="0.5" min="0"
+                              placeholder="—"
+                              value={log.weight ?? ""}
+                              data-set-input="weight"
+                              onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
+                              className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
+                            />
+                            <Input
+                              type="number" inputMode="numeric" step="1" min="0"
+                              placeholder={safeReps(ex.reps) || "—"}
+                              value={log.reps ?? ""}
+                              onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
+                              className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
+                            />
+                            {/* RPE chip trigger — opens the 5-pill selector below the row. */}
+                            <button
+                              type="button"
+                              onClick={() => chipsOpen ? closeRpeChipsFor(rowKey) : openRpeChipsFor(rowKey)}
+                              aria-label={`Set ${setIdx + 1} RPE ${log.rpe ?? "not set"}`}
+                              aria-expanded={chipsOpen}
+                              className={`min-h-11 h-11 w-full px-1 rounded-lg bg-white border border-neutral-200 inline-flex items-center justify-center gap-0.5 text-sm font-bold transition-colors ${log.rpe != null ? "text-primary" : "text-muted-foreground"} ${chipsOpen ? "ring-1 ring-black border-black" : ""}`}
+                            >
+                              {currentPill && <span className="text-base leading-none">{currentPill.emoji}</span>}
+                              <span>{log.rpe ?? (perSetRpeTarget ? String(perSetRpeTarget) : "—")}</span>
+                            </button>
                           </div>
-                          <Input
-                            type="number" inputMode="decimal" step="0.5" min="0"
-                            placeholder="—"
-                            value={log.weight ?? ""}
-                            data-set-input="weight"
-                            onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
-                            className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
-                          />
-                          <Input
-                            type="number" inputMode="numeric" step="1" min="0"
-                            placeholder={safeReps(ex.reps) || "—"}
-                            value={log.reps ?? ""}
-                            onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
-                            className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
-                          />
-                          <Input
-                            type="number" inputMode="numeric" step="1" min="1" max="10"
-                            placeholder="—"
-                            value={log.rpe ?? ""}
-                            aria-label={`Set ${setIdx + 1} RPE (1–10)`}
-                            onChange={e => handleFieldChange(ex.id, setIdx, "rpe", e.target.value)}
-                            className={`min-h-11 h-11 px-1 text-center text-sm font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${log.rpe != null ? "text-primary" : "text-muted-foreground"}`}
-                          />
+                          {chipsOpen && (
+                            <div className="mt-1 flex items-center justify-between gap-1 px-1" role="radiogroup" aria-label={`Set ${setIdx + 1} RPE selector`}>
+                              {RPE_PILLS.map(pill => {
+                                const selected = log.rpe === pill.value;
+                                return (
+                                  <button
+                                    key={pill.value}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    aria-label={`RPE ${pill.label}`}
+                                    onClick={() => handleRpeChipPick(ex.id, setIdx, pill.value)}
+                                    className={`min-w-11 min-h-11 px-1 rounded-full inline-flex flex-col items-center justify-center border transition-colors ${selected ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50 active:scale-95"}`}
+                                  >
+                                    <span className="text-lg leading-none">{pill.emoji}</span>
+                                    <span className="text-[10px] font-bold leading-none mt-0.5">{pill.value}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
