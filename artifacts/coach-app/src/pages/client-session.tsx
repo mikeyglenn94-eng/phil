@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Save, Loader2, CheckCircle2, Clock, Repeat, Zap,
   Mic, Square, Volume2, ArrowLeftRight, X, Check, Plus, Send, PlayCircle, Share2, Download, Copy, Trash2, MoreVertical, Mail,
-  Pencil, ChevronDown,
+  Pencil, ChevronDown, StickyNote,
 } from "lucide-react";
 import {
   WorkoutPreviewEditorCard,
@@ -614,6 +614,9 @@ export default function ClientSession() {
 
   // Comment state (per-exercise)
   const [comments, setComments] = useState<Record<string, string>>({});
+  // Tracks which exercises have their per-exercise note textarea expanded.
+  // A non-empty `comments[exId]` always renders the textarea regardless of this set.
+  const [noteExpandedFor, setNoteExpandedFor] = useState<Set<string>>(new Set());
   const [commentListeningFor, setCommentListeningFor] = useState<string | null>(null);
   const [commentInterim, setCommentInterim] = useState("");
   const commentRecRef = useRef<any>(null);
@@ -628,16 +631,6 @@ export default function ClientSession() {
   const [shareShowComment, setShareShowComment] = useState(true);
   const [shareGoals, setShareGoals] = useState<any[]>([]);
   const shareWidgetRef = useRef<HTMLDivElement>(null);
-
-  // Feedback state
-  const [feedbackText, setFeedbackText] = useState("");
-  const [feedbackListening, setFeedbackListening] = useState(false);
-  const [feedbackInterim, setFeedbackInterim] = useState("");
-  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
-  const [feedbackDone, setFeedbackDone] = useState(false);
-  const [feedbackConfirmation, setFeedbackConfirmation] = useState("");
-  const feedbackRecRef = useRef<any>(null);
-  const feedbackInterimRef = useRef("");
 
   // Session-level comment state (for WOD/Run Brain sessions)
   const [sessionComment, setSessionComment] = useState("");
@@ -942,97 +935,6 @@ export default function ClientSession() {
     sessionCommentRecRef.current = r;
     try { r.start(); } catch { sessionCommentActiveRef.current = false; setSessionCommentListening(false); }
   }
-
-  // ── Feedback voice ────────────────────────────────────────────────────────
-  const toggleFeedbackListening = () => {
-    if (feedbackListening) { stopRef(feedbackRecRef); return; }
-    stopRef(feedbackRecRef);
-    const r = makeSR();
-    if (!r) return;
-    feedbackInterimRef.current = "";
-    r.onresult = (e: any) => {
-      let fin = ""; let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      feedbackInterimRef.current = interim;
-      setFeedbackInterim(interim);
-      if (fin) {
-        feedbackInterimRef.current = "";
-        setFeedbackText(prev => (prev ? prev + " " : "") + fin.trim());
-        setFeedbackInterim("");
-      }
-    };
-    r.onerror = () => { feedbackInterimRef.current = ""; setFeedbackListening(false); setFeedbackInterim(""); };
-    r.onend = () => {
-      const leftover = feedbackInterimRef.current.trim();
-      if (leftover) setFeedbackText(prev => (prev ? prev + " " : "") + leftover);
-      feedbackInterimRef.current = "";
-      setFeedbackListening(false);
-      setFeedbackInterim("");
-    };
-    feedbackRecRef.current = r;
-    setFeedbackListening(true);
-    setFeedbackInterim("");
-    try { r.start(); } catch {}
-  };
-
-  const submitFeedback = async () => {
-    if (!feedbackText.trim() || !programme || !session) return;
-
-    // Cancel any pending autosave so it can't overwrite the AI changes with stale data
-    if (autosaveTimerRef_cs.current) {
-      clearTimeout(autosaveTimerRef_cs.current);
-      autosaveTimerRef_cs.current = null;
-    }
-
-    setFeedbackSubmitting(true);
-    try {
-      const res = await fetch(`/api/programmes/${programmeId}/session-feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          completedSession: session,
-          feedback: feedbackText.trim(),
-          allSessions: effectiveProgramme?.sessions || [],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
-      const { updatedSessions, userConfirmation } = data as { updatedSessions: any[]; userConfirmation: string };
-      if (updatedSessions.length > 0) {
-        const updatedById = new Map(updatedSessions.map((s: any) => [s.id, s]));
-        const merged = (effectiveProgramme?.sessions || []).map((s: Session) =>
-          updatedById.has(s.id) ? { ...s, ...updatedById.get(s.id) } : s
-        );
-        const _ctsFb = ctsDataRef.current;
-        if (_ctsFb) {
-          const updatedSession = merged.find((s: Session) => s.id === sessionId) ?? merged[0];
-          await fetch(`/api/client-team-sessions/${_ctsFb.id}`, {
-            method: "PUT", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionData: updatedSession }),
-          });
-          queryClient.invalidateQueries({ queryKey: ["client-team-sessions-for-client", _ctsFb.clientId] });
-        } else {
-          await updateMutation.mutateAsync({ id: programmeId, data: { sessions: merged } });
-        }
-        // Immediately update the detail cache so any subsequent autosave reads the correct merged data
-        queryClient.setQueryData(getGetProgrammeQueryKey(programmeId), (old: any) =>
-          old ? { ...old, sessions: merged } : old
-        );
-        queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetProgrammeQueryKey(programmeId) });
-      }
-      setFeedbackDone(true);
-      setFeedbackConfirmation(userConfirmation);
-      toast({ title: userConfirmation });
-    } catch {
-      toast({ title: "Couldn't apply feedback — try again", variant: "destructive" });
-    } finally {
-      setFeedbackSubmitting(false);
-    }
-  };
 
   // ── Log voice (Web Speech for preview + Whisper for accuracy) ────────────
   const logAccRef = useRef("");
@@ -2506,7 +2408,27 @@ export default function ClientSession() {
                     {allLogged ? "✓" : exIdx + 1}
                   </span>
                   <div className="min-w-0">
-                    <h3 className="exercise-name">{displayName}</h3>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h3 className="exercise-name">{displayName}</h3>
+                      <button
+                        type="button"
+                        onClick={() => setNoteExpandedFor(prev => {
+                          const next = new Set(prev);
+                          if (next.has(ex.id)) next.delete(ex.id); else next.add(ex.id);
+                          return next;
+                        })}
+                        title={noteExpandedFor.has(ex.id) || comments[ex.id]?.trim() ? "Hide note" : "Add note"}
+                        aria-label="Add note"
+                        aria-pressed={noteExpandedFor.has(ex.id) || !!comments[ex.id]?.trim()}
+                        className={`shrink-0 p-1 rounded-md transition-colors ${
+                          noteExpandedFor.has(ex.id) || comments[ex.id]?.trim()
+                            ? "text-primary bg-primary/10"
+                            : "text-muted-foreground/60 hover:text-primary hover:bg-primary/10"
+                        }`}
+                      >
+                        <StickyNote className="w-4 h-4" />
+                      </button>
+                    </div>
                     <a
                       href={`https://www.youtube.com/results?search_query=${encodeURIComponent(displayName + " exercise tutorial")}`}
                       target="_blank"
@@ -2759,29 +2681,42 @@ export default function ClientSession() {
                 )}
               </div>
 
-              {/* Client comment box */}
-              <div className="notes-section">
-                <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-border bg-muted/20 hover:border-muted-foreground/30"}`}>
-                  <textarea
-                    value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
-                    onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
-                    placeholder="Leave a note for Phil…"
-                    rows={2}
-                    disabled={commentListeningFor === ex.id}
-                    className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => startCommentListening(ex.id)}
-                    className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${commentListeningFor === ex.id ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-                    title={commentListeningFor === ex.id ? "Stop" : "Dictate comment"}
-                  >
-                    {commentListeningFor === ex.id
-                      ? <Square className="w-3.5 h-3.5 fill-current" />
-                      : <Mic className="w-3.5 h-3.5" />}
-                  </button>
+              {/* Client comment box — collapsed unless expanded or already has content */}
+              {(noteExpandedFor.has(ex.id) || !!comments[ex.id]?.trim() || commentListeningFor === ex.id) && (
+                <div className="notes-section">
+                  <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-border bg-muted/20 hover:border-muted-foreground/30"}`}>
+                    <textarea
+                      autoFocus
+                      value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
+                      onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
+                      onBlur={() => {
+                        if (!comments[ex.id]?.trim() && commentListeningFor !== ex.id) {
+                          setNoteExpandedFor(prev => {
+                            if (!prev.has(ex.id)) return prev;
+                            const next = new Set(prev);
+                            next.delete(ex.id);
+                            return next;
+                          });
+                        }
+                      }}
+                      placeholder='e.g. "Felt strong", "Bar path off", "Left knee grumbled"'
+                      rows={2}
+                      disabled={commentListeningFor === ex.id}
+                      className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => startCommentListening(ex.id)}
+                      className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${commentListeningFor === ex.id ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                      title={commentListeningFor === ex.id ? "Stop" : "Dictate comment"}
+                    >
+                      {commentListeningFor === ex.id
+                        ? <Square className="w-3.5 h-3.5 fill-current" />
+                        : <Mic className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
@@ -2806,7 +2741,27 @@ export default function ClientSession() {
                     {allLogged ? "✓" : totalIdx + 1}
                   </span>
                   <div className="min-w-0">
-                    <h3 className="exercise-name">{ex.name}</h3>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h3 className="exercise-name">{ex.name}</h3>
+                      <button
+                        type="button"
+                        onClick={() => setNoteExpandedFor(prev => {
+                          const next = new Set(prev);
+                          if (next.has(ex.id)) next.delete(ex.id); else next.add(ex.id);
+                          return next;
+                        })}
+                        title={noteExpandedFor.has(ex.id) || comments[ex.id]?.trim() ? "Hide note" : "Add note"}
+                        aria-label="Add note"
+                        aria-pressed={noteExpandedFor.has(ex.id) || !!comments[ex.id]?.trim()}
+                        className={`shrink-0 p-1 rounded-md transition-colors ${
+                          noteExpandedFor.has(ex.id) || comments[ex.id]?.trim()
+                            ? "text-primary bg-primary/10"
+                            : "text-muted-foreground/60 hover:text-primary hover:bg-primary/10"
+                        }`}
+                      >
+                        <StickyNote className="w-4 h-4" />
+                      </button>
+                    </div>
                     <p className="text-[10px] text-primary/60 font-medium mt-0.5 flex items-center gap-1">
                       <Plus className="w-2.5 h-2.5" /> added by you
                     </p>
@@ -2885,29 +2840,42 @@ export default function ClientSession() {
                 )}
               </div>
 
-              {/* Client comment box */}
-              <div className="notes-section">
-                <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-border bg-muted/20 hover:border-muted-foreground/30"}`}>
-                  <textarea
-                    value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
-                    onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
-                    placeholder="Leave a note for Phil…"
-                    rows={2}
-                    disabled={commentListeningFor === ex.id}
-                    className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => startCommentListening(ex.id)}
-                    className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${commentListeningFor === ex.id ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-                    title={commentListeningFor === ex.id ? "Stop" : "Dictate comment"}
-                  >
-                    {commentListeningFor === ex.id
-                      ? <Square className="w-3.5 h-3.5 fill-current" />
-                      : <Mic className="w-3.5 h-3.5" />}
-                  </button>
+              {/* Client comment box — collapsed unless expanded or already has content */}
+              {(noteExpandedFor.has(ex.id) || !!comments[ex.id]?.trim() || commentListeningFor === ex.id) && (
+                <div className="notes-section">
+                  <div className={`relative rounded-xl border transition-colors ${commentListeningFor === ex.id ? "border-primary/40 bg-primary/5" : "border-border bg-muted/20 hover:border-muted-foreground/30"}`}>
+                    <textarea
+                      autoFocus
+                      value={commentListeningFor === ex.id ? (commentInterim || comments[ex.id] || "") : (comments[ex.id] || "")}
+                      onChange={e => { setComments(prev => ({ ...prev, [ex.id]: e.target.value })); setSaved(false); scheduleClientAutosave(); }}
+                      onBlur={() => {
+                        if (!comments[ex.id]?.trim() && commentListeningFor !== ex.id) {
+                          setNoteExpandedFor(prev => {
+                            if (!prev.has(ex.id)) return prev;
+                            const next = new Set(prev);
+                            next.delete(ex.id);
+                            return next;
+                          });
+                        }
+                      }}
+                      placeholder='e.g. "Felt strong", "Bar path off", "Left knee grumbled"'
+                      rows={2}
+                      disabled={commentListeningFor === ex.id}
+                      className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => startCommentListening(ex.id)}
+                      className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${commentListeningFor === ex.id ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                      title={commentListeningFor === ex.id ? "Stop" : "Dictate comment"}
+                    >
+                      {commentListeningFor === ex.id
+                        ? <Square className="w-3.5 h-3.5 fill-current" />
+                        : <Mic className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
@@ -2972,52 +2940,6 @@ export default function ClientSession() {
             <Plus className="w-4 h-4" /> Add exercise
           </button>
         )}
-
-        {/* Post-session feedback */}
-        <div className="rounded-2xl border bg-muted/20 overflow-hidden">
-          <div className="px-4 pt-4 pb-3">
-            <p className="text-sm font-semibold mb-0.5">Any changes for next time?</p>
-            <p className="text-xs text-muted-foreground mb-3">Your feedback will update future sessions of this type in the programme.</p>
-            {feedbackDone ? (
-              <div className="flex items-start gap-2.5 rounded-xl bg-green-50 border border-green-200 px-3 py-3">
-                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
-                <p className="text-sm text-green-800">{feedbackConfirmation}</p>
-              </div>
-            ) : (
-              <>
-                <div className={`relative rounded-xl border transition-colors ${feedbackListening ? "border-primary/40 bg-primary/5" : "border-border bg-background"}`}>
-                  <textarea
-                    value={feedbackListening ? (feedbackInterim || feedbackText) : feedbackText}
-                    onChange={e => { if (!feedbackListening) setFeedbackText(e.target.value); }}
-                    placeholder={feedbackListening ? "Listening…" : 'e.g. "Too easy", "Swap burpees", "Running felt too hard"'}
-                    rows={2}
-                    disabled={feedbackListening || feedbackSubmitting}
-                    className="w-full bg-transparent resize-none text-sm px-3 pt-2.5 pb-2 pr-10 rounded-xl outline-none placeholder:text-muted-foreground/50 disabled:opacity-70"
-                  />
-                  <button
-                    type="button"
-                    onClick={toggleFeedbackListening}
-                    disabled={feedbackSubmitting}
-                    className={`absolute right-2 top-2 p-1.5 rounded-lg transition-colors ${feedbackListening ? "text-red-500 bg-red-50" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-                  >
-                    {feedbackListening
-                      ? <Square className="w-3.5 h-3.5 fill-current" />
-                      : <Mic className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-                <Button
-                  className="w-full mt-2 rounded-xl gap-2"
-                  disabled={!feedbackText.trim() || feedbackSubmitting || feedbackListening}
-                  onClick={submitFeedback}
-                >
-                  {feedbackSubmitting
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Applying…</>
-                    : <><Send className="w-4 h-4" /> Apply to future sessions</>}
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
 
         {/* Share workout */}
         <button onClick={openShareModal} className="button-secondary w-full">
