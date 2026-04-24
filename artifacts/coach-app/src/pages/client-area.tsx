@@ -417,12 +417,28 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   }
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
-    const params = new URLSearchParams(search);
-    const t = params.get("tab");
+    const sp = new URLSearchParams(search);
+    const t = sp.get("tab");
     if (t === "dashboard") return "dashboard";
     if (t === "nutrition") return "nutrition";
-    return "training";
+    if (t === "training") return "training";
+    if (t === "irl") return "irl";
+    // Deep link: /client/nutrition lands directly on the standalone nutrition view
+    if (typeof window !== "undefined" && window.location.pathname === "/client/nutrition") return "nutrition";
+    // Default is now "dashboard" (which surfaces nutrition via the pinned strip).
+    // The top tab pills were removed; bottom nav will replace them.
+    return "dashboard";
   });
+  // Controls the dashboard's pinned nutrition strip: collapsed shows remaining
+  // macros, expanded reveals the full meal-logging view inline.
+  const [nutritionExpanded, setNutritionExpanded] = useState(false);
+  // Collapse the inline nutrition panel whenever the user navigates away
+  // from the Dashboard tab so the next return shows the closed state.
+  useEffect(() => {
+    if (activeTab !== "dashboard" && nutritionExpanded) {
+      setNutritionExpanded(false);
+    }
+  }, [activeTab, nutritionExpanded]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [assignStartDate, setAssignStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -3571,50 +3587,72 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           </div>
         )}
 
-        {/* Tabs + Phil toggle */}
-        <div className="flex items-center gap-2 px-6 py-4">
-          <div className="tabs flex-1">
-            {([
-              { id: "dashboard", label: "Dashboard", icon: <BarChart3 className="w-3.5 h-3.5" /> },
-              { id: "nutrition",  label: "Nutrition",  icon: <Utensils  className="w-3.5 h-3.5" /> },
-              { id: "training",   label: "Training",   icon: <Dumbbell  className="w-3.5 h-3.5" /> },
-              ...(mode === "client" && isIrlEnabled ? [{ id: "irl" as Tab, label: "IRL Sessions", icon: <MapPin className="w-3.5 h-3.5" /> }] : []),
-            ] as { id: Tab; label: string; icon: React.ReactNode }[]).map(({ id, label, icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`tab gap-1.5${activeTab === id ? " active" : ""}`}
-              >
-                {icon}{label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Top tab pills removed — bottom nav now owns Dashboard/Training/IRL switching.
+            Nutrition is merged into the Dashboard via a pinned strip. */}
       </div>}
 
-      {/* Dashboard Tab */}
-      {!isTeamMode && activeTab === "dashboard" && (
+      {/* Dashboard + Nutrition (merged) — single scroll container.
+          - Dashboard view: pinned macros strip → optional expanded nutrition view → DashboardTab
+          - /client/nutrition deep link: standalone nutrition view (no strip, no DashboardTab)
+          The 530-line nutrition JSX below is rendered when:
+            (a) standalone /nutrition tab, OR
+            (b) dashboard tab with the strip expanded.
+          Position is the same in both cases (inside this scroll container),
+          so structurally we only need one inline JSX block. */}
+      {!isTeamMode && (activeTab === "dashboard" || activeTab === "nutrition") && (
         <div className="flex-1 overflow-y-auto">
-          <DashboardTab
-            analytics={analytics}
-            isLoading={analyticsLoading}
-            clientId={clientId}
-            calorieTarget={client?.dailyCalorieGoal ?? null}
-            proteinTarget={client?.dailyProteinGoal ?? null}
-            nutritionMode={nutritionTrackingMode}
-            hasSessionData={!analytics || analytics.sessions.length > 0}
-          />
-        </div>
-      )}
-      {!isTeamMode && mode === "client" && activeTab === "dashboard" && (
-        <AskPhilDock context="dashboard" />
-      )}
+          {/* ── Nutrition strip (dashboard only, pinned) ────────────
+              Shows today's remaining macros. Chevron expands inline
+              into the full meal-logging view. */}
+          {activeTab === "dashboard" && (() => {
+            const todayStr = format(new Date(), "yyyy-MM-dd");
+            const todayLogs = weeklyNutritionLogs.filter(e => e.date === todayStr);
+            const todayCals = todayLogs.reduce((s, e) => s + (e.calories ?? 0), 0);
+            const todayPro  = todayLogs.reduce((s, e) => s + parseFloat(e.protein ?? "0"), 0);
+            const calTarget = client?.dailyCalorieGoal ?? 0;
+            const proTarget = client?.dailyProteinGoal ?? 0;
+            const remCal = Math.max(0, Math.round(calTarget - todayCals));
+            const remPro = Math.max(0, Math.round(proTarget - todayPro));
+            const hasAnyTarget = calTarget > 0 || proTarget > 0;
+            return (
+              <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b">
+                <button
+                  type="button"
+                  onClick={() => setNutritionExpanded(v => !v)}
+                  aria-expanded={nutritionExpanded}
+                  aria-label={nutritionExpanded ? "Collapse meal logging" : "Open meal logging"}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 active:bg-muted/60 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Utensils className="w-4 h-4 text-muted-foreground shrink-0" />
+                    {hasAnyTarget ? (
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        {calTarget > 0 && (
+                          <span className="text-sm font-semibold tabular-nums">{remCal} kcal</span>
+                        )}
+                        {calTarget > 0 && proTarget > 0 && (
+                          <span className="text-muted-foreground/40 text-sm">·</span>
+                        )}
+                        {proTarget > 0 && (
+                          <span className="text-sm font-semibold tabular-nums">{remPro}g protein</span>
+                        )}
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">left today</span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Set a nutrition goal to track macros</span>
+                    )}
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${nutritionExpanded ? "rotate-180" : ""}`} />
+                </button>
+              </div>
+            );
+          })()}
 
-
-      {/* Nutrition Tab */}
-      {!isTeamMode && activeTab === "nutrition" && (
-        <div className="flex-1 overflow-y-auto">
-        <div className="nutrition-screen px-6 py-6 max-w-2xl mx-auto">
+          {/* ── Nutrition content (the original 530-line block) ────
+              Rendered for the standalone deep link OR the expanded
+              dashboard accordion. */}
+          {(activeTab === "nutrition" || (activeTab === "dashboard" && nutritionExpanded)) && (
+        <div className={`nutrition-screen px-6 py-6 max-w-2xl mx-auto${activeTab === "dashboard" ? " border-b bg-muted/20" : ""}`}>
 
           {/* ── Nutrition Goals ───────────────────────────────────── */}
           <div className="flex items-center justify-between mb-4">
@@ -4146,7 +4184,24 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </DialogContent>
           </Dialog>
         </div>
+          )}
+
+          {/* ── Dashboard tab content (analytics) ─────────────────── */}
+          {activeTab === "dashboard" && (
+            <DashboardTab
+              analytics={analytics}
+              isLoading={analyticsLoading}
+              clientId={clientId}
+              calorieTarget={client?.dailyCalorieGoal ?? null}
+              proteinTarget={client?.dailyProteinGoal ?? null}
+              nutritionMode={nutritionTrackingMode}
+              hasSessionData={!analytics || analytics.sessions.length > 0}
+            />
+          )}
         </div>
+      )}
+      {!isTeamMode && mode === "client" && activeTab === "dashboard" && (
+        <AskPhilDock context="dashboard" />
       )}
 
       {/* IRL Sessions Tab */}
