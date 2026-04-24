@@ -605,6 +605,23 @@ export default function ClientSession() {
   const [isParsingAdd, setIsParsingAdd] = useState(false);
   const addRecRef = useRef<any>(null);
 
+  // Autofill-from-set-1 state (per exercise)
+  // - autofillCompletedFor: exIds where the user has already used autofill this session.
+  //   The chip stays hidden for these until set 1 is cleared and re-entered.
+  // - autofillFilledShowing: exIds currently in their 1.5s "Filled" confirmation window.
+  // - autofillAnimSet: per exercise, the set indices currently animating their 150ms fade.
+  const [autofillCompletedFor, setAutofillCompletedFor] = useState<Set<string>>(new Set());
+  const [autofillFilledShowing, setAutofillFilledShowing] = useState<Set<string>>(new Set());
+  const [autofillAnimSet, setAutofillAnimSet] = useState<Record<string, Set<number>>>({});
+  // Track all in-flight autofill timers so we can clear them on unmount.
+  const autofillTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  useEffect(() => {
+    return () => {
+      autofillTimersRef.current.forEach(t => clearTimeout(t));
+      autofillTimersRef.current.clear();
+    };
+  }, []);
+
   // Comment state (per-exercise)
   const [comments, setComments] = useState<Record<string, string>>({});
   // Tracks which exercises have their per-exercise note textarea expanded.
@@ -1039,11 +1056,118 @@ export default function ClientSession() {
 
   const handleFieldChange = (exId: string, setIdx: number, field: "weight" | "reps", raw: string) => {
     const num = raw === "" ? null : parseFloat(raw);
+    const value = isNaN(num as number) ? null : num;
     setLogs(prev => {
       const current = [...(prev[exId] || [])];
-      current[setIdx] = { ...current[setIdx], [field]: isNaN(num as number) ? null : num };
+      current[setIdx] = { ...current[setIdx], [field]: value };
       return { ...prev, [exId]: current };
     });
+    // If the user clears either field of set 1, allow the Autofill chip to re-appear
+    // once they've filled set 1 again (per spec).
+    if (setIdx === 0 && value == null && autofillCompletedFor.has(exId)) {
+      setAutofillCompletedFor(prev => {
+        const s = new Set(prev);
+        s.delete(exId);
+        return s;
+      });
+    }
+    setSaved(false);
+    scheduleClientAutosave();
+  };
+
+  // Autofill set 1's values into every empty subsequent set in the same exercise.
+  // - For weighted exercises: copies both weight and reps; "filled" requires both.
+  // - For bodyweight exercises: copies reps only; "filled" requires reps (weight stays null).
+  // - Never overwrites already-filled sets, never adds new sets, never touches RPE.
+  // - Animates each fill with a 150ms fade, staggered by 50ms.
+  // - Shows "Filled" confirmation for 1.5s after the last set finishes, then hides the chip.
+  const handleAutofill = (exId: string, totalSets: number, isBw: boolean) => {
+    const exLogs = logs[exId] || [];
+    const set1 = exLogs[0];
+    if (!set1) return;
+    // BW exercises don't use weight; only reps is required to enable autofill.
+    if (isBw) {
+      if (set1.reps == null) return;
+    } else {
+      if (set1.weight == null || set1.reps == null) return;
+    }
+
+    // For BW, "empty" means reps is null (weight is irrelevant/always null).
+    // For weighted, "empty" means both weight and reps are null.
+    const isRowEmpty = (s: { weight: number | null; reps: number | null } | undefined) => {
+      if (!s) return true;
+      return isBw ? s.reps == null : (s.weight == null && s.reps == null);
+    };
+    const toFill: number[] = [];
+    for (let i = 1; i < totalSets; i++) {
+      if (isRowEmpty(exLogs[i])) toFill.push(i);
+    }
+    if (toFill.length === 0) return;
+
+    // Subtle haptic for supported devices
+    try { window.navigator.vibrate?.(10); } catch { /* ignore */ }
+
+    const STAGGER_MS = 50;
+    const FADE_MS = 150;
+    const w = isBw ? null : set1.weight;
+    const r = set1.reps;
+
+    // Helper: schedule a timer and track it so unmount can cancel it.
+    const schedule = (fn: () => void, delay: number) => {
+      const id = setTimeout(() => {
+        autofillTimersRef.current.delete(id);
+        fn();
+      }, delay);
+      autofillTimersRef.current.add(id);
+      return id;
+    };
+
+    toFill.forEach((idx, n) => {
+      const startAt = n * STAGGER_MS;
+      schedule(() => {
+        setLogs(prev => {
+          const current = [...(prev[exId] || [])];
+          // Re-check empty so we don't overwrite a value the user typed mid-animation
+          if (!isRowEmpty(current[idx])) return prev;
+          current[idx] = { weight: w, reps: r };
+          return { ...prev, [exId]: current };
+        });
+        setAutofillAnimSet(prev => {
+          const s = new Set(prev[exId] || []);
+          s.add(idx);
+          return { ...prev, [exId]: s };
+        });
+        // Clear the per-row animation flag after the fade completes
+        schedule(() => {
+          setAutofillAnimSet(prev => {
+            const s = new Set(prev[exId] || []);
+            s.delete(idx);
+            return { ...prev, [exId]: s };
+          });
+        }, FADE_MS);
+      }, startAt);
+    });
+
+    // Mark autofill as used and show the "Filled" chip for 1.5s after the last fade ends
+    setAutofillCompletedFor(prev => {
+      const s = new Set(prev);
+      s.add(exId);
+      return s;
+    });
+    const totalAnimMs = (toFill.length - 1) * STAGGER_MS + FADE_MS;
+    setAutofillFilledShowing(prev => {
+      const s = new Set(prev);
+      s.add(exId);
+      return s;
+    });
+    schedule(() => {
+      setAutofillFilledShowing(prev => {
+        const s = new Set(prev);
+        s.delete(exId);
+        return s;
+      });
+    }, totalAnimMs + 1500);
+
     setSaved(false);
     scheduleClientAutosave();
   };
@@ -2426,47 +2550,93 @@ export default function ClientSession() {
                         ) : null}
                       </div>
                     </div>
-                    {Array.from({ length: setsCount }, (_, setIdx) => {
-                      const log = exLogs[setIdx] || { weight: null, reps: null };
-                      const isDone = isBw ? log.reps !== null : (log.weight !== null || log.reps !== null);
-                      const perSetTarget = ex.perSetReps?.[setIdx];
-                      const perSetRpeTarget = ex.perSetRpe?.[setIdx];
+                    {/* Autofill chip visibility: set 1 is "filled enough" (BW: reps; weighted: weight+reps);
+                        chip stays gone after one use until set 1 is cleared. We always wrap set 1 in the
+                        flex layout so input width is stable; the chip itself toggles visibility, not layout. */}
+                    {(() => {
+                      const set1 = exLogs[0];
+                      const set1Ready = !!set1 && (isBw ? set1.reps != null : (set1.weight != null && set1.reps != null));
+                      const filledShowing = autofillFilledShowing.has(ex.id);
+                      const completed = autofillCompletedFor.has(ex.id);
+                      const hasEmptySubsequent = Array.from({ length: setsCount }, (_, i) => i)
+                        .slice(1)
+                        .some(i => {
+                          const s = exLogs[i];
+                          if (!s) return true;
+                          return isBw ? s.reps == null : (s.weight == null && s.reps == null);
+                        });
+                      const showChip = set1Ready && (filledShowing || (!completed && hasEmptySubsequent));
+                      // Whether set 1 should always reserve chip space. We reserve it whenever the
+                      // exercise has more than one set, so set 1's input widths never jump.
+                      const reserveChipSpace = setsCount > 1;
                       return (
-                        <div key={setIdx} className={`set-row transition-colors ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"}`}>
-                          <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
-                            <div>{setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}</div>
-                            {perSetRpeTarget && <div className="text-[9px] font-semibold text-muted-foreground normal-case">RPE {perSetRpeTarget}</div>}
-                          </div>
-                          {isBw ? (
-                            <div className="flex items-center justify-center">
-                              <span className="text-sm font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 h-10 flex items-center">BW</span>
-                            </div>
-                          ) : (
-                            <Input
-                              type="number" inputMode="decimal" step="0.5" min="0"
-                              placeholder="—"
-                              value={log.weight ?? ""}
-                              onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
-                              className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
-                            />
-                          )}
-                          <div className="relative">
-                            <Input
-                              type="number" inputMode="numeric" step="1" min="0"
-                              placeholder={perSetTarget != null ? String(perSetTarget) : safeReps(ex.reps) || "—"}
-                              value={log.reps ?? ""}
-                              onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
-                              className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
-                            />
-                            {perSetTarget && (
-                              <span className="absolute -bottom-3.5 left-0 right-0 text-center text-[9px] text-primary/50 font-semibold pointer-events-none">
-                                target: {perSetTarget}
-                              </span>
-                            )}
-                          </div>
+                        <div className="space-y-1.5">
+                          {Array.from({ length: setsCount }, (_, setIdx) => {
+                            const log = exLogs[setIdx] || { weight: null, reps: null };
+                            const isDone = isBw ? log.reps !== null : (log.weight !== null || log.reps !== null);
+                            const perSetTarget = ex.perSetReps?.[setIdx];
+                            const perSetRpeTarget = ex.perSetRpe?.[setIdx];
+                            const isAutofillAnim = autofillAnimSet[ex.id]?.has(setIdx);
+                            const setRow = (
+                              <div className={`set-row transition-all ${isDone ? "bg-primary/5 border border-primary/20" : "bg-muted/40"} ${isAutofillAnim ? "animate-autofill-fade" : ""}`}>
+                                <div className={`text-sm font-bold pl-1 leading-tight ${isDone ? "text-primary" : "text-muted-foreground"}`}>
+                                  <div>{setIdx + 1}{isDone && <span className="ml-0.5">✓</span>}</div>
+                                  {perSetRpeTarget && <div className="text-[9px] font-semibold text-muted-foreground normal-case">RPE {perSetRpeTarget}</div>}
+                                </div>
+                                {isBw ? (
+                                  <div className="flex items-center justify-center">
+                                    <span className="text-sm font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 h-10 flex items-center">BW</span>
+                                  </div>
+                                ) : (
+                                  <Input
+                                    type="number" inputMode="decimal" step="0.5" min="0"
+                                    placeholder="—"
+                                    value={log.weight ?? ""}
+                                    onChange={e => handleFieldChange(ex.id, setIdx, "weight", e.target.value)}
+                                    className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
+                                  />
+                                )}
+                                <div className="relative">
+                                  <Input
+                                    type="number" inputMode="numeric" step="1" min="0"
+                                    placeholder={perSetTarget != null ? String(perSetTarget) : safeReps(ex.reps) || "—"}
+                                    value={log.reps ?? ""}
+                                    onChange={e => handleFieldChange(ex.id, setIdx, "reps", e.target.value)}
+                                    className={`min-h-11 h-11 text-center text-base font-bold rounded-lg bg-white border border-neutral-200 shadow-none focus-visible:border-black focus-visible:ring-1 focus-visible:ring-black ${isDone ? "text-primary" : ""}`}
+                                  />
+                                  {perSetTarget && (
+                                    <span className="absolute -bottom-3.5 left-0 right-0 text-center text-[9px] text-primary/50 font-semibold pointer-events-none">
+                                      target: {perSetTarget}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                            if (setIdx === 0 && reserveChipSpace) {
+                              return (
+                                <div key={setIdx} className="flex items-center gap-2">
+                                  <div className="flex-1 min-w-0">{setRow}</div>
+                                  {/* Chip space is always reserved for set 1 (when there's >1 set) so input
+                                      width is stable. We toggle visibility/pointer-events instead of mounting. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAutofill(ex.id, setsCount, isBw)}
+                                    aria-hidden={!showChip}
+                                    tabIndex={showChip ? 0 : -1}
+                                    aria-label={filledShowing ? "Autofill complete" : "Autofill remaining sets from set 1"}
+                                    className={`shrink-0 bg-neutral-900 text-white rounded-full px-1.5 py-1 text-[12px] font-medium inline-flex items-center gap-1 hover:bg-neutral-800 active:scale-95 transition-opacity whitespace-nowrap shadow-sm ${showChip ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                    {filledShowing ? "Filled" : "Autofill"}
+                                  </button>
+                                </div>
+                              );
+                            }
+                            return <div key={setIdx}>{setRow}</div>;
+                          })}
                         </div>
                       );
-                    })}
+                    })()}
                     <button
                       type="button"
                       onClick={() => addSetToExercise(ex.id, setsCount)}
