@@ -211,4 +211,58 @@ export function searchRunsSync(query: string, limit = 3) {
   return (scored.length > 0 ? scored : runWorkouts.slice(0, limit).map(w => ({ ...w, score: 1, intensityLabel: INTENSITY_LABELS[w.intensity] ?? w.intensity })));
 }
 
+// ── Run session prompt doctrine ─────────────────────────────────────────────
+// Interpolated into parse.ts programme-generation prompt. Single source of
+// truth for how Phil generates hard run sessions: pace-driven (5k/10k
+// anchored, never RPE), variety-first intervals, and the 10 canonical
+// structures. Update here, it propagates to parse.ts on next request.
+export const RUN_SESSION_DOCTRINE = `
+## Run sessions — pace-driven generation rules
+
+**Runs are pace-driven, not RPE-driven.** Do NOT output an rpe value on run session exercises — leave rpe null on every run exercise. Paces anchor to the athlete's 5k and 10k times:
+- **5k pace** anchors VO2 work (short-to-mid intervals)
+- **10k pace** anchors threshold work (cruise intervals, tempo)
+- **10k + 15–30s/km** anchors long steady and marathon tempo
+- **5k − 5 to 10s/km** anchors speed endurance
+- **Strides and hill sprints** are effort-cued ("strong", "hard controlled", "95%") — the one exception to the pace-driven rule.
+
+**If the athlete's 5k or 10k time is not present in the brief or context when a run session is requested, do NOT guess paces and do NOT substitute RPE.** Ask exactly one inline question before generating any run session:
+
+> "Before I lock the run sessions in — what is your current 5k or 10k time? A recent race or a rough time-trial estimate is fine. I will anchor every run pace off it."
+
+One question, then proceed. Non-run sessions (strength, WOD, cycling, swimming) can still be generated in the same turn; only run sessions wait for the pace answer.
+
+## The 10 canonical hard-running structures
+
+These are the default vocabulary for every hard running session. Pick from this list first. Scale each by rep count, distance, and intensity based on athlete level, session goal, and weekly context. Only invent outside this library when there is a specific justification (race-specific long intervals for marathon work, a named test set, niche goals, or explicit athlete request).
+
+**Variety-first principle:** when two structures deliver the same total work and pace target, prefer the mixed or varied structure over flat repetitive sets. "1k / 800 / 800 / 600 / 400 / 1k" beats "5×1k". Flat sets are acceptable only for race simulation, a named test set, or pure beginners — state the reason when you use them.
+
+1. **Pyramid intervals** — ascending-descending distances at 5k–10k pace. Example: 400 / 600 / 800 / 1000 / 800 / 600 / 400 with equal jog recovery, 5k pace on the short rungs, 10k pace on the long rungs. Scales by number of rungs and top distance.
+
+2. **Reverse pyramid** — inverted pyramid, long rung first. Example: 1000 / 800 / 600 / 400 / 600 / 800 / 1000. Same pace rules as the pyramid. Use when front-loading quality is the goal.
+
+3. **Mixed-distance intervals** — non-symmetric distance mix at 5k–10k pace. Example: 1k / 800 / 800 / 600 / 400 / 1k with 2 min jog recovery. Scales by rep count and distance mix. Default shape when no other structure is specifically justified.
+
+4. **Over-unders** — continuous blocks alternating just-under LT and just-over LT pace. Example: 5–8 blocks of [2 min at 10k + 5s/km / 1 min at 10k − 5s/km], no rest between blocks. Scales by block length and total block count.
+
+5. **Long run with hot spot** — steady long run with a quality block embedded. Example: 60 min steady with 15 min at 10k pace starting at minute 30. Scales by total duration, hot-spot length, and placement (middle or finish). Hot-spot pace is 10k or marathon tempo, never faster.
+
+6. **Cruise intervals (threshold)** — 4–6 × 1 mile (or 1500m / 2000m) at 10k pace, 60–90s jog recovery. Scales by rep distance and rep count. Primary vehicle for threshold development.
+
+7. **VO2 classics** — 5 × 1000m or 4 × 1200m at 5k pace, equal or near-equal jog recovery. Scales by rep distance and count. Use when a clean anchored VO2 stimulus is the goal.
+
+8. **Short VO2 / 30-30s** — continuous 10–20 × 30s hard / 30s easy, no walk recovery. Variants: 40-20, 20-10. "Hard" is ~5k pace or slightly faster. Scales by total rep count. Use for aerobic power under continuous load.
+
+9. **Progression run** — continuous run starting easy and finishing at threshold. Example: 10k starting at 10k + 30s/km, dropping 5–10s/km per kilometre, finishing at 10k pace. Scales by total distance and aggressiveness of progression.
+
+10. **Strides + hills combo** — steady run with 6–8 × 20s hill sprints embedded in the middle or end. Hills are strong / 95% effort (not paced — the one exception). Example: 30 min steady, 8 × 20s hill sprints on a 6–8% grade with walk-back recovery, 10 min steady cool-down. Scales by effort count, length (10–30s), and gradient.
+
+## How to render these in the session JSON
+- Name the structure explicitly in the session name: "Pyramid Intervals — 5k/10k pace", "Mixed-Distance Intervals", "Cruise Intervals", "Over-Unders", "Long Run with 15 min Hot Spot", etc.
+- Reflect the structure in the "structure" field with specific paces derived from the athlete's 5k/10k times.
+- Break the session into exercise entries that reflect the segments (warm-up, work intervals, recoveries, cool-down).
+- The "rpe" field on every run exercise stays null. Intensity is carried by pace language in the name, structure, and notes.
+`;
+
 export default router;

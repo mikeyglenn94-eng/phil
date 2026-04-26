@@ -8,6 +8,7 @@ import { randomUUID } from "crypto";
 import { addDays, parseISO, format } from "date-fns";
 import { logApiCost } from "../lib/log-api-cost";
 import { extractAuth } from "../middlewares/require-auth";
+import { RUN_SESSION_DOCTRINE } from "./run-brain";
 
 // ── Safe JSON parser — strips AI markdown fences before parsing ─────────────
 function safeParseAIJson(raw: string): any {
@@ -437,6 +438,13 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - By default, keep exercise selection stable across the full block. Progress through overload variables: more weight, more reps, more sets, less rest, harder effort (RPE), or more demanding tempo.
 - The session style section below will specify whether exercise variation is permitted. Follow it strictly.
 
+### 1b. Rest intervals — defaults
+- **Primary compounds (default 2.5 min between sets):** Back Squat, Front Squat, Deadlift, Romanian Deadlift when used as the main lift, Bench Press, Close-Grip Bench, Incline Bench, Strict Press, Overhead Press, all Olympic lifts and their power/hang variations, Pendlay or barbell rows from the floor.
+- **Accessories, machine work, and isolation (default 90s between sets):** rows on a machine or cable, curls, pressdowns, lateral raises, leg press, leg curl, leg extension, face pulls, hip thrust, Bulgarian split squat, step-ups, core work, any single-joint movement.
+- These are defaults, not ceilings. Go longer (3–5 min) for heavy strength or peaking phases where neural quality matters most. Go shorter (30–60s) for hypertrophy-density work or metcon-style conditioning — but only when the session has a clear reason to compress rest.
+- Rest is a legitimate progression variable (can tighten week to week as part of overload), but the starting defaults above apply unless overridden.
+- When prescribing rest that differs from the default, state the reason in the exercise \`notes\` (e.g. "short rest — density block", "full rest — heavy triples").
+
 ### 2. Intensity is the default for regular clients
 - Most clients train 4–5 days per week. On busy days, they may do two sessions — a strength block in the morning and a WOD or run in the afternoon/evening. Same-day pairing is normal and expected in hybrid programmes.
 - Not every session should make the client want to throw up, but they should be working hard most of the time. Hard and purposeful is the standard. Easy volume for its own sake is a waste of a session.
@@ -521,6 +529,7 @@ Snatch, Clean & Jerk, Clean, Jerk, and their variations (Power Snatch, Hang Clea
 - Increase intensity OR volume in a given week, never both simultaneously
 - Every training week must include at least 1 endurance ride as the aerobic base
 - Max 2 interval sessions per week — intervals are the quality work, endurance is the volume
+- **Variety-first interval design:** when programming an interval ride, prefer mixed-duration, pyramid, or over-under structures over flat repetitive sets. A pyramid (1-2-3-2-1 min) or an over-under block beats "5×5 min" at the same total work and intensity. Flat sets are only appropriate for race simulation, a specific test, or pure beginners — state the reason when you use them.
 
 ### Swimming sessions (source: "swim_brain"):
 - "source": "swim_brain"
@@ -644,13 +653,7 @@ When programming running, reference and develop these specific time domains:
 - **Variety in structure:** use creative, named session formats. Not just "run 5km". Think pyramid runs, hop-scotch style (build distance then descend), Bombolini-style mixed pace sessions.
 - **The recovery interval IS the rest:** in mixed-pace sessions, the easy pace interval is the rest — it should be written as part of the structure, not omitted.
 
-### Example session formats to use
-- **Pyramid run (aerobic threshold):** 200m steady / 100m sprint / 400m steady / 100m sprint / 600m steady / 100m sprint... then descend back down. Continuous, non-stop. Sprints at 97–98% (not max — retain form). Total ~4–6km.
-- **Bombolini (mixed threshold/speed):** 3 sets of [500m fast (between 1-mile and 400m PR pace) + 200m recovery jog + 100m sprint], 5 min rest between sets.
-- **Threshold intervals:** 4×1km at 10k pace, 90s rest between reps.
-- **VO2 Max quality session:** 8×400m at faster than 5k pace, 90s rest.
-- **Long steady run:** 40–60 min at aerobic threshold / Z2 pace. Comfortable, continuous. Name: "Long Steady Run".
-- **Speed session:** 6×100m sprint, 3 min full recovery between each.
+${RUN_SESSION_DOCTRINE}
 
 ### Periodisation for endurance blocks
 - Early weeks: predominantly aerobic threshold volume (build the base)
