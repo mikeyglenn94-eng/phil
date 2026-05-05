@@ -13,7 +13,7 @@
  *      one card per affected exercise; each tap → POST {action:"record_swap"}.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -76,15 +76,31 @@ interface GenerationFlowChatProps {
   onComplete?: (result: GenerateResult) => void;
   /** Optional: called whenever state advances. Lets the host show a side panel. */
   onStateChange?: (state: FlowState) => void;
+  /** When true, hide the internal transcript + free-text input. The host owns
+   *  message rendering and supplies user input via the imperative `send` ref.
+   *  The component still renders chip rows and swap-card UI inline. */
+  embedded?: boolean;
+  /** Called with each new chat message as it's added to the flow's history.
+   *  Lets an embedded host append flow turns into its own bubble stream. */
+  onMessage?: (message: FlowMessage) => void;
 }
 
-export function GenerationFlowChat({
+export interface GenerationFlowChatHandle {
+  send: (userMessage: string) => Promise<void>;
+}
+
+export const GenerationFlowChat = forwardRef<
+  GenerationFlowChatHandle,
+  GenerationFlowChatProps
+>(function GenerationFlowChat({
   type,
   context,
   onPreview,
   onComplete,
   onStateChange,
-}: GenerationFlowChatProps) {
+  embedded,
+  onMessage,
+}, ref) {
   const { token } = useAuth();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -116,9 +132,22 @@ export function GenerationFlowChat({
     return (await res.json()) as Record<string, unknown>;
   }
 
+  /** Tracks how many messages from history we've already emitted via onMessage.
+   *  Lets us emit only the *new* turns each time the state updates. */
+  const emittedCountRef = useRef(0);
+
   function commitState(next: FlowState) {
     setState(next);
     onStateChange?.(next);
+    // Diff history vs already-emitted count and fire onMessage for each new turn.
+    if (onMessage) {
+      const history = next.history ?? [];
+      while (emittedCountRef.current < history.length) {
+        const m = history[emittedCountRef.current];
+        if (m) onMessage(m);
+        emittedCountRef.current += 1;
+      }
+    }
   }
 
   // ── Start ──────────────────────────────────────────────────────────────
@@ -137,6 +166,13 @@ export function GenerationFlowChat({
       .finally(() => setBusy(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Imperative handle — lets the embedded host pipe user input ─────────
+  useImperativeHandle(ref, () => ({
+    send: async (userMessage: string) => {
+      await send(userMessage);
+    },
+  }), [state, busy, type]);
 
   // ── Advance ────────────────────────────────────────────────────────────
 
@@ -273,8 +309,8 @@ export function GenerationFlowChat({
   const activeSwap = showSwapUI ? swapSets![activeSwapIndex] : null;
 
   return (
-    <div className="flex flex-col gap-3 max-w-2xl mx-auto p-4">
-      <ChatTranscript history={state?.history ?? []} />
+    <div className={embedded ? "flex flex-col gap-3" : "flex flex-col gap-3 max-w-2xl mx-auto p-4"}>
+      {!embedded ? <ChatTranscript history={state?.history ?? []} /> : null}
 
       {error ? (
         <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded px-3 py-2">
@@ -305,7 +341,7 @@ export function GenerationFlowChat({
         />
       ) : null}
 
-      {!done && !busy && !showSwapUI ? (
+      {!done && !busy && !showSwapUI && !embedded ? (
         <FreeTextInput
           value={textInput}
           onChange={setTextInput}
@@ -320,14 +356,14 @@ export function GenerationFlowChat({
         />
       ) : null}
 
-      {done ? (
+      {done && !embedded ? (
         <div className="text-sm text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-3 py-2">
           Done. Check the next pane for the result.
         </div>
       ) : null}
     </div>
   );
-}
+});
 
 // ── Subcomponents ─────────────────────────────────────────────────────────
 

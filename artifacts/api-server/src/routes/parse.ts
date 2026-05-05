@@ -378,6 +378,17 @@ router.post("/generate-rationale", async (req, res): Promise<void> => {
   }
 });
 
+// ⚠ DEPRECATED — replaced by lib/generation-flow's programme-flow generator.
+//
+// Two consumers remain:
+//   1. client-area.tsx callsite that runs when /coach-parse's CoachParseResult
+//      reports hasEnough — i.e. the legacy build flow that the new chat
+//      classifier hands off to as a fallback when intent === "chat".
+//   2. library-builder.tsx (separate page, coach-side, out of chat scope).
+//
+// Delete in the cleanup PR after the chat rewire proves out and (1) is gone.
+// (2) needs its own treatment — likely a coach-side trigger of the same
+// programme flow, but separate scope.
 router.post("/generate-programme", async (req, res): Promise<void> => {
   const { description, startDate, strengthStyle, clientId, weekOnly } = req.body as {
     description: string; startDate: string; strengthStyle?: "straight" | "variety"; clientId?: number; weekOnly?: boolean;

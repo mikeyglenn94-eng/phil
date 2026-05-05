@@ -27,6 +27,7 @@ import { WeekViewAgenda } from "@/components/calendar/week-view-agenda";
 import { SessionBadge } from "@/components/calendar/session-badge";
 import { MultiSelectActionBar } from "@/components/calendar/multi-select-action-bar";
 import { ProgressionSheet } from "@/components/calendar/progression-sheet";
+import { GenerationFlowChat, type GenerationFlowChatHandle } from "@/components/generation-flow-chat";
 import { type QuickReply } from "@/components/chat/quick-reply-chips";
 import {
   BubbleRenderer,
@@ -1093,6 +1094,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [progressionSheetOpen, setProgressionSheetOpen] = useState(false);
   const [progressionSources, setProgressionSources] = useState<Session[]>([]);
+
+  // ── Active in-chat flow (state-machine driven generation) ────────────────
+  // When set, an embedded GenerationFlowChat renders inside the Phil panel and
+  // user messages from the top input are forwarded to it via flowRef.
+  type ActiveFlowType = "programme" | "session" | "modification" | "progression";
+  const [activeFlowType, setActiveFlowType] = useState<ActiveFlowType | null>(null);
+  const [activeFlowContext, setActiveFlowContext] = useState<Record<string, unknown> | null>(null);
+  const flowRef = useRef<GenerationFlowChatHandle | null>(null);
   const [pasteMode, setPasteMode] = useState(false);
   const [sessionClipboard, setSessionClipboard] = useState<{ sessions: Session[]; baseDate: string } | null>(null);
 
@@ -2146,16 +2155,200 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   };
 
   // ── Main entry point: dispatch based on intent ───────────────────────────
-  const handleCoachInput = async (overrideInput?: string) => {
+  // ── State-machine flow dispatcher ────────────────────────────────────────
+  // The new generation flows live in lib/generation-flow. The frontend wraps
+  // them via an intent classifier — generation messages start a flow,
+  // everything else falls through to the legacy classifyCoachIntent path so
+  // review / library / schedule / conversational continue to work unchanged.
+
+  const CANCEL_RE = /^(cancel|never\s?mind|nevermind|stop|forget it|abort|nope|drop it)\b/i;
+
+  function isCancelMessage(input: string): boolean {
+    return CANCEL_RE.test(input.trim());
+  }
+
+  /** Calls /api/chat-classify. Returns the intent label, or "chat" on any
+   *  failure so the legacy path takes over. */
+  async function classifyChatIntent(message: string): Promise<string> {
+    try {
+      const hasActiveProgramme = (clientProgrammes ?? []).length > 0;
+      const res = await fetch("/api/chat-classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, hasActiveProgramme }),
+      });
+      if (!res.ok) return "chat";
+      const data = (await res.json()) as { intent?: string };
+      return data.intent ?? "chat";
+    } catch {
+      return "chat";
+    }
+  }
+
+  /** Builds the context payload for a flow type given the current ClientArea
+   *  state, then mounts the embedded GenerationFlowChat. */
+  function startFlowFromIntent(intent: string): boolean {
+    switch (intent) {
+      case "start_programme_flow": {
+        setActiveFlowType("programme");
+        setActiveFlowContext({
+          clientId,
+          clientName: client?.name,
+        });
+        return true;
+      }
+      case "start_session_flow": {
+        setActiveFlowType("session");
+        setActiveFlowContext({
+          clientId,
+          clientName: client?.name,
+        });
+        return true;
+      }
+      case "start_modification_flow": {
+        const targetProg = (clientProgrammes ?? [])[0];
+        if (!targetProg) {
+          // Brief: fall back to programme flow when there's nothing to modify.
+          addPhilMsg("You don't have a programme yet. Want me to build you one? Say 'yes' or describe what you want.");
+          return true;
+        }
+        const today = format(new Date(), "yyyy-MM-dd");
+        const futureSessions = (targetProg.sessions as Session[]).filter(s => s.date >= today);
+        setActiveFlowType("modification");
+        setActiveFlowContext({
+          clientId,
+          programmeId: targetProg.id,
+          programmeName: targetProg.title,
+          futureSessions,
+          equipmentList: (client as { equipmentList?: string } | undefined)?.equipmentList ?? null,
+        });
+        return true;
+      }
+      case "start_progression_flow": {
+        const selectedSources = allClientSessions.filter(s => selectedSessionIds.has(s.id));
+        if (selectedSources.length === 0) {
+          addPhilMsg("Select sessions on the calendar first, then say 'repeat with progression'.");
+          return true;
+        }
+        const targetProg = (clientProgrammes ?? [])[0];
+        setActiveFlowType("progression");
+        setActiveFlowContext({
+          clientId,
+          programmeId: targetProg?.id ?? 0,
+          sourceSessions: selectedSources.map(s => ({
+            id: s.id,
+            name: s.name ?? "",
+            date: s.date,
+            dayNumber: (s as Session & { dayNumber?: number | null }).dayNumber ?? null,
+            source: (s as Session & { source?: string | null }).source ?? null,
+            structure: (s as Session & { structure?: string | null }).structure ?? null,
+            exercises: (s.exercises ?? []).map(ex => ({
+              name: ex.name ?? "",
+              sets: ex.sets ?? null,
+              reps: ex.reps ?? null,
+              rpe: ex.rpe ?? null,
+              rest: ex.rest ?? null,
+              tempo: ex.tempo ?? null,
+              notes: ex.notes ?? null,
+            })),
+            runLog: (s as Session & { runLog?: { distance?: number | null; pace?: string | null }[] }).runLog ?? [],
+          })),
+        });
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  const clearActiveFlow = () => {
+    setActiveFlowType(null);
+    setActiveFlowContext(null);
+    flowRef.current = null;
+  };
+
+  /** Handles the result emitted by an embedded flow on completion. */
+  const handleFlowComplete = async (result: { kind: string; data: unknown }) => {
+    const kind = result.kind;
+    const data = result.data as Record<string, unknown>;
+    clearActiveFlow();
+    try {
+      if (kind === "programme") {
+        const programme = data as { title?: string; blockLength?: number | null; sessionsPerWeek?: number | null; sessions?: Session[] };
+        const today = format(new Date(), "yyyy-MM-dd");
+        const sessionsWithDates = (programme.sessions ?? []).map(s => {
+          const dn = (s as Session & { dayNumber?: number | null }).dayNumber ?? null;
+          if (dn != null) {
+            return { ...s, date: format(addDays(parseISO(today), dn - 1), "yyyy-MM-dd") };
+          }
+          return s;
+        });
+        await fetch("/api/programmes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: programme.title ?? "Programme",
+            sessions: sessionsWithDates,
+            clientId,
+            ...(programme.blockLength != null ? { blockLength: programme.blockLength } : {}),
+            ...(programme.sessionsPerWeek != null ? { sessionsPerWeek: programme.sessionsPerWeek } : {}),
+          }),
+        });
+        await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+        addPhilMsg(`Built it. ${sessionsWithDates.length} sessions on the calendar — tap any to tweak.`);
+      } else if (kind === "session") {
+        const session = data as { name?: string };
+        const today = format(new Date(), "yyyy-MM-dd");
+        await saveSessionDirectly({ ...(data as object), id: `session-${Date.now()}` }, today);
+        addPhilMsg(`Done. "${session.name ?? "Session"}" added to today.`);
+      } else if (kind === "modification") {
+        const mod = data as { confirmation?: string };
+        addPhilMsg(mod.confirmation ?? "Programme updated.");
+      } else if (kind === "progression") {
+        await mergeProgressedBlock(data as never);
+      }
+    } catch {
+      addPhilMsg("Hit a snag saving that. Try again.");
+    }
+  };
+
+  /** Try to handle the message via the new state-machine path. Returns
+   *  "handled" if dispatched (cancel / active flow / generation start) or
+   *  "passthrough" if the legacy classifier should run. */
+  const dispatchChatToFlow = async (input: string): Promise<"handled" | "passthrough"> => {
+    if (activeFlowType && isCancelMessage(input)) {
+      clearActiveFlow();
+      addPhilMsg("Right. Moving on.");
+      return "handled";
+    }
+    if (activeFlowType) {
+      try {
+        await flowRef.current?.send(input);
+      } catch {
+        addPhilMsg("Something tripped up that flow. Try again or say 'cancel' to start over.");
+      }
+      return "handled";
+    }
+    const intent = await classifyChatIntent(input);
+    if (intent === "chat") return "passthrough";
+    const started = startFlowFromIntent(intent);
+    return started ? "handled" : "passthrough";
+  };
+
+  const handleCoachInput = async (overrideInput?: string, opts?: { skipUserMsg?: boolean }) => {
     const input = (overrideInput !== undefined ? overrideInput : cmdInput).trim();
     if (!input) return;
 
-    // Log user message + open Phil panel
-    addUserMsg(input);
+    // Log user message (unless caller already did) + open Phil panel
+    if (!opts?.skipUserMsg) addUserMsg(input);
     setPhilOpen(true);
     if (overrideInput === undefined) setCmdInput("");
     setCoachInlineResponse(null);
     setCoachParseResult(null);
+
+    // ── New: try the state-machine flow dispatcher first ────────────────
+    const dispatched = await dispatchChatToFlow(input);
+    if (dispatched === "handled") return;
 
     const intent = classifyCoachIntent(input);
 
@@ -2351,10 +2544,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setPhilExpanded(true);
     setPhilUnread(false);
 
-    // Injury flow: intercept if active or if injury keywords detected
+    // ── New state-machine flow dispatch — runs before any legacy branch.
+    addUserMsg(input);
+    const dispatched = await dispatchChatToFlow(input);
+    if (dispatched === "handled") return;
+
+    // Legacy injury flow — kept as a fallback if the classifier returned "chat"
+    // for an injury-style message. The modification flow is the primary path
+    // post-rewire and will be the dispatched branch in nearly all cases.
     const hasInjuryKeyword = !injuryFlow && INJURY_KEYWORDS.some(kw => input.toLowerCase().includes(kw));
     if (injuryFlow || hasInjuryKeyword) {
-      addUserMsg(input);
       await handleInjuryChat(input);
       return;
     }
@@ -2363,22 +2562,21 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     if (activeTab === "training" || isTeamMode) {
       if (coachParseResult && !coachParseResult.hasEnough) {
         // Still gathering info — pass the answer to Phil's clarifying question
-        addUserMsg(input);
         await callCoachParse(originalCoachInput, input);
         return;
       }
       if (coachParseResult && coachParseResult.hasEnough) {
         // A plan preview is showing with "Build this" — treat this message as a refinement
-        addUserMsg(input);
         await callCoachParse(originalCoachInput, undefined, input, coachParseResult);
         return;
       }
-      await handleCoachInput(input);
+      // skipUserMsg: we already added the user message above.
+      await handleCoachInput(input, { skipUserMsg: true });
       return;
     }
 
-    // On Dashboard / Nutrition: send directly to phil-chat with tab context
-    addUserMsg(input);
+    // On Dashboard: send directly to phil-chat with tab context.
+    // Note: Nutrition tab paths removed — the tab is no longer in the product.
     setCmdParsing(true);
     try {
       const token = localStorage.getItem("axis_auth_token");
@@ -2416,19 +2614,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         : undefined;
       addPhilMsg(data.reply ?? "What would you like to work on today?", quickReplies ? { quickReplies } : undefined);
 
-      // Handle tab navigation
-      if (data.navigateTo === "training" || data.navigateTo === "nutrition" || data.navigateTo === "dashboard") {
+      // Handle tab navigation. Nutrition tab is removed from the product;
+      // any "nutrition" navigateTo from the legacy phil-chat prompt is ignored.
+      if (data.navigateTo === "training" || data.navigateTo === "dashboard") {
         setTimeout(() => setActiveTab(data.navigateTo), 800);
       }
-
-      // Handle food log action (Nutrition tab)
-      if (data.action?.type === "log_food" && data.action.description) {
-        try {
-          await addMutation.mutateAsync({ clientId, data: { description: data.action.description, date: selectedDate } });
-          queryClient.invalidateQueries({ queryKey: getListNutritionEntriesQueryKey(clientId, { date: selectedDate }) });
-          refetchWeeklyLogs();
-        } catch { /* non-fatal */ }
-      }
+      // Food-log action (was Nutrition tab) is removed — dead code path.
     } catch {
       addPhilMsg("Something went wrong. Try again.");
     } finally {
@@ -5233,30 +5424,54 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     </div>
                   </div>
                 )}
+
+                {/* Embedded state-machine flow — chip row inline beneath the most recent Phil bubble.
+                    The flow's transcript is suppressed (embedded mode); chip rows / swap cards
+                    render directly. User input still arrives via the top "Ask Phil" composer (or
+                    the panel composer on Dashboard) — those callers forward to flowRef.send(). */}
+                {activeFlowType && activeFlowContext ? (
+                  <div className="ml-8 pr-2">
+                    <GenerationFlowChat
+                      ref={flowRef}
+                      type={activeFlowType}
+                      context={activeFlowContext}
+                      embedded
+                      onMessage={(m) => {
+                        // Only mirror Phil's questions into the chat — user
+                        // messages are added by the chat dispatcher.
+                        if (m.role === "assistant") addPhilMsg(m.content);
+                      }}
+                      onComplete={(result) => void handleFlowComplete(result)}
+                    />
+                  </div>
+                ) : null}
               </div>
-              {/* Input — fades to opacity-70 with a softer placeholder when chips are active.
-                  Focusing or typing into the input promotes (greys out) the active chip group. */}
-              <div className={`shrink-0 px-3 py-2.5 border-t transition-opacity ${activeChipMsgId ? "opacity-70" : "opacity-100"}`}>
-                <div className="flex gap-2">
-                  <input
-                    ref={philInputRef}
-                    value={philPanelInput}
-                    onChange={e => { setPhilPanelInput(e.target.value); if (activeChipMsgId && e.target.value) promoteActiveChips(); }}
-                    onFocus={() => { if (activeChipMsgId) promoteActiveChips(); }}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
-                    placeholder={activeChipMsgId ? "or type instead" : "Message Phil…"}
-                    className="flex-1 min-w-0 h-8 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <Button
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    onClick={() => void handlePhilPanelSubmit()}
-                    disabled={!philPanelInput.trim() || cmdParsing}
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </Button>
+              {/* Composer — hidden on Training (the top "Ask Phil" input is the
+                  single composer for that tab). Visible on Dashboard / non-Training
+                  surfaces where there's no other input nearby. */}
+              {(activeTab !== "training" && !isTeamMode) && (
+                <div className={`shrink-0 px-3 py-2.5 border-t transition-opacity ${activeChipMsgId ? "opacity-70" : "opacity-100"}`}>
+                  <div className="flex gap-2">
+                    <input
+                      ref={philInputRef}
+                      value={philPanelInput}
+                      onChange={e => { setPhilPanelInput(e.target.value); if (activeChipMsgId && e.target.value) promoteActiveChips(); }}
+                      onFocus={() => { if (activeChipMsgId) promoteActiveChips(); }}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
+                      placeholder={activeChipMsgId ? "or type instead" : "Message Phil…"}
+                      className="flex-1 min-w-0 h-8 rounded-lg border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <Button
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => void handlePhilPanelSubmit()}
+                      disabled={!philPanelInput.trim() || cmdParsing}
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 

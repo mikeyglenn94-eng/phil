@@ -776,6 +776,13 @@ ${tabSection}`;
 });
 
 // ── POST /api/clients/:clientId/injury-chat ──────────────────────────────────
+// ⚠ DEPRECATED — replaced by lib/generation-flow's modification-flow state machine.
+//
+// Kept alive only because client-area.tsx still falls through here on injury
+// keywords if the new classifier returns "chat" for an ambiguous message. The
+// modification flow is the primary path post-rewire. Delete in the cleanup PR
+// after verifying the new flow handles every injury-style user message.
+//
 // Multi-phase injury modification flow.
 // Phases: start → severity → choice → done (swaps applied inline).
 

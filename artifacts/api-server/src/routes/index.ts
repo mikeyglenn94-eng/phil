@@ -27,6 +27,7 @@ import swimBrainRouter from "./swim-brain";
 import adminMetricsRouter from "./admin-metrics";
 import generationFlowRouter from "./generation-flow";
 import bestEffortsRouter from "./best-efforts";
+import chatClassifyRouter from "./chat-classify";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(swimBrainRouter);
 router.use(adminMetricsRouter);
 router.use(generationFlowRouter);
 router.use(bestEffortsRouter);
+router.use(chatClassifyRouter);
 
 export default router;

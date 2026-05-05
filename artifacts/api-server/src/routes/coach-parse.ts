@@ -1,3 +1,13 @@
+// ⚠ DEPRECATED — replaced by lib/generation-flow's programme-flow state machine.
+//
+// This file's two routes are kept alive only because client-area.tsx still
+// reaches /coach-parse and /programme-thinking when the new chat classifier
+// returns "chat" for an ambiguous build-style message. The new path covers the
+// happy paths; this file is the legacy fall-through.
+//
+// Delete in the cleanup PR after we've verified the new flow handles every
+// programme-build user message we care about. Don't add new features here.
+
 import { Router, type IRouter } from "express";
 import { openai } from "@workspace/integrations-openai-ai-server";
 
