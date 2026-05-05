@@ -21,7 +21,7 @@ import { useAuth } from "@/contexts/auth-context";
 
 // ── Types matching the server-side FlowState shape ────────────────────────
 
-type FlowType = "programme" | "session" | "modification";
+type FlowType = "programme" | "session" | "modification" | "progression";
 
 interface SlotOption {
   value: string;
@@ -66,7 +66,8 @@ interface SwapChoiceSet {
 type GenerateResult =
   | { kind: "programme"; data: unknown }
   | { kind: "session"; data: unknown }
-  | { kind: "modification"; data: unknown };
+  | { kind: "modification"; data: unknown }
+  | { kind: "progression"; data: unknown };
 
 interface GenerationFlowChatProps {
   type: FlowType;

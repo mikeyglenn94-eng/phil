@@ -39,6 +39,19 @@ export {
   type ModificationFlowState,
 } from "./modification-flow.js";
 
+// Progression flow
+export {
+  startProgressionFlow,
+  advanceProgressionFlow,
+  isProgressionFlowComplete,
+  withAssistantMessageProgression,
+  generate as generateProgression,
+  currentSlot as currentProgressionSlot,
+  computeStyleOptions as computeProgressionStyleOptions,
+  type ProgressionFlowState,
+  type ProgressionStyleOption,
+} from "./progression-flow.js";
+
 // Question writer + slot definitions for the route layer / UI
 export { writeQuestion } from "./question-writer.js";
 export {
@@ -47,6 +60,7 @@ export {
   PROGRAMME_SLOTS,
   SESSION_SLOTS,
   MODIFICATION_SLOTS,
+  PROGRESSION_SLOTS,
 } from "./types.js";
 
 export type {
@@ -70,4 +84,8 @@ export type {
   SwapChoiceSet,
   SwapDecision,
   ModifiedProgramme,
+  ProgressionFlowContext,
+  ProgressionSourceSession,
+  ProgressedSession,
+  ProgressedBlock,
 } from "./types.js";

@@ -2,24 +2,31 @@ import { Router, type IRouter } from "express";
 import {
   advanceModificationFlow,
   advanceProgrammeFlow,
+  advanceProgressionFlow,
   advanceSessionFlow,
   buildSwapChoiceSets,
+  computeProgressionStyleOptions,
   currentProgrammeSlot,
+  currentProgressionSlot,
   currentSessionSlot,
   generateModifiedProgramme,
   generatePreview,
   generateProgramme,
+  generateProgression,
   generateSession,
   getSlotList,
   isModificationFlowComplete,
   isProgrammeFlowComplete,
+  isProgressionFlowComplete,
   isSessionFlowComplete,
   previewReady,
   recordSwapDecision,
   startModificationFlow,
   startProgrammeFlow,
+  startProgressionFlow,
   startSessionFlow,
   withAssistantMessageProgramme,
+  withAssistantMessageProgression,
   withAssistantMessageSession,
   withAssistantMessageModification,
   writeQuestion,
@@ -27,6 +34,8 @@ import {
   type FlowType,
   type ModificationFlowState,
   type ProgrammeFlowState,
+  type ProgressionFlowState,
+  type ProgressionSourceSession,
   type SessionFlowState,
   type SlotDef,
   type SwapDecision,
@@ -135,6 +144,9 @@ async function handleStart(
     case "modification":
       state = startModificationFlow(body.context as never);
       break;
+    case "progression":
+      state = startProgressionFlow(body.context as never);
+      break;
     default:
       res.status(400).json({ error: `Unknown flow type: ${String((body as { type: unknown }).type)}` });
       return;
@@ -151,7 +163,7 @@ async function handleStart(
   res.json({
     state,
     assistantMessage: message,
-    options: slotOptions(slotDef),
+    options: slotOptions(slotDef, state),
   });
 }
 
@@ -195,7 +207,7 @@ async function handleAdvance(
   res.json({
     state: stateOut,
     assistantMessage: message,
-    options: slotOptions(slotDef),
+    options: slotOptions(slotDef, stateOut),
   });
 }
 
@@ -239,6 +251,12 @@ async function handleGenerate(
       res.json({ result: modified });
       return;
     }
+    case "progression": {
+      const block = await generateProgression(body.state as ProgressionFlowState);
+      void logApiCost({ userId: req.auth?.userId, endpoint: "generation-flow:generate", model: "gpt-5.2", usage: null });
+      res.json({ result: block });
+      return;
+    }
     default:
       res.status(400).json({ error: `Unknown flow type: ${String((body.state as { type: unknown }).type)}` });
       return;
@@ -280,6 +298,8 @@ async function advanceFlowDispatch(
       return advanceSessionFlow(state as SessionFlowState, userMessage);
     case "modification":
       return advanceModificationFlow(state as ModificationFlowState, userMessage);
+    case "progression":
+      return advanceProgressionFlow(state as ProgressionFlowState, userMessage);
     default:
       throw new Error(`Unknown flow type: ${String(state.type)}`);
   }
@@ -293,6 +313,8 @@ function isFlowComplete(state: FlowState<unknown>): boolean {
       return isSessionFlowComplete(state as SessionFlowState);
     case "modification":
       return isModificationFlowComplete(state as ModificationFlowState);
+    case "progression":
+      return isProgressionFlowComplete(state as ProgressionFlowState);
     default:
       throw new Error(`Unknown flow type: ${String(state.type)}`);
   }
@@ -304,18 +326,52 @@ function currentSlotDef(state: FlowState<unknown>): SlotDef | null {
       ? currentProgrammeSlot(state as ProgrammeFlowState)
       : state.type === "session"
         ? currentSessionSlot(state as SessionFlowState)
-        : state.currentSlot;
+        : state.type === "progression"
+          ? currentProgressionSlot(state as ProgressionFlowState)
+          : state.currentSlot;
   if (!name) return null;
   return getSlotList(state.type).find((d: SlotDef) => d.name === name) ?? null;
 }
 
-function slotOptions(slot: SlotDef | null) {
+/** Option list for the current slot. For most flows this is just the slot's
+ *  static options. Progression's `style` slot is special: the option list is
+ *  computed from the source-session mix and the already-filled `weeks` value
+ *  so we never offer Wave when weeks < 3, never show endurance styles for a
+ *  pure-strength selection, etc. */
+function slotOptions(slot: SlotDef | null, state: FlowState<unknown>) {
   if (!slot || !slot.options) return null;
+  if (state.type === "progression" && slot.name === "style") {
+    const ctx = state.context as { sourceSessions?: ProgressionSourceSession[] } | null;
+    const sources = ctx?.sourceSessions ?? [];
+    const weeksRaw = state.slots.weeks;
+    const weeks = parseWeeksValue(weeksRaw);
+    const dynamic = computeProgressionStyleOptions(sources, weeks);
+    return {
+      kind: slot.kind,
+      options: dynamic,
+      allowOther: slot.allowOther ?? false,
+    };
+  }
   return {
     kind: slot.kind,
     options: slot.options,
     allowOther: slot.allowOther ?? false,
   };
+}
+
+function parseWeeksValue(v: unknown): number {
+  if (typeof v === "string") {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (v && typeof v === "object" && "value" in (v as Record<string, unknown>)) {
+    const inner = (v as { value: unknown }).value;
+    if (typeof inner === "string") {
+      const n = parseInt(inner, 10);
+      return Number.isFinite(n) ? n : 0;
+    }
+  }
+  return 0;
 }
 
 function appendAssistant(state: FlowState<unknown>, content: string): FlowState<unknown> {
@@ -327,6 +383,8 @@ function appendAssistant(state: FlowState<unknown>, content: string): FlowState<
       return withAssistantMessageSession(state as SessionFlowState, content);
     case "modification":
       return withAssistantMessageModification(state as ModificationFlowState, content);
+    case "progression":
+      return withAssistantMessageProgression(state as ProgressionFlowState, content);
     default:
       throw new Error(`Unknown flow type: ${String(state.type)}`);
   }

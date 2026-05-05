@@ -1,6 +1,6 @@
 // ── Flow type ──────────────────────────────────────────────────────────────
 
-export type FlowType = "programme" | "session" | "modification";
+export type FlowType = "programme" | "session" | "modification" | "progression";
 
 // ── Slot definitions ───────────────────────────────────────────────────────
 
@@ -129,6 +129,55 @@ export interface ModifiedProgramme {
   decisions: { exerciseName: string; decision: SwapDecision }[];
   /** Human-readable confirmation, in Phil's voice. */
   confirmation: string;
+}
+
+// ── Progression flow types ─────────────────────────────────────────────────
+
+/** A subset of the live Session shape — what the progression generator needs
+ *  to produce a coherent block. The full shape (drag handlers, team meta) is
+ *  carried by the calendar UI; the LLM only sees what matters for progression. */
+export interface ProgressionSourceSession {
+  id: string;
+  name: string;
+  date: string;
+  dayNumber?: number | null;
+  source?: string | null;
+  structure?: string | null;
+  exercises: GeneratedExercise[];
+  /** Optional run-interval log when the source was a logged run. */
+  runLog?: { distance?: number | null; pace?: string | null }[];
+}
+
+export interface ProgressionFlowContext {
+  clientId: number;
+  /** The source sessions selected from the calendar (one or more). */
+  sourceSessions: ProgressionSourceSession[];
+  /** The programme id the progressed sessions should be appended to. */
+  programmeId: number;
+}
+
+export interface ProgressedSession {
+  id: string;
+  date: string;
+  dayNumber?: number | null;
+  name: string;
+  source: "progression_block";
+  structure?: string;
+  color?: string;
+  exercises: GeneratedExercise[];
+  /** Soft attribution back to the source session id, so the UI can group / undo. */
+  progressedFromSessionId: string;
+  /** 1-indexed week within the new block (1..weeks). */
+  progressionWeek: number;
+}
+
+export interface ProgressedBlock {
+  /** Total weeks generated. */
+  weeks: number;
+  /** The style the LLM applied (in case it picked from "auto"). */
+  style: string;
+  /** Flat list of progressed sessions across all generated weeks. */
+  sessions: ProgressedSession[];
 }
 
 // ── Programme-flow context ─────────────────────────────────────────────────
@@ -351,6 +400,50 @@ export const MODIFICATION_SLOTS: SlotDef[] = [
   },
 ];
 
+// ── Slot list — progression flow ───────────────────────────────────────────
+
+export const PROGRESSION_SLOTS: SlotDef[] = [
+  {
+    name: "weeks",
+    kind: "single_select",
+    options: [
+      { value: "2", label: "2 weeks" },
+      { value: "3", label: "3 weeks" },
+      { value: "4", label: "4 weeks" },
+      { value: "5", label: "5 weeks" },
+      { value: "6", label: "6 weeks" },
+    ],
+    hint: "How many weeks the progression should run.",
+  },
+  {
+    name: "style",
+    kind: "single_select",
+    options: [
+      // Strength styles
+      { value: "linear", label: "Linear" },
+      { value: "volume_accumulation", label: "Volume Accumulation" },
+      { value: "intensity", label: "Intensity" },
+      { value: "wave", label: "Wave Loading" },
+      // Endurance styles
+      { value: "distance", label: "Distance" },
+      { value: "pace", label: "Pace" },
+      { value: "intervals", label: "Intervals" },
+      { value: "volume", label: "Volume" },
+      // Always available
+      { value: "auto", label: "Auto (philosophy picks)" },
+    ],
+    // The route narrows these dynamically at serve time — strength sessions →
+    // strength styles only; endurance → endurance styles only; mixed → auto only;
+    // wave is dropped if weeks < 3.
+    hint: "Progression style. The route filters this list based on weeks + session-type breakdown.",
+  },
+  {
+    name: "confirm",
+    kind: "bool",
+    hint: "User has reviewed the summary and approved generating the block.",
+  },
+];
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function slotEquals(slots: SlotValues, name: string, target: string): boolean {
@@ -374,6 +467,8 @@ export function getSlotList(type: FlowType): SlotDef[] {
       return SESSION_SLOTS;
     case "modification":
       return MODIFICATION_SLOTS;
+    case "progression":
+      return PROGRESSION_SLOTS;
   }
 }
 

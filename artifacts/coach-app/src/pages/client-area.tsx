@@ -25,6 +25,8 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import DashboardTab, { type AnalyticsData } from "./dashboard-tab";
 import { WeekViewAgenda } from "@/components/calendar/week-view-agenda";
 import { SessionBadge } from "@/components/calendar/session-badge";
+import { MultiSelectActionBar } from "@/components/calendar/multi-select-action-bar";
+import { ProgressionSheet } from "@/components/calendar/progression-sheet";
 import { type QuickReply } from "@/components/chat/quick-reply-chips";
 import {
   BubbleRenderer,
@@ -1089,6 +1091,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   );
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [progressionSheetOpen, setProgressionSheetOpen] = useState(false);
+  const [progressionSources, setProgressionSources] = useState<Session[]>([]);
   const [pasteMode, setPasteMode] = useState(false);
   const [sessionClipboard, setSessionClipboard] = useState<{ sessions: Session[]; baseDate: string } | null>(null);
 
@@ -1245,6 +1249,64 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     const n = selectedSessionIds.size;
     toast({ title: `${n} session${n > 1 ? "s" : ""} deleted` });
     exitSelectionMode();
+  };
+
+  // ── Repeat with progression ─────────────────────────────────────────────
+  // Open the progression sheet for the supplied source sessions. The sheet
+  // drives the lib/generation-flow progression state machine and returns a
+  // ProgressedBlock that mergeProgressedBlock writes back to the programme.
+  const openProgressionFromSessions = (sources: Session[]) => {
+    if (sources.length === 0) return;
+    setProgressionSources(sources);
+    setProgressionSheetOpen(true);
+  };
+
+  const openProgressionFromSelection = () => {
+    if (selectedSessionIds.size === 0) return;
+    const sources = allClientSessions.filter(s => selectedSessionIds.has(s.id));
+    openProgressionFromSessions(sources);
+  };
+
+  /** Merge a generated ProgressedBlock into the target programme.
+   *  Sessions are appended (not replaced); existing sessions on the target
+   *  days stay untouched per brief.
+   *  Block is associated with the source sessions' parent programme — falls
+   *  back to clientProgrammes[0] if multiple programmes are involved. */
+  const mergeProgressedBlock = async (block: {
+    weeks: number;
+    style: string;
+    sessions: Array<Session & { progressedFromSessionId?: string; progressionWeek?: number }>;
+  }) => {
+    if (!block.sessions || block.sessions.length === 0) {
+      toast({ title: "Nothing was generated. Try again." });
+      return;
+    }
+    pushHistory();
+    // Pick the target programme — use the first source session's parent.
+    const firstSourceId = block.sessions[0]?.progressedFromSessionId;
+    let targetProgramme = (clientProgrammes ?? []).find(p =>
+      (p.sessions as Session[]).some(s => s.id === firstSourceId)
+    ) ?? (clientProgrammes ?? [])[0];
+    if (!targetProgramme) {
+      toast({ title: "No programme to add sessions to.", variant: "destructive" });
+      return;
+    }
+    const merged = [...(targetProgramme.sessions as Session[]), ...block.sessions];
+    try {
+      await fetch(`/api/programmes/${targetProgramme.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessions: merged }),
+      });
+      await queryClient.invalidateQueries({ queryKey: getListProgrammesQueryKey({ clientId }) });
+      toast({
+        title: `Added ${block.sessions.length} session${block.sessions.length === 1 ? "" : "s"} across ${block.weeks} week${block.weeks === 1 ? "" : "s"}.`,
+        description: "Tap any to tweak.",
+      });
+      exitSelectionMode();
+    } catch {
+      toast({ title: "Failed to save progression. Please try again.", variant: "destructive" });
+    }
   };
 
   /**
@@ -4890,7 +4952,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                         <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
                                           <RefreshCw className="w-3.5 h-3.5 mr-2" />Repeat
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                                        <DropdownMenuItem onClick={() => openProgressionFromSessions([session])}>
                                           <TrendingUp className="w-3.5 h-3.5 mr-2" />Repeat with Progression
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
@@ -5284,7 +5346,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                     <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
                       <RefreshCw className="w-3.5 h-3.5 mr-2" />Repeat
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
+                    <DropdownMenuItem onClick={openProgressionFromSelection}>
                       <TrendingUp className="w-3.5 h-3.5 mr-2" />Repeat with Progression
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => toast({ title: "Coming soon" })}>
@@ -6751,6 +6813,40 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Multi-select action bar — sticky at bottom of viewport when selection has content. */}
+      <MultiSelectActionBar
+        selectedCount={selectedSessionIds.size}
+        onCancel={exitSelectionMode}
+        onRepeatWithProgression={openProgressionFromSelection}
+      />
+
+      {/* Progression flow sheet — opened from action bar OR per-session dropdown. */}
+      <ProgressionSheet
+        open={progressionSheetOpen}
+        onOpenChange={setProgressionSheetOpen}
+        sourceSessions={progressionSources.map(s => ({
+          id: s.id,
+          name: s.name ?? "",
+          date: s.date,
+          dayNumber: (s as Session & { dayNumber?: number | null }).dayNumber ?? null,
+          source: (s as Session & { source?: string | null }).source ?? null,
+          structure: (s as Session & { structure?: string | null }).structure ?? null,
+          exercises: (s.exercises ?? []).map(ex => ({
+            name: ex.name ?? "",
+            sets: ex.sets ?? null,
+            reps: ex.reps ?? null,
+            rpe: ex.rpe ?? null,
+            rest: ex.rest ?? null,
+            tempo: ex.tempo ?? null,
+            notes: ex.notes ?? null,
+          })),
+          runLog: (s as Session & { runLog?: { distance?: number | null; pace?: string | null }[] }).runLog ?? [],
+        }))}
+        programmeId={(clientProgrammes ?? [])[0]?.id ?? 0}
+        clientId={clientId}
+        onComplete={(block) => void mergeProgressedBlock(block as never)}
+      />
     </div>
   );
 }

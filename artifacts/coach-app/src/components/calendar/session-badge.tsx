@@ -25,6 +25,8 @@ export function getSessionTypeBadge(session: Session): BadgeStyle {
       return { label: "Endurance", className: "bg-sky-100 text-sky-700" };
     case "strength_block":
       return { label: "Strength", className: "bg-violet-100 text-violet-700" };
+    case "progression_block":
+      return { label: "Progression", className: "bg-indigo-100 text-indigo-700" };
     default:
       return { label: "Strength", className: "bg-violet-100 text-violet-700" };
   }
