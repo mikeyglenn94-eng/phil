@@ -1,0 +1,19 @@
+{
+  "name": "@workspace/workout-parser",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@workspace/integrations-openai-ai-server": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  }
+}

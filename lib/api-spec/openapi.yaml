@@ -206,25 +206,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/CalendarCommandResponse"
 
-  /parse-log:
-    post:
-      operationId: parseLog
-      tags: [parse]
-      summary: Parse a client's spoken workout log into per-set data
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ParseLogBody"
-      responses:
-        "200":
-          description: Parsed set logs
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ParseLogResponse"
-
   /transcribe:
     post:
       operationId: transcribeAudio
@@ -724,43 +705,6 @@ components:
       required:
         - sessions
         - changes
-
-    SetLog:
-      type: object
-      properties:
-        setIndex:
-          type: integer
-          description: Zero-based set index
-        weight:
-          type: ["number", "null"]
-        reps:
-          type: ["integer", "null"]
-      required:
-        - setIndex
-
-    ParseLogBody:
-      type: object
-      properties:
-        transcript:
-          type: string
-        exerciseName:
-          type: string
-        totalSets:
-          type: integer
-      required:
-        - transcript
-        - exerciseName
-        - totalSets
-
-    ParseLogResponse:
-      type: object
-      properties:
-        sets:
-          type: array
-          items:
-            $ref: "#/components/schemas/SetLog"
-      required:
-        - sets
 
     ParseTranscriptBody:
       type: object

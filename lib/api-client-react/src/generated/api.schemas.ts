@@ -109,25 +109,6 @@ export interface CalendarCommandResponse {
   changes: string[];
 }
 
-export interface SetLog {
-  /** Zero-based set index */
-  setIndex: number;
-  /** @nullable */
-  weight?: number | null;
-  /** @nullable */
-  reps?: number | null;
-}
-
-export interface ParseLogBody {
-  transcript: string;
-  exerciseName: string;
-  totalSets: number;
-}
-
-export interface ParseLogResponse {
-  sets: SetLog[];
-}
-
 export interface ParseTranscriptBody {
   transcript: string;
   existingExercises?: Exercise[];
@@ -226,7 +207,6 @@ export type AddNutritionEntryBody = {
 };
 
 export type UpdateNutritionEntryBody = {
-  description?: string;
   calories?: number;
   protein?: number;
   carbs?: number;

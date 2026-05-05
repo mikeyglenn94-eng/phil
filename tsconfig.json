@@ -17,6 +17,12 @@
     },
     {
       "path": "./lib/integrations-openai-ai-react"
+    },
+    {
+      "path": "./lib/workout-parser"
+    },
+    {
+      "path": "./lib/generation-flow"
     }
   ]
 }

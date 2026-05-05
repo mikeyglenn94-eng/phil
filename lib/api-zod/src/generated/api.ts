@@ -641,25 +641,6 @@ export const CalendarCommandResponse = zod.object({
 });
 
 /**
- * @summary Parse a client's spoken workout log into per-set data
- */
-export const ParseLogBody = zod.object({
-  transcript: zod.string(),
-  exerciseName: zod.string(),
-  totalSets: zod.number(),
-});
-
-export const ParseLogResponse = zod.object({
-  sets: zod.array(
-    zod.object({
-      setIndex: zod.number().describe("Zero-based set index"),
-      weight: zod.number().nullish(),
-      reps: zod.number().nullish(),
-    }),
-  ),
-});
-
-/**
  * @summary Transcribe audio to text
  */
 export const TranscribeAudioBody = zod.object({

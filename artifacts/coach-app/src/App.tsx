@@ -26,6 +26,9 @@ import { AuthProvider, useAuth } from "./contexts/auth-context";
 import { ChatProvider } from "./contexts/chat-context";
 import { RestTimerProvider } from "./contexts/rest-timer-context";
 import ChatPage from "./pages/chat";
+import DevParser from "./pages/dev-parser";
+import DevGenerationFlow from "./pages/dev-generation-flow";
+import BestEffortsPage from "./pages/best-efforts";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -210,6 +213,20 @@ function App() {
                 </RequireAuth>
               </Route>
 
+              {/* Dev — parser playground (coach/admin only) */}
+              <Route path="/dev/parser">
+                <RequireAuth roles={["coach", "admin"]}>
+                  <DevParser />
+                </RequireAuth>
+              </Route>
+
+              {/* Dev — generation-flow playground (coach/admin only) */}
+              <Route path="/dev/generation-flow">
+                <RequireAuth roles={["coach", "admin"]}>
+                  <DevGenerationFlow />
+                </RequireAuth>
+              </Route>
+
               {/* Full-screen editor routes (behind coach auth) */}
               <Route path="/programmes/:programmeId/sessions/:sessionId">
                 <RequireAuth roles={["coach", "admin"]}>
@@ -219,6 +236,13 @@ function App() {
 
               {/* Client session (athletes or coaches previewing) */}
               <Route path="/client/programmes/:programmeId/sessions/:sessionId" component={ClientSession} />
+
+              {/* Athlete-facing standalone pages */}
+              <Route path="/best-efforts">
+                <RequireAuth roles={["athlete", "coach", "admin"]}>
+                  <BestEffortsPage />
+                </RequireAuth>
+              </Route>
 
               {/* Athlete portal */}
               <Route path="/chat">

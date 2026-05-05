@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, programmesTable, clientGoalsTable, clientBaselinesTable } from "@workspace/db";
+import { db, programmesTable, clientGoalsTable, clientBaselinesTable, clientOneRMsTable } from "@workspace/db";
+import { computeBestEfforts, type BestEffort, type BestEffortsSessionInput, type ManualOneRm } from "../lib/best-efforts";
 
 const router: IRouter = Router();
 
@@ -258,8 +259,24 @@ interface WeekBucket {
   completed: number;
   hasLift: boolean;
   hasRun: boolean;
+  /** True if the week contains at least one qualifying endurance session
+   *  (run/cycle/swim, logged, with totalDistance ≥ 3km OR duration ≥ 20 min).
+   *  Separate from hasRun so the existing adherence/Weekly Win logic doesn't
+   *  shift behaviour. */
+  hasQualifyingEndurance: boolean;
   totalVolume: number;
   totalDistance: number;
+}
+
+const ENDURANCE_SOURCES = new Set(["run_brain", "cycle_brain", "swim_brain", "endurance_cycle"]);
+
+/** True if the session is logged endurance (run/cycle/swim) of meaningful
+ *  size — at least 3 km OR 20 min. Stops token shake-out runs gaming the
+ *  hybrid streak. */
+function isQualifyingEndurance(s: SessionStat): boolean {
+  if (!s.source || !ENDURANCE_SOURCES.has(s.source)) return false;
+  const minutes = s.weightedPaceSeconds > 0 ? s.weightedPaceSeconds / 60 : 0;
+  return s.totalDistance >= 3 || minutes >= 20;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -403,6 +420,154 @@ function computeStreak(bucketMap: Map<string, WeekBucket>, today: string): numbe
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// HYBRID STREAK + HIGHLIGHTS
+// ═══════════════════════════════════════════════════════════════════
+
+/** Consecutive completed weeks ending last Sunday where the week contained
+ *  at least one logged lift AND at least one qualifying endurance session.
+ *  The current (in-progress) week is NOT counted — it's a "candidate week"
+ *  shown via hybridStreak.thisWeek. */
+function computeHybridStreak(
+  bucketMap: Map<string, WeekBucket>,
+  today: string,
+): { count: number; thisWeek: { hasLift: boolean; hasEndurance: boolean }; longest: number } {
+  const thisWk = weekStartMonday(today);
+  const thisB = bucketMap.get(thisWk);
+  const thisWeek = {
+    hasLift: thisB?.hasLift ?? false,
+    hasEndurance: thisB?.hasQualifyingEndurance ?? false,
+  };
+
+  // Count back from last completed week.
+  let streak = 0;
+  let wk = offsetWeek(thisWk, -1);
+  for (let i = 0; i < 104; i++) {
+    const b = bucketMap.get(wk);
+    if (!b || !b.hasLift || !b.hasQualifyingEndurance) break;
+    streak++;
+    wk = offsetWeek(wk, -1);
+  }
+
+  // Longest hybrid streak ever — scan all known weeks.
+  const allWeeks = [...bucketMap.values()]
+    .filter((b) => b.weekStart < thisWk) // exclude current week
+    .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  let longest = 0;
+  let running = 0;
+  for (const b of allWeeks) {
+    if (b.hasLift && b.hasQualifyingEndurance) {
+      running++;
+      if (running > longest) longest = running;
+    } else {
+      running = 0;
+    }
+  }
+
+  return { count: streak, thisWeek, longest };
+}
+
+interface HybridHighlights {
+  biggestCombinedWeek: { weekStart: string; totalVolume: number; totalDistance: number } | null;
+  biggestSingleDay: { date: string; totalVolume: number; totalDistance: number } | null;
+  longestHybridStreak: number;
+}
+
+/** Cross-sport records — the unfair-advantage stuff hybrid athletes have. */
+function computeHybridHighlights(
+  sessions: SessionStat[],
+  bucketMap: Map<string, WeekBucket>,
+): HybridHighlights {
+  // Biggest combined week — max(totalVolume + totalDistance) across hybrid weeks.
+  // Volume is in kg, distance is in km — we don't sum them directly. We pick
+  // the week whose combined "training mass" is largest by treating each as
+  // a top score and combining via a normalised compound metric. For v1, we
+  // use the simplest honest metric: weeks where BOTH lift AND endurance were
+  // present, ranked by totalVolume + totalDistance × 100 (so 10 km ≈ 1 ton).
+  let biggestWeek: HybridHighlights["biggestCombinedWeek"] = null;
+  let bestWeekScore = -1;
+  for (const b of bucketMap.values()) {
+    if (!b.hasLift || !b.hasQualifyingEndurance) continue;
+    const score = b.totalVolume + b.totalDistance * 100;
+    if (score > bestWeekScore) {
+      bestWeekScore = score;
+      biggestWeek = {
+        weekStart: b.weekStart,
+        totalVolume: b.totalVolume,
+        totalDistance: b.totalDistance,
+      };
+    }
+  }
+
+  // Biggest single training day — sum sessions per date, find the date with
+  // both lift and endurance and the largest combined score.
+  const byDay = new Map<string, { totalVolume: number; totalDistance: number; hasLift: boolean; hasEnd: boolean }>();
+  for (const s of sessions) {
+    if (!byDay.has(s.date)) {
+      byDay.set(s.date, { totalVolume: 0, totalDistance: 0, hasLift: false, hasEnd: false });
+    }
+    const d = byDay.get(s.date)!;
+    d.totalVolume += s.totalVolume;
+    d.totalDistance += s.totalDistance;
+    if (s.totalVolume > 0 || s.totalReps > 0) d.hasLift = true;
+    if (isQualifyingEndurance(s)) d.hasEnd = true;
+  }
+  let biggestDay: HybridHighlights["biggestSingleDay"] = null;
+  let bestDayScore = -1;
+  for (const [date, d] of byDay) {
+    if (!d.hasLift || !d.hasEnd) continue;
+    const score = d.totalVolume + d.totalDistance * 100;
+    if (score > bestDayScore) {
+      bestDayScore = score;
+      biggestDay = { date, totalVolume: d.totalVolume, totalDistance: d.totalDistance };
+    }
+  }
+
+  // Longest hybrid streak ever — same scan as computeHybridStreak's "longest".
+  const allWeeks = [...bucketMap.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  let longest = 0;
+  let running = 0;
+  for (const b of allWeeks) {
+    if (b.hasLift && b.hasQualifyingEndurance) {
+      running++;
+      if (running > longest) longest = running;
+    } else {
+      running = 0;
+    }
+  }
+
+  return { biggestCombinedWeek: biggestWeek, biggestSingleDay: biggestDay, longestHybridStreak: longest };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LAST-HEAVY DATE
+// ═══════════════════════════════════════════════════════════════════
+
+/** Date of the most recent logged session where the user hit at least
+ *  85 % of their all-time PB e1RM on the lift. Drives the dashboard's
+ *  "Last heavy: {date}" copy when the current 4-wk estimate has dropped. */
+function lastHeavyDate(
+  sessions: SessionStat[],
+  inc: string[],
+  exc: string[],
+  allTimePb: number | null,
+): string | null {
+  if (allTimePb == null || allTimePb <= 0) return null;
+  const threshold = allTimePb * 0.85;
+  let latest: string | null = null;
+  for (const s of sessions) {
+    for (const ex of s.exerciseBreakdown) {
+      if (!nameMatches(ex.name, inc, exc)) continue;
+      for (const set of ex.sets) {
+        if (!set.weight || !set.reps || set.reps < 1 || set.reps > 10) continue;
+        const e = epley1RM(set.weight, set.reps);
+        if (e >= threshold && (!latest || s.date > latest)) latest = s.date;
+      }
+    }
+  }
+  return latest;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // WEEKLY WIN
 // ═══════════════════════════════════════════════════════════════════
 
@@ -484,7 +649,16 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
   const bucketMap = new Map<string, WeekBucket>();
   const getBucket = (wk: string): WeekBucket => {
     if (!bucketMap.has(wk)) {
-      bucketMap.set(wk, { weekStart: wk, planned: 0, completed: 0, hasLift: false, hasRun: false, totalVolume: 0, totalDistance: 0 });
+      bucketMap.set(wk, {
+        weekStart: wk,
+        planned: 0,
+        completed: 0,
+        hasLift: false,
+        hasRun: false,
+        hasQualifyingEndurance: false,
+        totalVolume: 0,
+        totalDistance: 0,
+      });
     }
     return bucketMap.get(wk)!;
   };
@@ -504,6 +678,7 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
     if (s.totalVolume > 0 || s.totalReps > 0) b.hasLift = true;
     // Count as a run week if distance logged OR it's a run-type session (even if intervals weren't detailed)
     if (s.totalDistance > 0 || s.source === "run_brain" || s.source === "endurance_cycle") b.hasRun = true;
+    if (isQualifyingEndurance(s)) b.hasQualifyingEndurance = true;
   }
 
   // ── byWeek ──────────────────────────────────────────────────────
@@ -658,7 +833,7 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
   }
 
   const rawScores = recentWeeks.map(wk => {
-    const b = bucketMap.get(wk) ?? { weekStart: wk, planned: 0, completed: 0, hasLift: false, hasRun: false, totalVolume: 0, totalDistance: 0 };
+    const b: WeekBucket = bucketMap.get(wk) ?? { weekStart: wk, planned: 0, completed: 0, hasLift: false, hasRun: false, hasQualifyingEndurance: false, totalVolume: 0, totalDistance: 0 };
     return computeRawScore(b, perfTrend, computeBalanceScore(b, recentCompletedAvg));
   });
 
@@ -719,6 +894,44 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
     streak
   );
 
+  // ── Hybrid + last-heavy extensions ───────────────────────────────
+
+  const hybridStreak = computeHybridStreak(bucketMap, today);
+  const hybridHighlights = computeHybridHighlights(sessions, bucketMap);
+  const lastHeavyDates = {
+    squat:    lastHeavyDate(sessions, SQUAT_INCLUDE, [], allTimeStrength.squat),
+    bench:    lastHeavyDate(sessions, BENCH_INCLUDE, [], allTimeStrength.bench),
+    deadlift: lastHeavyDate(sessions, DEADLIFT_INCLUDE, DEADLIFT_EXCLUDE, allTimeStrength.deadlift),
+  };
+
+  // ── Best efforts (top 5 for dashboard widget) ───────────────────
+  const oneRmRows = await db.select().from(clientOneRMsTable).where(eq(clientOneRMsTable.clientId, clientId));
+  const manualOneRMs: ManualOneRm[] = oneRmRows.map((r) => ({
+    exerciseName: r.exerciseName,
+    weightKg: parseFloat(String(r.weightKg)),
+    loggedAt: r.loggedAt,
+  }));
+  const rawSessionsById = new Map<string, { runLog?: { distance?: number | null; pace?: string | null }[] }>();
+  for (const raw of allSessions) {
+    if (raw && typeof raw.id === "string") rawSessionsById.set(raw.id, raw);
+  }
+  const sessionsForBE: BestEffortsSessionInput[] = sessions.map((s) => ({
+    sessionId: s.sessionId,
+    date: s.date,
+    source: s.source,
+    totalVolume: s.totalVolume,
+    totalDistance: s.totalDistance,
+    weightedPaceSeconds: s.weightedPaceSeconds,
+    avgPace: s.avgPace,
+    exerciseBreakdown: s.exerciseBreakdown,
+    runLog: (rawSessionsById.get(s.sessionId)?.runLog ?? []).map((iv) => ({
+      distance: iv.distance ?? null,
+      pace: iv.pace ?? null,
+    })),
+  }));
+  const allBestEfforts: BestEffort[] = computeBestEfforts(sessionsForBE, manualOneRMs);
+  const topBestEfforts = allBestEfforts.slice(0, 5);
+
   // ── Response ─────────────────────────────────────────────────────
 
   res.json({
@@ -745,12 +958,16 @@ router.get("/clients/:clientId/analytics", async (req, res): Promise<void> => {
       deadlift: { current: strengthCurr.deadlift, previous: strengthPrev.deadlift },
     },
     allTimeStrength,
+    lastHeavyDates,
     runMetrics: {
       estimated5K: { current: est5KCurr, previous: est5KPrev },
     },
     allTimeEst5K,
     estHalfMaraCurr,
     allTimeEstHalfMara,
+    hybridStreak,
+    hybridHighlights,
+    topBestEfforts,
     baselines: manualBaselines ? {
       benchKg:             parseNumeric(manualBaselines.benchKg),
       squatKg:             parseNumeric(manualBaselines.squatKg),

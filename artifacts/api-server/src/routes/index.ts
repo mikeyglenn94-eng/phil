@@ -25,6 +25,8 @@ import coachDashboardRouter from "./coach-dashboard";
 import cycleBrainRouter from "./cycle-brain";
 import swimBrainRouter from "./swim-brain";
 import adminMetricsRouter from "./admin-metrics";
+import generationFlowRouter from "./generation-flow";
+import bestEffortsRouter from "./best-efforts";
 
 const router: IRouter = Router();
 
@@ -54,5 +56,7 @@ router.use(coachDashboardRouter);
 router.use(cycleBrainRouter);
 router.use(swimBrainRouter);
 router.use(adminMetricsRouter);
+router.use(generationFlowRouter);
+router.use(bestEffortsRouter);
 
 export default router;

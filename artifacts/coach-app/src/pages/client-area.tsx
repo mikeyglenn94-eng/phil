@@ -23,6 +23,8 @@ import {
 import type { NutritionEntry, Programme, Session } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import DashboardTab, { type AnalyticsData } from "./dashboard-tab";
+import { WeekViewAgenda } from "@/components/calendar/week-view-agenda";
+import { SessionBadge } from "@/components/calendar/session-badge";
 import { type QuickReply } from "@/components/chat/quick-reply-chips";
 import {
   BubbleRenderer,
@@ -122,24 +124,8 @@ function getSessionHighlight(session: Session): string {
     .join(" · ");
 }
 
-function getSessionTypeBadge(session: Session): { label: string; className: string } {
-  switch (session.source) {
-    case "run_brain":
-      return { label: "Run", className: "bg-emerald-100 text-emerald-700" };
-    case "wod_brain":
-      return { label: "WOD", className: "bg-orange-100 text-orange-700" };
-    case "cycle_brain":
-      return { label: "Cycling", className: "bg-amber-100 text-amber-700" };
-    case "swim_brain":
-      return { label: "Swimming", className: "bg-sky-100 text-sky-700" };
-    case "endurance_cycle":
-      return { label: "Endurance", className: "bg-sky-100 text-sky-700" };
-    case "strength_block":
-      return { label: "Strength", className: "bg-violet-100 text-violet-700" };
-    default:
-      return { label: "Strength", className: "bg-violet-100 text-violet-700" };
-  }
-}
+// Type-pill function moved to @/components/calendar/session-badge.
+// SessionBadge is imported above and used inline below.
 
 /** Renders a structured BUY-IN / ROUNDS / CASH-OUT breakdown from a WOD option object. */
 function renderWodStructure(opt: any): React.ReactNode {
@@ -4584,7 +4570,41 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
           {/* Calendar grid */}
           <div className="flex-1 overflow-y-auto overflow-x-auto overscroll-contain" style={{ WebkitOverflowScrolling: "touch" }}>
-            <div className={calendarView === "week" ? "min-w-[560px]" : "min-w-[560px]"}>
+            {/* Mobile agenda — week view only. Month view falls through to the grid below (low-density, fine on mobile). */}
+            {calendarView === "week" && (
+              <div className="md:hidden">
+                <WeekViewAgenda
+                  weeks={trainingWeeks}
+                  sessions={allClientSessions}
+                  programmes={(clientProgrammes ?? []) as never}
+                  onTapSession={(session, prog) => {
+                    if (prog) {
+                      if (mode === "client") {
+                        setLocation(`/client/programmes/${prog.id}/sessions/${session.id}`);
+                      } else {
+                        sessionStorage.setItem("session_editor_returnTo", calendarContext === "team" ? `/teams/${teamId}` : `/clients/${clientId}`);
+                        sessionStorage.setItem("session_editor_injected", JSON.stringify(session));
+                        setLocation(`/programmes/${prog.id}/sessions/${session.id}`);
+                      }
+                    } else if ((session as { source?: string }).source === "team_session" && mode === "client") {
+                      const ctsRow = (clientTeamSessionRows ?? []).find(r => r.sessionData.id === session.id);
+                      if (ctsRow) {
+                        sessionStorage.setItem("client_cts_inject", JSON.stringify(ctsRow));
+                        setLocation(`/client/programmes/0/sessions/${session.id}`);
+                      }
+                    }
+                  }}
+                  onAddSession={(dateStr) => {
+                    setQuickAddDate(dateStr);
+                    setQuickAddName("");
+                    setQuickAddDesc("");
+                    setQuickAddError("");
+                    setQuickAddOpen(true);
+                  }}
+                />
+              </div>
+            )}
+            <div className={calendarView === "week" ? "min-w-[560px] hidden md:block" : "min-w-[560px]"}>
               {/* Day headers */}
               <div className="grid grid-cols-7 border-b bg-muted/30 sticky top-0 z-10">
                 {(calendarView === "week" ? trainingWeeks[0] : ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]).map((d, i) => (
@@ -4904,12 +4924,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                 )}
                                 {calendarView === "month" ? (
                                   <div className="pr-8">
-                                    {(() => {
-                                      const badge = getSessionTypeBadge(session);
-                                      return (
-                                        <span className={`inline-block text-[8px] font-semibold leading-none px-1.5 py-0.5 rounded-full mb-2 ${badge.className} ${selectionMode ? "ml-4" : ""}`}>{badge.label}</span>
-                                      );
-                                    })()}
+                                    <SessionBadge session={session} size="xs" className={`mb-2 ${selectionMode ? "ml-4" : ""}`} />
                                     <span className={`block truncate font-medium text-[10px] leading-snug ${selectionMode ? "pl-4" : ""}`}>{session.name || "Session"}</span>
                                     {isTeamMode && teamMeta && (
                                       <span className={`inline-block text-[7px] font-bold leading-none px-1 py-0.5 rounded-full ${isPublished ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
@@ -4919,6 +4934,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                                   </div>
                                 ) : (
                                   <>
+                                    <SessionBadge session={session} size="xs" className="mb-1.5" />
                                     <span className="block font-semibold pr-5 leading-snug mb-1 line-clamp-2">{session.name || "Session"}</span>
                                     {/* Team mode: Draft/Published badge + actions */}
                                     {isTeamMode && teamMeta && (

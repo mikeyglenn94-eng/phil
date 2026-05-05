@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import CoachingSheet from "@/components/coaching-sheet";
+import { BestEffortsFeed } from "@/components/dashboard/best-efforts-feed";
+import { HybridStreakCard } from "@/components/dashboard/hybrid-streak-card";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -61,7 +63,57 @@ export interface AnalyticsData {
   allTimeEst5K?: string | null;
   estHalfMaraCurr?: string | null;
   allTimeEstHalfMara?: string | null;
+  /** Date of the last session at ≥ 85% of the all-time PB per main lift. */
+  lastHeavyDates?: {
+    squat: string | null;
+    bench: string | null;
+    deadlift: string | null;
+  };
+  /** Hybrid streak — consecutive completed weeks with both lift + endurance logged. */
+  hybridStreak?: {
+    count: number;
+    thisWeek: { hasLift: boolean; hasEndurance: boolean };
+    longest: number;
+  };
+  /** Cross-sport records — biggest combined week, biggest single day, longest streak. */
+  hybridHighlights?: {
+    biggestCombinedWeek: { weekStart: string; totalVolume: number; totalDistance: number } | null;
+    biggestSingleDay: { date: string; totalVolume: number; totalDistance: number } | null;
+    longestHybridStreak: number;
+  };
+  /** Top 5 best efforts for the dashboard widget. Full list lives at /clients/:id/best-efforts. */
+  topBestEfforts?: BestEffortPayload[];
 }
+
+export type BestEffortPayload =
+  | {
+      kind: "lift";
+      lift: string;
+      display: string;
+      recordType: string;
+      kg: number;
+      reps: number;
+      date: string;
+      sessionId: string | null;
+    }
+  | {
+      kind: "endurance";
+      distance: string;
+      display: string;
+      seconds: number;
+      paceSecondsPerKm: number;
+      date: string;
+      sessionId: string;
+      estimated: boolean;
+    }
+  | {
+      kind: "longest";
+      sport: "run" | "cycle" | "swim";
+      display: string;
+      km: number;
+      date: string;
+      sessionId: string;
+    };
 
 // ── Preferences ───────────────────────────────────────────────────
 
@@ -476,7 +528,7 @@ function DriverRow({ driver }: { driver: ScoreDriver }) {
 function StatCard({
   title, value, unavailable, sub, delta, icon, className = "",
 }: {
-  title: string; value: string; unavailable?: boolean; sub?: React.ReactNode;
+  title: string; value: React.ReactNode; unavailable?: boolean; sub?: React.ReactNode;
   delta?: React.ReactNode; icon: React.ReactNode; className?: string;
 }) {
   return (
@@ -499,32 +551,48 @@ function StatCard({
 }
 
 // ── Perf card (all-time PB + current estimate) ───────────────────
+//
+// Threshold rule:
+// - current ≥ 0.85 × all-time PB → show current est, no emoji
+// - current < 0.85 × all-time PB → swap "Current est. Xkg 😟" for
+//   "Last heavy: {date} - log to update" (date supplied by the caller)
+// - current > all-time PB        → "↑ PB" indicator (the only emoji-equivalent)
+// Sad face is gone entirely.
 
 function PerfCard({
-  title, icon, allTimePB, currentEst, higherIsBetter = true, className = "",
+  title, icon, allTimePB, currentEst, lastHeavyDate, higherIsBetter = true, className = "",
 }: {
   title: string; icon: React.ReactNode;
   allTimePB: string | null; currentEst: string | null;
+  /** ISO date of the last session at ≥ 85 % of PB. Used when current has dropped below threshold. */
+  lastHeavyDate?: string | null;
   higherIsBetter?: boolean; className?: string;
 }) {
   const hasBoth = allTimePB !== null && currentEst !== null;
-  type Comparison = "better" | "equal" | "worse";
-  let comparison: Comparison = "worse";
+  type Comparison = "better" | "above_threshold" | "below_threshold";
+  let comparison: Comparison = "above_threshold";
   if (hasBoth) {
     if (higherIsBetter) {
       const currN = parseFloat(currentEst!);
       const pbN   = parseFloat(allTimePB!);
-      if (!isNaN(currN) && !isNaN(pbN)) {
-        comparison = currN > pbN ? "better" : currN === pbN ? "equal" : "worse";
+      if (!isNaN(currN) && !isNaN(pbN) && pbN > 0) {
+        if (currN > pbN) comparison = "better";
+        else if (currN >= pbN * 0.85) comparison = "above_threshold";
+        else comparison = "below_threshold";
       }
     } else {
+      // Lower-is-better (pace times). Threshold: current ≤ 1.15 × pb time = within 15 % slower.
       const currS = paceToSeconds(currentEst!);
       const pbS   = paceToSeconds(allTimePB!);
-      if (currS !== null && pbS !== null) {
-        comparison = currS < pbS ? "better" : currS === pbS ? "equal" : "worse";
+      if (currS !== null && pbS !== null && pbS > 0) {
+        if (currS < pbS) comparison = "better";
+        else if (currS <= pbS * 1.15) comparison = "above_threshold";
+        else comparison = "below_threshold";
       }
     }
   }
+  const isBelowThreshold = comparison === "below_threshold";
+  const showLastHeavyLine = isBelowThreshold && lastHeavyDate;
   return (
     <div className={`bg-card border rounded-2xl px-4 py-3.5 flex flex-col gap-1.5 ${className}`}>
       <div className="flex items-center justify-between">
@@ -537,11 +605,18 @@ function PerfCard({
           <span className="text-sm font-semibold tabular-nums">{allTimePB}</span>
         </div>
       )}
-      {currentEst !== null && (
+      {showLastHeavyLine ? (
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground">Last heavy</span>
+          <span className="text-[11px] text-muted-foreground/80">
+            {formatLastHeavy(lastHeavyDate!)}
+          </span>
+        </div>
+      ) : currentEst !== null && (
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">Current est.</span>
-          <span className={`text-sm font-semibold tabular-nums ${hasBoth && comparison === "better" ? "text-emerald-600" : ""}`}>
-            {currentEst}{hasBoth && (comparison === "better" ? " ↑ PB" : comparison === "equal" ? " 😐" : " 😟")}
+          <span className={`text-sm font-semibold tabular-nums ${comparison === "better" ? "text-emerald-600" : ""}`}>
+            {currentEst}{comparison === "better" ? " ↑ PB" : ""}
           </span>
         </div>
       )}
@@ -550,6 +625,22 @@ function PerfCard({
       )}
     </div>
   );
+}
+
+function formatLastHeavy(isoDate: string): string {
+  try {
+    const d = new Date(`${isoDate}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return "log to update";
+    const today = new Date();
+    const days = Math.floor((today.getTime() - d.getTime()) / 86_400_000);
+    if (days < 0) return "log to update";
+    if (days < 7) return `${days === 0 ? "today" : days === 1 ? "yesterday" : `${days}d ago`} · log to update`;
+    if (days < 28) return `${Math.floor(days / 7)}w ago · log to update`;
+    if (days < 365) return `${Math.floor(days / 30)}mo ago · log to update`;
+    return `${Math.floor(days / 365)}y ago · log to update`;
+  } catch {
+    return "log to update";
+  }
 }
 
 // ── Pref row ─────────────────────────────────────────────────────
@@ -1758,6 +1849,17 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
         </div>
       )}
 
+      {/* ── 3.5 Hybrid streak ────────────────────────────────── */}
+      {analytics.hybridStreak && (
+        <HybridStreakCard streak={analytics.hybridStreak} />
+      )}
+
+      {/* ── 3.6 Best Efforts feed ────────────────────────────── */}
+      <BestEffortsFeed
+        topBestEfforts={analytics.topBestEfforts}
+        hybridHighlights={analytics.hybridHighlights}
+      />
+
       {/* ── 4. Core performance cards ────────────────────────── */}
       {(prefs.showEstimated5K || prefs.showHalfMarathonCard || prefs.showMarathonCard || prefs.showSquatE1RM || prefs.showBenchE1RM || prefs.showDeadliftE1RM) && (
         <section>
@@ -1819,6 +1921,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                   icon={<Dumbbell className="w-4 h-4" />}
                   allTimePB={allTimePBNum !== null ? `${allTimePBNum}kg` : null}
                   currentEst={strengthMetrics.squat.current !== null ? `${strengthMetrics.squat.current}kg` : null}
+                  lastHeavyDate={analytics.lastHeavyDates?.squat ?? null}
                 />
               );
             })()}
@@ -1834,6 +1937,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                   icon={<Dumbbell className="w-4 h-4" />}
                   allTimePB={allTimePBNum !== null ? `${allTimePBNum}kg` : null}
                   currentEst={strengthMetrics.bench.current !== null ? `${strengthMetrics.bench.current}kg` : null}
+                  lastHeavyDate={analytics.lastHeavyDates?.bench ?? null}
                 />
               );
             })()}
@@ -1849,6 +1953,7 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
                   icon={<Dumbbell className="w-4 h-4" />}
                   allTimePB={allTimePBNum !== null ? `${allTimePBNum}kg` : null}
                   currentEst={strengthMetrics.deadlift.current !== null ? `${strengthMetrics.deadlift.current}kg` : null}
+                  lastHeavyDate={analytics.lastHeavyDates?.deadlift ?? null}
                 />
               );
             })()}
@@ -1866,19 +1971,39 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
               const curr = thisWeekData?.totalDistance ?? 0;
               const prev = lastWeekByNow.distance;
               const diff = curr - prev;
+              const everRan = (analytics.sessions ?? []).some((s) => s.totalDistance > 0);
+              if (curr > 0) {
+                return (
+                  <StatCard
+                    title="Distance Run"
+                    icon={<Footprints className="w-4 h-4" />}
+                    value={fmtDist(curr)}
+                    sub={prev > 0 ? (
+                      <span>
+                        {"By this point last week: "}{fmtDist(prev)}{" "}
+                        <span className={diff >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
+                          {diff >= 0 ? `+${fmtDist(diff)} ahead` : `-${fmtDist(Math.abs(diff))} behind`}
+                        </span>
+                      </span>
+                    ) : undefined}
+                  />
+                );
+              }
+              if (prev > 0) {
+                return (
+                  <StatCard
+                    title="Distance Run"
+                    icon={<Footprints className="w-4 h-4" />}
+                    value={<span className="text-muted-foreground/70 font-normal">{fmtDist(prev)}</span>}
+                    sub={<span><span className="text-muted-foreground">Last week. </span><span className="text-primary">Log a session</span></span>}
+                  />
+                );
+              }
               return (
                 <StatCard
                   title="Distance Run"
                   icon={<Footprints className="w-4 h-4" />}
-                  value={curr > 0 ? fmtDist(curr) : "—"}
-                  sub={prev > 0 ? (
-                    <span>
-                      {"By this point last week: "}{fmtDist(prev)}{" "}
-                      <span className={diff >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
-                        {diff >= 0 ? `+${fmtDist(diff)} ahead` : `-${fmtDist(Math.abs(diff))} behind`}
-                      </span>
-                    </span>
-                  ) : undefined}
+                  value={<span className="text-sm text-muted-foreground font-normal">{everRan ? "Nothing yet this week" : "No runs logged yet"}</span>}
                 />
               );
             })()}
@@ -1887,19 +2012,39 @@ export default function DashboardTab({ analytics, isLoading, clientId, calorieTa
               const curr = thisWeekData?.totalVolume ?? 0;
               const prev = lastWeekByNow.volume;
               const diff = curr - prev;
+              const everLifted = (analytics.sessions ?? []).some((s) => s.totalVolume > 0);
+              if (curr > 0) {
+                return (
+                  <StatCard
+                    title="Volume Lifted"
+                    icon={<TrendingUp className="w-4 h-4" />}
+                    value={fmtVol(curr)}
+                    sub={prev > 0 ? (
+                      <span>
+                        {"By this point last week: "}{fmtVol(prev)}{" "}
+                        <span className={diff >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
+                          {diff >= 0 ? `+${fmtVol(diff)} ahead` : `-${fmtVol(Math.abs(diff))} behind`}
+                        </span>
+                      </span>
+                    ) : undefined}
+                  />
+                );
+              }
+              if (prev > 0) {
+                return (
+                  <StatCard
+                    title="Volume Lifted"
+                    icon={<TrendingUp className="w-4 h-4" />}
+                    value={<span className="text-muted-foreground/70 font-normal">{fmtVol(prev)}</span>}
+                    sub={<span><span className="text-muted-foreground">Last week. </span><span className="text-primary">Log a session</span></span>}
+                  />
+                );
+              }
               return (
                 <StatCard
                   title="Volume Lifted"
                   icon={<TrendingUp className="w-4 h-4" />}
-                  value={curr > 0 ? fmtVol(curr) : "—"}
-                  sub={prev > 0 ? (
-                    <span>
-                      {"By this point last week: "}{fmtVol(prev)}{" "}
-                      <span className={diff >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
-                        {diff >= 0 ? `+${fmtVol(diff)} ahead` : `-${fmtVol(Math.abs(diff))} behind`}
-                      </span>
-                    </span>
-                  ) : undefined}
+                  value={<span className="text-sm text-muted-foreground font-normal">{everLifted ? "Nothing yet this week" : "No lifts logged yet"}</span>}
                 />
               );
             })()}
