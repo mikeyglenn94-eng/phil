@@ -341,7 +341,17 @@ function currentSlotDef(state: FlowState<unknown>): SlotDef | null {
  *  so we never offer Wave when weeks < 3, never show endurance styles for a
  *  pure-strength selection, etc. */
 function slotOptions(slot: SlotDef | null, state: FlowState<unknown>) {
-  if (!slot || !slot.options) return null;
+  if (!slot) return null;
+  // Free-text-only slots (no options array) still need an OptionsBlock so
+  // the wizard renders the textarea instead of empty space. Defence against
+  // future slot definitions that ship as pure free_text.
+  if (!slot.options) {
+    return {
+      kind: slot.kind,
+      options: [],
+      allowOther: slot.allowOther ?? false,
+    };
+  }
   if (state.type === "progression" && slot.name === "style") {
     const ctx = state.context as { sourceSessions?: ProgressionSourceSession[] } | null;
     const sources = ctx?.sourceSessions ?? [];

@@ -69,7 +69,7 @@ export async function generateSwapOptions(
   state: ModificationFlowState,
   exerciseName: string,
 ): Promise<SwapOption[]> {
-  const reason = String(state.slots.specifics ?? "");
+  const reason = specificsText(state.slots.specifics);
   const equipment = state.context.equipmentList ?? "full commercial gym";
   const completion = await openai.chat.completions.create({
     model: MODEL,
@@ -180,7 +180,7 @@ async function identifyAffectedExercises(
 ): Promise<AffectedExerciseRef[]> {
   const futureSessions = state.context.futureSessions;
   const modificationType = String(getValue(state.slots.modification_type) ?? "");
-  const specifics = String(state.slots.specifics ?? "");
+  const specifics = specificsText(state.slots.specifics);
 
   // LLM-first identification.
   const compactProgramme = futureSessions.map((s) => ({
@@ -330,6 +330,25 @@ function getValue(v: unknown): string | null {
     return typeof inner === "string" ? inner : null;
   }
   return null;
+}
+
+/** Read a slot value as descriptive text. Prefers the free-text note (when
+ *  the user typed an "other" answer) over the canonical snake_case value
+ *  (when the user tapped a chip). The note is what the LLM actually wants
+ *  to read — "rotator cuff impingement" beats "other" or "shoulder". */
+function specificsText(v: unknown): string {
+  if (typeof v === "string") return humaniseSlotValue(v);
+  if (v && typeof v === "object") {
+    const obj = v as { value?: unknown; note?: unknown };
+    const note = typeof obj.note === "string" ? obj.note.trim() : "";
+    if (note) return note;
+    if (typeof obj.value === "string") return humaniseSlotValue(obj.value);
+  }
+  return "";
+}
+
+function humaniseSlotValue(s: string): string {
+  return s.replace(/_/g, " ").trim();
 }
 
 function safeParse(raw: string): Record<string, unknown> {

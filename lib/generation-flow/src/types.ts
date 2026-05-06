@@ -282,8 +282,18 @@ export const PROGRAMME_SLOTS: SlotDef[] = [
   },
   {
     name: "injuries_or_avoid",
-    kind: "free_text",
-    hint: "Anything off the table — niggling injuries, exercises they want to avoid. 'None' is a valid answer.",
+    kind: "single_select",
+    allowOther: true,
+    options: [
+      { value: "none", label: "None" },
+      { value: "lower_back", label: "Lower back" },
+      { value: "knee", label: "Knee" },
+      { value: "shoulder", label: "Shoulder" },
+      { value: "hip", label: "Hip" },
+      { value: "wrist", label: "Wrist" },
+      { value: "elbow", label: "Elbow" },
+    ],
+    hint: "Anything off the table — niggling injuries, exercises they want to avoid. Common pain points are listed as chips; the user can also type a more specific description (e.g. 'left rotator cuff', 'tendinopathy in patellar tendon') via the free-text field. 'None' is the most common happy-path answer.",
   },
   {
     name: "preview_confirmed",
@@ -365,8 +375,16 @@ export const SESSION_SLOTS: SlotDef[] = [
   },
   {
     name: "notes",
-    kind: "free_text",
-    hint: "Anything else worth knowing for this session. Optional. The user can skip with 'none' or 'skip'.",
+    kind: "single_select",
+    allowOther: true,
+    options: [
+      { value: "none", label: "None" },
+      { value: "feeling_fresh", label: "Feeling fresh" },
+      { value: "tired_today", label: "Tired today" },
+      { value: "pressed_for_time", label: "Pressed for time" },
+      { value: "recovering_from_yesterday", label: "Recovering from yesterday" },
+    ],
+    hint: "Anything else worth knowing for this session — state of self, time pressure, recovery context. Optional. 'None' is the most common happy-path tap; specific notes go in the free-text field.",
   },
 ];
 
@@ -389,8 +407,23 @@ export const MODIFICATION_SLOTS: SlotDef[] = [
   },
   {
     name: "specifics",
-    kind: "free_text",
-    hint: "The detail behind the modification. e.g. for swap_aggravating_exercises this is the body part or exercise; for change_difficulty this is too easy / too hard and where; for change_volume / change_focus it's the area to push or pull back.",
+    kind: "single_select",
+    allowOther: true,
+    options: [
+      // Pain / aggravation — by far the most common modification and the
+      // one with the cleanest tappable space. Other modification types use
+      // the free-text field.
+      { value: "lower_back", label: "Lower back" },
+      { value: "knee", label: "Knee" },
+      { value: "shoulder", label: "Shoulder" },
+      { value: "hip", label: "Hip" },
+      { value: "wrist", label: "Wrist" },
+      { value: "elbow", label: "Elbow" },
+      // Common difficulty signals.
+      { value: "too_easy", label: "Too easy" },
+      { value: "too_hard", label: "Too hard" },
+    ],
+    hint: "The detail behind the modification. Body-part chips cover the swap_aggravating_exercises path (most common case). 'Too easy' / 'Too hard' chips cover change_difficulty. swap_equipment / change_volume / change_frequency / change_focus answers go in the free-text field (e.g. 'lost gym access', 'add a 5th day', 'more upper body').",
   },
   {
     name: "affected_exercises",
