@@ -28,6 +28,7 @@ import adminMetricsRouter from "./admin-metrics";
 import generationFlowRouter from "./generation-flow";
 import bestEffortsRouter from "./best-efforts";
 import chatClassifyRouter from "./chat-classify";
+import parseSessionFromImageRouter from "./parse-session-from-image";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(adminMetricsRouter);
 router.use(generationFlowRouter);
 router.use(bestEffortsRouter);
 router.use(chatClassifyRouter);
+router.use(parseSessionFromImageRouter);
 
 export default router;

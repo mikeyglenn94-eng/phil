@@ -686,6 +686,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const [savingQuickSession, setSavingQuickSession] = useState<"private" | "public" | "calendar" | null>(null);
   const quickAddInterimRef = useRef("");
   const quickAddRecRef = useRef<any>(null);
+  // ── Endurance screenshot upload (Run / Cycle / Swim only) ──
+  const [screenshotUploading, setScreenshotUploading] = useState(false);
+  const [screenshotError, setScreenshotError] = useState<{ reason: string; message: string } | null>(null);
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
 
   // ── Unified editable session state (types + converters imported from shared component) ────
   const [editableSession, setEditableSession] = useState<EditableSession | null>(null);
@@ -729,6 +733,54 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     };
     r.start();
     quickAddRecRef.current = r;
+  }
+
+  async function handleScreenshotUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    if (quickAddType !== "run" && quickAddType !== "cycle" && quickAddType !== "swim") return;
+
+    setScreenshotUploading(true);
+    setScreenshotError(null);
+    setQuickAddError("");
+    setParsedQuickSession(null);
+    setEditableSession(null);
+
+    try {
+      const resized = await Promise.all(files.map(f => resizeImageToBase64(f)));
+      const res = await fetch("/api/parse-session-from-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64Array: resized.map(r => r.base64),
+          imageMimeTypes: resized.map(r => r.mimeType),
+          sport: quickAddType,
+          name: quickAddName.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setScreenshotError({
+          reason: typeof body.reason === "string" ? body.reason : "model_error",
+          message: typeof body.error === "string" ? body.error : "Couldn't read this screenshot. Try a clearer one or log manually.",
+        });
+        return;
+      }
+      const data = await res.json();
+      // Stamp source for cycle/swim, mirroring handleQuickAdd line 765-766.
+      if (quickAddType === "cycle") data.source = "cycle_brain";
+      if (quickAddType === "swim") data.source = "swim_brain";
+      setParsedQuickSession(data);
+      setEditableSession(parseRunToEditable(data));
+    } catch {
+      setScreenshotError({
+        reason: "model_error",
+        message: "Couldn't read this screenshot. Try a clearer one or log manually.",
+      });
+    } finally {
+      setScreenshotUploading(false);
+    }
   }
 
   async function handleQuickAdd() {
@@ -6291,7 +6343,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       </Dialog>}
 
       {/* Quick-add single session dialog */}
-      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); setParsedQuickSession(null); setQuickAddWodOptions(null); setSavingQuickSession(null); } }}>
+      <Dialog open={quickAddOpen} onOpenChange={o => { setQuickAddOpen(o); if (!o) { setQuickAddName(""); setQuickAddDesc(""); setQuickAddError(""); setQuickAddType("strength"); setParsedQuickSession(null); setQuickAddWodOptions(null); setSavingQuickSession(null); setScreenshotError(null); setScreenshotUploading(false); } }}>
         <DialogContent className="max-w-sm flex flex-col max-h-[92dvh] overflow-hidden p-0">
           <div className="px-6 pt-6 pb-3 shrink-0">
             <DialogHeader>
@@ -6312,13 +6364,62 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 <button
                   key={t}
                   type="button"
-                  onClick={() => { setQuickAddType(t); setQuickAddDesc(""); setQuickAddError(""); }}
+                  onClick={() => { setQuickAddType(t); setQuickAddDesc(""); setQuickAddError(""); setScreenshotError(null); }}
                   className={`flex-1 text-[10px] font-medium py-1.5 rounded-lg transition-colors ${quickAddType === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   {t === "strength" ? "Strength" : t === "wod" ? "WOD" : t === "run" ? "Run" : t === "cycle" ? "Cycle" : "Swim"}
                 </button>
               ))}
             </div>
+
+            {/* Screenshot upload — endurance only, hidden once a session is parsed */}
+            {(quickAddType === "run" || quickAddType === "cycle" || quickAddType === "swim") && !parsedQuickSession && !quickAddWodOptions && (
+              <>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground gap-2 -mt-1">
+                  <span>Got a Strava or Garmin screenshot?</span>
+                  <button
+                    type="button"
+                    onClick={() => screenshotInputRef.current?.click()}
+                    disabled={screenshotUploading}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-muted hover:bg-muted/50 transition-colors text-foreground disabled:opacity-50"
+                  >
+                    {screenshotUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
+                    {screenshotUploading ? "Reading..." : "From screenshot"}
+                  </button>
+                  <input
+                    ref={screenshotInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleScreenshotUpload}
+                  />
+                </div>
+                {screenshotError && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs space-y-2">
+                    <p className="text-amber-900 dark:text-amber-100 leading-snug">{screenshotError.message}</p>
+                    <div className="flex gap-2">
+                      {screenshotError.reason === "appears_to_be_strength_session" && (
+                        <button
+                          type="button"
+                          onClick={() => { setQuickAddType("strength"); setScreenshotError(null); }}
+                          className="px-2 py-1 rounded-md border border-amber-400 bg-background text-foreground hover:bg-muted/50 transition-colors"
+                        >
+                          Switch to strength
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setScreenshotError(null)}
+                        className="px-2 py-1 text-amber-700 dark:text-amber-300 hover:underline"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
 
             <div>
               <label className="text-xs font-medium text-muted-foreground">

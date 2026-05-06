@@ -27,11 +27,20 @@ export interface ModelUsage {
   total_tokens?: number;
 }
 
+export interface RunLogInterval {
+  distance: number | null;
+  pace: string | null;
+  hr: number | null;
+}
+
 export interface ParsedWorkout {
   ok: true;
   name: string;
   sport: Sport;
   exercises: ParsedExercise[];
+  /** Per-interval log when the input is an endurance screenshot. Optional —
+   *  text-parsed sessions don't populate this. */
+  runLog?: RunLogInterval[];
   raw: string;
   rawModelOutput: string;
   usage: ModelUsage | null;
@@ -41,7 +50,10 @@ export type ParseFailureReason =
   | "empty_input"
   | "no_exercises_found"
   | "model_error"
-  | "json_parse_error";
+  | "json_parse_error"
+  | "images_appear_to_be_different_activities"
+  | "sport_unclear"
+  | "appears_to_be_strength_session";
 
 export interface ParseFailure {
   ok: false;
