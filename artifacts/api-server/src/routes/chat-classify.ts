@@ -41,20 +41,28 @@ The five labels:
 
 start_programme_flow
   - Build a new multi-week training programme.
-  - Examples: "build me a programme", "create a 4-week plan", "I need a new programme", "design me a 6-week strength block", "start a hyrox block", "I'm training for a marathon"
-  - Goal statements that imply a programme: "I want to get stronger", "training for a half marathon"
+  - "plan" and "programme" are SYNONYMS — every "plan" message is a programme intent.
+  - Examples: "build me a programme", "build my plan", "build me a plan", "build a plan", "create a plan", "new plan", "I need a programme", "design me a 6-week strength block", "start a hyrox block", "I'm training for a marathon", "create a 4-week programme", "make me a plan"
+  - Goal statements that imply a programme: "I want to get stronger", "training for a half marathon", "I want to lose weight" (any goal statement without an existing-programme reference)
 
 start_session_flow
   - Generate ONE single workout session.
-  - Examples: "add a session today", "give me a leg session", "build me a 45-min upper body workout", "what should I do today" (when generation is implied)
+  - "add a session" / "add session" / "give me a session" / "build me a session" → ALWAYS this label.
+  - Examples: "add a session", "add a session today", "give me a leg session", "give me a 45-min upper body workout", "build me a strength session", "what should I do today" (when generation is implied), "I need a session"
 
 start_modification_flow
-  - Modify an existing programme. Pain, equipment changes, difficulty complaints, explicit swaps.
+  - Modify an EXISTING programme. Requires explicit modification signal.
+  - Trigger ONLY on:
+    * Pain words: "hurts", "sore", "niggle", "tweaked", "aggravat-", "flared", "strained", "bad back/knee/shoulder/hip", "can't do X anymore"
+    * Explicit swap: "swap X", "swap X for Y", "change X to Y", "replace X with Y", "remove X", "drop X"
+    * Difficulty complaints: "too easy", "too hard", "too much", "not enough", "this is killing me", "this isn't working"
+    * Equipment changes: "lost gym access", "no gym today", "no kit", "stuck at home", "lost my barbell"
   - Examples: "my back hurts", "knee is sore", "swap deadlifts for hip thrust", "this is too easy", "lost gym access", "rdl is aggravating my back"
-  - Note: if the user has no active programme (hasActiveProgramme=false), modification requests fall back to start_programme_flow because there's nothing to modify yet.
+  - DO NOT classify as modification on generic words alone. "Plan", "programme", "session", "training" — none of these on their own are modification intent. They are programme or session intent.
+  - If hasActiveProgramme=false, modification requests fall back to start_programme_flow (nothing to modify).
 
 start_progression_flow
-  - Repeat / progress sessions across future weeks.
+  - Repeat / progress existing sessions across future weeks.
   - Examples: "repeat this week with progression", "progress my current block", "extend the block by 4 weeks", "do this for the next 4 weeks", "repeat for 3 weeks"
 
 chat
@@ -63,7 +71,7 @@ chat
 
 Routing rules:
 - Default to "chat" if uncertain. Better Phil asks "did you mean to build a programme?" than to drop someone into a flow they didn't want.
-- Pain words ("hurts", "sore", "niggle", "tweaked") → start_modification_flow if hasActiveProgramme=true, else start_programme_flow.
+- "plan" alone, "build my plan", "create a plan" → start_programme_flow. "Plan" never indicates modification by itself.
 - Calendar commands ("copy this week", "delete sessions") → chat (the legacy scheduler handles them).
 - Library / search / browse → chat.
 

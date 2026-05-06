@@ -1103,6 +1103,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   const [activeFlowType, setActiveFlowType] = useState<ActiveFlowType | null>(null);
   const [activeFlowContext, setActiveFlowContext] = useState<Record<string, unknown> | null>(null);
   const flowRef = useRef<GenerationFlowChatHandle | null>(null);
+  // Soft escape: when a mid-flow message classifies as a different generation
+  // intent, Phil offers Switch / Stay chips. While set, the next chat message
+  // is the user's decision (the chip value).
+  const [pendingFlowSwitch, setPendingFlowSwitch] = useState<{
+    newIntent: string;
+    fromFlow: ActiveFlowType;
+  } | null>(null);
   const [pasteMode, setPasteMode] = useState(false);
   const [sessionClipboard, setSessionClipboard] = useState<{ sessions: Session[]; baseDate: string } | null>(null);
 
@@ -2316,17 +2323,90 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
   /** Try to handle the message via the new state-machine path. Returns
    *  "handled" if dispatched (cancel / active flow / generation start) or
    *  "passthrough" if the legacy classifier should run. */
+  // Soft-escape decision keywords. Compared as a startsWith / equality match
+  // against the user's trimmed lowercase input.
+  const isSwitchDecision = (input: string) => /^(switch|switch flow|yes,? switch)$/.test(input.toLowerCase().trim());
+  const isStayDecision = (input: string) => /^(stay|no,? stay|keep going)$/.test(input.toLowerCase().trim());
+
+  const flowLabel = (t: ActiveFlowType): string => {
+    switch (t) {
+      case "programme": return "programme building";
+      case "session": return "session building";
+      case "modification": return "modification";
+      case "progression": return "progression";
+    }
+  };
+  const intentLabel = (intent: string): string => {
+    if (intent === "start_programme_flow") return "build a programme";
+    if (intent === "start_session_flow") return "build a session";
+    if (intent === "start_modification_flow") return "modify your programme";
+    if (intent === "start_progression_flow") return "progress sessions";
+    return intent;
+  };
+  const intentToActiveFlowType = (intent: string): ActiveFlowType | null => {
+    switch (intent) {
+      case "start_programme_flow": return "programme";
+      case "start_session_flow": return "session";
+      case "start_modification_flow": return "modification";
+      case "start_progression_flow": return "progression";
+      default: return null;
+    }
+  };
+
   const dispatchChatToFlow = async (input: string): Promise<"handled" | "passthrough"> => {
+    // 1. Resolve a pending Switch/Stay decision before anything else.
+    if (pendingFlowSwitch) {
+      if (isSwitchDecision(input)) {
+        addUserMsg(input);
+        const { newIntent } = pendingFlowSwitch;
+        setPendingFlowSwitch(null);
+        clearActiveFlow();
+        const started = startFlowFromIntent(newIntent);
+        if (!started) addPhilMsg("Couldn't start that flow. Try rephrasing.");
+        return "handled";
+      }
+      if (isStayDecision(input)) {
+        addUserMsg(input);
+        setPendingFlowSwitch(null);
+        addPhilMsg("Sticking with what we were doing. Carry on.");
+        return "handled";
+      }
+      // Anything else: clear the pending switch and fall through to normal
+      // dispatch — the user clearly moved on without choosing.
+      setPendingFlowSwitch(null);
+    }
+
+    // 2. Hard cancel mid-flow (cancel/never mind/stop) — clears the flow.
     if (activeFlowType && isCancelMessage(input)) {
-      // Flow won't fire send() in this branch, so the user msg has to be
-      // appended explicitly here (the callers skip it when activeFlowType
-      // is set, expecting the flow to emit it via onMessage).
       addUserMsg(input);
       clearActiveFlow();
       addPhilMsg("Right. Moving on.");
       return "handled";
     }
+
+    // 3. Mid-flow soft escape: re-classify the message. If it strongly
+    // indicates a different generation flow, offer Switch / Stay chips
+    // rather than blindly forwarding to the active flow's slot parser
+    // (which would parse-fail and the question writer would loop).
     if (activeFlowType) {
+      const newIntent = await classifyChatIntent(input);
+      const newFlow = intentToActiveFlowType(newIntent);
+      if (newFlow && newFlow !== activeFlowType) {
+        addUserMsg(input);
+        setPendingFlowSwitch({ newIntent, fromFlow: activeFlowType });
+        addPhilMsg(
+          `You're mid-flow on ${flowLabel(activeFlowType)}. Want to switch to ${intentLabel(newIntent)}?`,
+          {
+            quickReplies: [
+              { label: "Switch", value: "switch" },
+              { label: "Stay", value: "stay" },
+            ],
+          },
+        );
+        return "handled";
+      }
+      // Same flow type or "chat" intent → forward to the active flow's
+      // slot parser. The question writer handles off-topic redirects.
       try {
         await flowRef.current?.send(input);
       } catch {
@@ -2334,6 +2414,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
       }
       return "handled";
     }
+
+    // 4. No active flow: classify and dispatch as normal.
     const intent = await classifyChatIntent(input);
     if (intent === "chat") return "passthrough";
     const started = startFlowFromIntent(intent);
@@ -4714,13 +4796,37 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 </p>
               );
             })()}
-            {/* Quick action chips — shown when idle */}
+            {/* Quick action chips — shown when idle.
+                "Build my plan" and "Add a session" bypass the classifier and
+                start the corresponding state-machine flow directly. We wrote
+                the labels so we know the intent — no need to risk a classifier
+                misroute on a hard-coded user action. The other two chips are
+                free-form (review / status / advice) so they fill the input
+                and run through the normal dispatcher. */}
             {!cmdInput && !pendingReschedule && !pendingBulkDelete && !pendingCommand && (
               <div className="flex flex-wrap gap-1.5">
                 {(["Build my plan", "Add a session", "What should I work on?", "Review my week"] as const).map(chip => (
                   <button
                     key={chip}
-                    onClick={() => setCmdInput(chip)}
+                    onClick={() => {
+                      if (chip === "Build my plan") {
+                        addUserMsg(chip);
+                        setPhilOpen(true);
+                        startFlowFromIntent("start_programme_flow");
+                        return;
+                      }
+                      if (chip === "Add a session") {
+                        addUserMsg(chip);
+                        setPhilOpen(true);
+                        startFlowFromIntent("start_session_flow");
+                        return;
+                      }
+                      // "What should I work on?" / "Review my week" — fill the
+                      // input so the user can edit before submitting; they go
+                      // through the normal dispatcher (classifier → "chat" →
+                      // legacy review/conversational).
+                      setCmdInput(chip);
+                    }}
                     className="text-[11px] px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-muted transition-colors text-muted-foreground"
                   >
                     {chip}
