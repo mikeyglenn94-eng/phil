@@ -318,7 +318,15 @@ export const GenerationFlowChat = forwardRef<
     try {
       const data = await callFlow({ action: "preview", state: s });
       const next = data.state as FlowState;
-      commitState(next);
+      const nextOptions = (data.options as OptionsBlock | null) ?? null;
+      const nextStepInfo = (data.stepInfo as StepInfo | null) ?? null;
+      const nextMessage = (data.assistantMessage as string | null) ?? null;
+      // Server now returns the slot UI for the post-preview slot
+      // (preview_confirmed: bool). Without these the wizard would render
+      // blank waiting for user confirmation.
+      commitState(next, { nextOptions, nextStepInfo, nextAssistantMessage: nextMessage });
+      setOptions(nextOptions);
+      setStepInfo(nextStepInfo);
       const preview = data.preview as unknown;
       onPreview?.(preview);
     } catch (e) {

@@ -178,9 +178,22 @@ async function handleAdvance(
   void logApiCost({ userId: req.auth?.userId, endpoint: "generation-flow:advance", model: "gpt-5.2", usage: null });
 
   if (advanced.type === "programme" && previewReady(advanced as ProgrammeFlowState)) {
+    // The next slot is preview_confirmed (kind: "bool"). Include its question
+    // and options so the wizard renders Yes/No buttons immediately — without
+    // this, the wizard would receive null options between advance and preview
+    // and render a blank screen.
+    const slotDef = currentSlotDef(advanced);
+    const message = slotDef
+      ? await writeQuestion({ slot: slotDef, history: advanced.history })
+      : "";
+    const stateOut = message
+      ? appendAssistant(advanced, message)
+      : advanced;
     res.json({
-      state: advanced,
-      assistantMessage: null,
+      state: stateOut,
+      assistantMessage: message,
+      options: slotOptions(slotDef, stateOut),
+      stepInfo: stepInfoFor(stateOut),
       previewReady: true,
     });
     return;
@@ -219,14 +232,30 @@ async function handlePreview(
   res: Parameters<Parameters<typeof router.post>[1]>[1],
 ): Promise<void> {
   const preview = await generatePreview(body.state);
-  const stateOut: ProgrammeFlowState = {
+  let stateOut: ProgrammeFlowState = {
     ...body.state,
     previewGenerated: true,
     preview,
   };
   void logApiCost({ userId: req.auth?.userId, endpoint: "generation-flow:preview", model: "gpt-5.2", usage: null });
 
-  res.json({ state: stateOut, preview });
+  // Include the slot UI for the post-preview slot (preview_confirmed: bool).
+  // Without this, the wizard's options/stepInfo go null between handleAdvance's
+  // previewReady response and this preview response, and the wizard renders
+  // blank during the preview-LLM call.
+  const slotDef = currentSlotDef(stateOut);
+  const message = slotDef
+    ? await writeQuestion({ slot: slotDef, history: stateOut.history })
+    : "";
+  if (message) stateOut = appendAssistant(stateOut, message) as ProgrammeFlowState;
+
+  res.json({
+    state: stateOut,
+    preview,
+    assistantMessage: message,
+    options: slotOptions(slotDef, stateOut),
+    stepInfo: stepInfoFor(stateOut),
+  });
 }
 
 async function handleGenerate(
