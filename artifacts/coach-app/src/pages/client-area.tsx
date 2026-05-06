@@ -2318,6 +2318,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
    *  "passthrough" if the legacy classifier should run. */
   const dispatchChatToFlow = async (input: string): Promise<"handled" | "passthrough"> => {
     if (activeFlowType && isCancelMessage(input)) {
+      // Flow won't fire send() in this branch, so the user msg has to be
+      // appended explicitly here (the callers skip it when activeFlowType
+      // is set, expecting the flow to emit it via onMessage).
+      addUserMsg(input);
       clearActiveFlow();
       addPhilMsg("Right. Moving on.");
       return "handled";
@@ -2340,8 +2344,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     const input = (overrideInput !== undefined ? overrideInput : cmdInput).trim();
     if (!input) return;
 
-    // Log user message (unless caller already did) + open Phil panel
-    if (!opts?.skipUserMsg) addUserMsg(input);
+    // Log user message (unless caller already did, or a flow is active — in
+    // which case the flow's onMessage will emit the user msg via the bubble
+    // diff, so manual addUserMsg here would duplicate). The cancel branch
+    // inside dispatchChatToFlow handles the cancel-input bubble itself
+    // because the flow doesn't fire send() in that case.
+    if (!opts?.skipUserMsg && !activeFlowType) addUserMsg(input);
     setPhilOpen(true);
     if (overrideInput === undefined) setCmdInput("");
     setCoachInlineResponse(null);
@@ -2546,7 +2554,10 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
     setPhilUnread(false);
 
     // ── New state-machine flow dispatch — runs before any legacy branch.
-    addUserMsg(input);
+    // Skip addUserMsg when a flow is active — the flow's onMessage emits
+    // the user msg, so manual add would duplicate. Cancel branch inside
+    // dispatchChatToFlow handles the cancel-input bubble explicitly.
+    if (!activeFlowType) addUserMsg(input);
     const dispatched = await dispatchChatToFlow(input);
     if (dispatched === "handled") return;
 
@@ -5440,8 +5451,12 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
 
                 {/* Embedded state-machine flow — chip row inline beneath the most recent Phil bubble.
                     The flow's transcript is suppressed (embedded mode); chip rows / swap cards
-                    render directly. User input still arrives via the top "Ask Phil" composer (or
-                    the panel composer on Dashboard) — those callers forward to flowRef.send(). */}
+                    render directly. User input arrives via the top "Ask Phil" composer (or the
+                    panel composer on Dashboard) AND via chip taps inside the flow component.
+                    Both go through flowRef.send() — the flow's optimistic-commit emits the user
+                    message via onMessage, so this host appends it to philMessages. That gives
+                    each slot a clean user-pick bubble and leaves only the current slot's chip
+                    row visible (the row tracks state.currentSlot's options, single instance). */}
                 {activeFlowType && activeFlowContext ? (
                   <div className="ml-8 pr-2">
                     <GenerationFlowChat
@@ -5450,9 +5465,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                       context={activeFlowContext}
                       embedded
                       onMessage={(m) => {
-                        // Only mirror Phil's questions into the chat — user
-                        // messages are added by the chat dispatcher.
-                        if (m.role === "assistant") addPhilMsg(m.content);
+                        if (m.role === "user") addUserMsg(m.content);
+                        else addPhilMsg(m.content);
                       }}
                       onComplete={(result) => void handleFlowComplete(result)}
                     />
