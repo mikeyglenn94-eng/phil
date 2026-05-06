@@ -1,20 +1,30 @@
 /**
  * Generation Flow Chat
  *
- * Drives the lib/generation-flow state machine from the UI.
- * One component handles all three flow types: programme, session, modification.
+ * Drives the lib/generation-flow state machine from the UI. One component,
+ * two render modes:
  *
- * Flow:
- *   1. mount → POST /generation-flow {action:"start"}
- *   2. each user reply → POST {action:"advance"} → render next question + options
- *   3. when previewReady (programme only) → POST {action:"preview"} → render preview
- *   4. when complete → POST {action:"generate"} → render result, fire onComplete
- *   5. modification swap_choices step → POST {action:"swap_options"} → render
- *      one card per affected exercise; each tap → POST {action:"record_swap"}.
+ *   - **Wizard mode** (default for embed): a single-question screen with
+ *     back / cancel / step indicator. Replaces the host chat surface while
+ *     a flow is active. No transcript, no per-turn onMessage emission —
+ *     only onComplete + onCancel fire to the host.
+ *
+ *   - **Standalone mode** (dev playground / debug): the legacy transcript-
+ *     plus-chip-row layout with a free-text input. Used for visual debugging
+ *     of the slot machine. Emits per-turn onMessage so callers can mirror
+ *     into a parent bubble stream.
+ *
+ * Server actions (POST /api/generation-flow):
+ *   - {action:"start"}                     → first slot's question + options + stepInfo.
+ *   - {action:"advance", state, userMessage} → next slot's question + options + stepInfo.
+ *   - {action:"preview", state}             → programme-flow week-1 preview.
+ *   - {action:"generate", state}            → terminal generation.
+ *   - {action:"swap_options", state}        → modification-flow swap-card sets.
+ *   - {action:"record_swap", ...}           → record a single swap decision.
  */
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Loader2, ArrowRight } from "lucide-react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { Loader2, ArrowRight, ArrowLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
@@ -39,6 +49,11 @@ interface OptionsBlock {
 interface FlowMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+interface StepInfo {
+  currentStepNumber: number;
+  totalSteps: number;
 }
 
 // Loose shape — full structure lives in lib/generation-flow.
@@ -78,18 +93,24 @@ interface GenerationFlowChatProps {
   onComplete?: (result: GenerateResult) => void;
   /** Optional: called whenever state advances. Lets the host show a side panel. */
   onStateChange?: (state: FlowState) => void;
-  /** When true, hide the internal transcript + free-text input. The host owns
-   *  message rendering and supplies user input via the imperative `send` ref.
-   *  The component still renders chip rows and swap-card UI inline. */
+  /** When true, render in wizard mode (single question per screen, replaces
+   *  the host's chat surface). When false / unset, render in standalone
+   *  transcript mode for the dev playground. */
   embedded?: boolean;
-  /** Called with each new chat message as it's added to the flow's history.
-   *  Lets an embedded host append flow turns into its own bubble stream. */
+  /** Standalone-mode-only: emit each new flow history turn so callers can
+   *  mirror into their own bubble stream. Wizard mode does NOT emit per-turn
+   *  messages — only onComplete fires to the host. */
   onMessage?: (message: FlowMessage) => void;
+  /** Wizard-mode: called when the user taps the X button or types a hard
+   *  cancel keyword in a free-text field. Host should clear flow state. */
+  onCancel?: () => void;
 }
 
 export interface GenerationFlowChatHandle {
   send: (userMessage: string) => Promise<void>;
 }
+
+const CANCEL_RE = /^(cancel|never\s?mind|nevermind|stop|forget it|abort|nope|drop it)\b/i;
 
 export const GenerationFlowChat = forwardRef<
   GenerationFlowChatHandle,
@@ -102,12 +123,14 @@ export const GenerationFlowChat = forwardRef<
   onStateChange,
   embedded,
   onMessage,
+  onCancel,
 }, ref) {
   const { token } = useAuth();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
   const [state, setState] = useState<FlowState | null>(null);
   const [options, setOptions] = useState<OptionsBlock | null>(null);
+  const [stepInfo, setStepInfo] = useState<StepInfo | null>(null);
   const [textInput, setTextInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
@@ -115,6 +138,16 @@ export const GenerationFlowChat = forwardRef<
   const [activeSwapIndex, setActiveSwapIndex] = useState(0);
   const [done, setDone] = useState(false);
   const startedRef = useRef(false);
+
+  // Wizard-mode cache: per-slot snapshot of (question, options, stepInfo) so
+  // the back button can revert to a previous slot's UI without re-fetching.
+  // Keyed by slot name. Filled as the wizard advances.
+  interface SlotPanel {
+    question: string;
+    options: OptionsBlock | null;
+    stepInfo: StepInfo | null;
+  }
+  const [slotPanels, setSlotPanels] = useState<Record<string, SlotPanel>>({});
 
   // ── Server call ────────────────────────────────────────────────────────
 
@@ -135,14 +168,30 @@ export const GenerationFlowChat = forwardRef<
   }
 
   /** Tracks how many messages from history we've already emitted via onMessage.
-   *  Lets us emit only the *new* turns each time the state updates. */
+   *  Lets us emit only the *new* turns each time the state updates. Standalone
+   *  mode only — wizard mode skips emission entirely. */
   const emittedCountRef = useRef(0);
 
-  function commitState(next: FlowState) {
+  function commitState(next: FlowState, opts?: { nextOptions: OptionsBlock | null; nextStepInfo: StepInfo | null; nextAssistantMessage: string | null }) {
     setState(next);
     onStateChange?.(next);
-    // Diff history vs already-emitted count and fire onMessage for each new turn.
-    if (onMessage) {
+
+    // Wizard mode caches per-slot snapshots so the back button can revert.
+    if (embedded && next.currentSlot && opts) {
+      // The latest assistant message is the question for the new currentSlot.
+      const question = opts.nextAssistantMessage ?? lastAssistantContent(next.history);
+      setSlotPanels((prev) => ({
+        ...prev,
+        [next.currentSlot!]: {
+          question,
+          options: opts.nextOptions,
+          stepInfo: opts.nextStepInfo,
+        },
+      }));
+    }
+
+    // Standalone mode mirrors each new turn into the host's bubble stream.
+    if (!embedded && onMessage) {
       const history = next.history ?? [];
       while (emittedCountRef.current < history.length) {
         const m = history[emittedCountRef.current];
@@ -151,6 +200,13 @@ export const GenerationFlowChat = forwardRef<
       }
     }
   }
+
+  // ── Imperative handle — lets a host pipe user input into the flow ──────
+  useImperativeHandle(ref, () => ({
+    send: async (userMessage: string) => {
+      await send(userMessage);
+    },
+  }), [state, busy, type]);
 
   // ── Start ──────────────────────────────────────────────────────────────
 
@@ -161,20 +217,18 @@ export const GenerationFlowChat = forwardRef<
     setError("");
     callFlow({ action: "start", type, context })
       .then((data) => {
-        commitState(data.state as FlowState);
-        setOptions((data.options as OptionsBlock | null) ?? null);
+        const next = data.state as FlowState;
+        const nextOptions = (data.options as OptionsBlock | null) ?? null;
+        const nextStepInfo = (data.stepInfo as StepInfo | null) ?? null;
+        const nextMessage = (data.assistantMessage as string | null) ?? null;
+        commitState(next, { nextOptions, nextStepInfo, nextAssistantMessage: nextMessage });
+        setOptions(nextOptions);
+        setStepInfo(nextStepInfo);
       })
       .catch((e) => setError(asErrorMessage(e)))
       .finally(() => setBusy(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ── Imperative handle — lets the embedded host pipe user input ─────────
-  useImperativeHandle(ref, () => ({
-    send: async (userMessage: string) => {
-      await send(userMessage);
-    },
-  }), [state, busy, type]);
 
   // ── Advance ────────────────────────────────────────────────────────────
 
@@ -183,18 +237,29 @@ export const GenerationFlowChat = forwardRef<
     const trimmed = userMessage.trim();
     if (!trimmed) return;
 
+    // Wizard-mode hard cancel — typed into a free-text field counts.
+    if (embedded && onCancel && CANCEL_RE.test(trimmed)) {
+      onCancel();
+      return;
+    }
+
     setError("");
     setBusy(true);
 
-    // Optimistic user bubble.
+    // Optimistic user bubble — only mirrored in standalone mode.
     const userBubble: FlowMessage = { role: "user", content: trimmed };
-    commitState({ ...state, history: [...state.history, userBubble] });
+    const optimistic: FlowState = { ...state, history: [...state.history, userBubble] };
+    commitState(optimistic);
 
     try {
       const data = await callFlow({ action: "advance", state, userMessage: trimmed });
       const next = data.state as FlowState;
-      commitState(next);
-      setOptions((data.options as OptionsBlock | null) ?? null);
+      const nextOptions = (data.options as OptionsBlock | null) ?? null;
+      const nextStepInfo = (data.stepInfo as StepInfo | null) ?? null;
+      const nextMessage = (data.assistantMessage as string | null) ?? null;
+      commitState(next, { nextOptions, nextStepInfo, nextAssistantMessage: nextMessage });
+      setOptions(nextOptions);
+      setStepInfo(nextStepInfo);
       setTextInput("");
 
       if (data.previewReady === true && type === "programme") {
@@ -202,12 +267,9 @@ export const GenerationFlowChat = forwardRef<
         return;
       }
       if (data.complete === true) {
-        // Modification flow finishes via record_swap loop, but other flows
-        // can finalise here.
         if (type !== "modification") await runGenerate(next);
         return;
       }
-      // Modification flow: when currentSlot becomes swap_choices, fetch options.
       if (type === "modification" && next.currentSlot === "swap_choices") {
         await loadSwapOptions(next);
       }
@@ -216,6 +278,37 @@ export const GenerationFlowChat = forwardRef<
     } finally {
       setBusy(false);
     }
+  }
+
+  // ── Wizard back navigation ─────────────────────────────────────────────
+
+  /** Slot names that have been visited (in order), based on state.slots
+   *  having a non-null value. The current slot is the latest unfilled one. */
+  const visitedSlotNames = useMemo(() => {
+    if (!state) return [];
+    return Object.entries(state.slots)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k]) => k);
+  }, [state]);
+
+  /** True if there is a slot earlier than the current one we can step back to. */
+  const canGoBack = useMemo(() => {
+    if (!state || !state.currentSlot) return false;
+    // We can step back if at least one slot has been answered before the current one.
+    return visitedSlotNames.length > 0;
+  }, [state, visitedSlotNames]);
+
+  function goBack() {
+    if (!state || !canGoBack) return;
+    // The most recently answered slot — we revert to that one.
+    const prevSlotName = visitedSlotNames[visitedSlotNames.length - 1];
+    if (!prevSlotName) return;
+    const cached = slotPanels[prevSlotName];
+    if (!cached) return;
+    setState({ ...state, currentSlot: prevSlotName });
+    setOptions(cached.options);
+    setStepInfo(cached.stepInfo);
+    setError("");
   }
 
   // ── Preview (programme only) ───────────────────────────────────────────
@@ -269,9 +362,6 @@ export const GenerationFlowChat = forwardRef<
       const total = swapSets?.length ?? 0;
       if (activeSwapIndex + 1 < total) {
         setActiveSwapIndex(activeSwapIndex + 1);
-      } else {
-        // All decisions recorded → move to the confirm slot.
-        // The next `send("yes")` from the user fires generate.
       }
     } catch (e) {
       setError(asErrorMessage(e));
@@ -299,20 +389,260 @@ export const GenerationFlowChat = forwardRef<
     }
   }
 
-  // ── UI ─────────────────────────────────────────────────────────────────
+  // ── Render: dispatch by mode ───────────────────────────────────────────
 
+  if (embedded) {
+    return (
+      <WizardView
+        state={state}
+        options={options}
+        stepInfo={stepInfo}
+        busy={busy}
+        error={error}
+        textInput={textInput}
+        setTextInput={setTextInput}
+        swapSets={swapSets}
+        activeSwapIndex={activeSwapIndex}
+        canGoBack={canGoBack}
+        onBack={goBack}
+        onCancel={onCancel}
+        onPick={(value) => send(value)}
+        onSubmitText={() => send(textInput)}
+        onPickSwap={(decision, replacement) => {
+          const set = swapSets?.[activeSwapIndex];
+          if (!set) return;
+          void recordSwap(set.exerciseName, decision, replacement);
+        }}
+        done={done}
+      />
+    );
+  }
+
+  // Standalone mode (dev playground) — keep the existing transcript layout.
+  return (
+    <StandaloneView
+      state={state}
+      options={options}
+      busy={busy}
+      error={error}
+      textInput={textInput}
+      setTextInput={setTextInput}
+      swapSets={swapSets}
+      activeSwapIndex={activeSwapIndex}
+      done={done}
+      onPick={(value) => send(value)}
+      onSubmitText={() => send(textInput)}
+      onPickSwap={(decision, replacement) => {
+        const set = swapSets?.[activeSwapIndex];
+        if (!set) return;
+        void recordSwap(set.exerciseName, decision, replacement);
+      }}
+    />
+  );
+});
+
+// ── Wizard view ───────────────────────────────────────────────────────────
+
+interface WizardViewProps {
+  state: FlowState | null;
+  options: OptionsBlock | null;
+  stepInfo: StepInfo | null;
+  busy: boolean;
+  error: string;
+  textInput: string;
+  setTextInput: (v: string) => void;
+  swapSets: SwapChoiceSet[] | null;
+  activeSwapIndex: number;
+  canGoBack: boolean;
+  onBack: () => void;
+  onCancel?: () => void;
+  onPick: (value: string) => void;
+  onSubmitText: () => void;
+  onPickSwap: (decision: "keep" | "remove" | "swap", replacement?: string) => void;
+  done: boolean;
+}
+
+function WizardView({
+  state,
+  options,
+  stepInfo,
+  busy,
+  error,
+  textInput,
+  setTextInput,
+  swapSets,
+  activeSwapIndex,
+  canGoBack,
+  onBack,
+  onCancel,
+  onPick,
+  onSubmitText,
+  onPickSwap,
+  done,
+}: WizardViewProps) {
   const showSwapUI =
-    type === "modification" &&
+    state?.type === "modification" &&
     state?.currentSlot === "swap_choices" &&
     swapSets &&
     swapSets.length > 0 &&
     !done;
+  const activeSwap = showSwapUI ? swapSets![activeSwapIndex] : null;
 
+  const question = state?.currentSlot ? lastAssistantContent(state.history) : "";
+
+  // The previously-saved value (if user is revisiting via Back).
+  const previousValue = state?.currentSlot ? state.slots[state.currentSlot] : undefined;
+  const previousValueString =
+    typeof previousValue === "string"
+      ? previousValue
+      : previousValue && typeof previousValue === "object" && "value" in (previousValue as Record<string, unknown>)
+        ? String((previousValue as { value: unknown }).value)
+        : null;
+
+  return (
+    <div className="flex flex-col h-full bg-background">
+      {/* Header — back / step indicator / cancel */}
+      <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={!canGoBack || busy}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="Back"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div className="flex-1 text-center text-[11px] font-semibold text-muted-foreground tracking-wider uppercase">
+          {stepInfo
+            ? stepInfo.currentStepNumber > stepInfo.totalSteps
+              ? "Wrapping up"
+              : `Step ${stepInfo.currentStepNumber} of ${stepInfo.totalSteps}`
+            : ""}
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+          aria-label="Cancel"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+        {error ? (
+          <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded px-3 py-2">
+            {error}
+          </div>
+        ) : null}
+
+        {busy && !state ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Working...
+          </div>
+        ) : null}
+
+        {!busy && question ? (
+          <h2 className="text-base font-semibold leading-snug">{question}</h2>
+        ) : null}
+
+        {!busy && showSwapUI && activeSwap ? (
+          <SwapCard
+            set={activeSwap}
+            index={activeSwapIndex}
+            total={swapSets!.length}
+            onPick={onPickSwap}
+          />
+        ) : null}
+
+        {!busy && !showSwapUI && options && options.kind !== "free_text" && options.kind !== "bool" ? (
+          <OptionsRow
+            options={options}
+            selectedValue={previousValueString}
+            onPick={onPick}
+          />
+        ) : null}
+
+        {!busy && !showSwapUI && options?.kind === "bool" ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onPick("yes")}
+              className="text-xs px-4 py-2 rounded-full border bg-muted/30 hover:bg-muted/60 transition-colors"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={() => onPick("no")}
+              className="text-xs px-4 py-2 rounded-full border bg-muted/30 hover:bg-muted/60 transition-colors"
+            >
+              No
+            </button>
+          </div>
+        ) : null}
+
+        {!busy && !showSwapUI && (options?.kind === "free_text" || options?.allowOther) ? (
+          <FreeTextInput
+            value={textInput}
+            onChange={setTextInput}
+            onSend={onSubmitText}
+            placeholder={
+              options?.kind === "free_text"
+                ? "Type your answer"
+                : "Or type your own answer"
+            }
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ── Standalone view (dev playground) — legacy transcript layout ───────────
+
+interface StandaloneViewProps {
+  state: FlowState | null;
+  options: OptionsBlock | null;
+  busy: boolean;
+  error: string;
+  textInput: string;
+  setTextInput: (v: string) => void;
+  swapSets: SwapChoiceSet[] | null;
+  activeSwapIndex: number;
+  done: boolean;
+  onPick: (value: string) => void;
+  onSubmitText: () => void;
+  onPickSwap: (decision: "keep" | "remove" | "swap", replacement?: string) => void;
+}
+
+function StandaloneView({
+  state,
+  options,
+  busy,
+  error,
+  textInput,
+  setTextInput,
+  swapSets,
+  activeSwapIndex,
+  done,
+  onPick,
+  onSubmitText,
+  onPickSwap,
+}: StandaloneViewProps) {
+  const showSwapUI =
+    state?.type === "modification" &&
+    state?.currentSlot === "swap_choices" &&
+    swapSets &&
+    swapSets.length > 0 &&
+    !done;
   const activeSwap = showSwapUI ? swapSets![activeSwapIndex] : null;
 
   return (
-    <div className={embedded ? "flex flex-col gap-3" : "flex flex-col gap-3 max-w-2xl mx-auto p-4"}>
-      {!embedded ? <ChatTranscript history={state?.history ?? []} /> : null}
+    <div className="flex flex-col gap-3 max-w-2xl mx-auto p-4">
+      <ChatTranscript history={state?.history ?? []} />
 
       {error ? (
         <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded px-3 py-2">
@@ -332,22 +662,19 @@ export const GenerationFlowChat = forwardRef<
           set={activeSwap}
           index={activeSwapIndex}
           total={swapSets!.length}
-          onPick={(decision, replacement) => recordSwap(activeSwap.exerciseName, decision, replacement)}
+          onPick={onPickSwap}
         />
       ) : null}
 
       {!done && !busy && !showSwapUI && options ? (
-        <OptionsRow
-          options={options}
-          onPick={(value) => send(value)}
-        />
+        <OptionsRow options={options} onPick={onPick} />
       ) : null}
 
-      {!done && !busy && !showSwapUI && !embedded ? (
+      {!done && !busy && !showSwapUI ? (
         <FreeTextInput
           value={textInput}
           onChange={setTextInput}
-          onSend={() => send(textInput)}
+          onSend={onSubmitText}
           placeholder={
             options?.kind === "free_text"
               ? "Type your answer"
@@ -358,14 +685,14 @@ export const GenerationFlowChat = forwardRef<
         />
       ) : null}
 
-      {done && !embedded ? (
+      {done ? (
         <div className="text-sm text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-3 py-2">
           Done. Check the next pane for the result.
         </div>
       ) : null}
     </div>
   );
-});
+}
 
 // ── Subcomponents ─────────────────────────────────────────────────────────
 
@@ -391,34 +718,38 @@ function ChatTranscript({ history }: { history: FlowMessage[] }) {
 
 function OptionsRow({
   options,
+  selectedValue,
   onPick,
 }: {
   options: OptionsBlock;
+  selectedValue?: string | null;
   onPick: (value: string) => void;
 }) {
   if (options.kind === "free_text") return null;
   return (
     <div className="flex flex-wrap gap-2">
-      {options.options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          onClick={() => { if (!o.disabled) onPick(o.label); }}
-          disabled={o.disabled}
-          aria-disabled={o.disabled}
-          title={o.disabled ? "Coming soon" : undefined}
-          className={
-            o.disabled
-              ? "text-xs px-3 py-1.5 rounded-full border bg-muted/30 text-muted-foreground/60 cursor-not-allowed opacity-60"
-              : "text-xs px-3 py-1.5 rounded-full border bg-muted/30 hover:bg-muted/60 transition-colors"
-          }
-        >
-          {o.label}
-        </button>
-      ))}
-      {options.allowOther ? (
-        <span className="text-xs text-muted-foreground self-center">or type your own below</span>
-      ) : null}
+      {options.options.map((o) => {
+        const isSelected = !!selectedValue && (selectedValue === o.value || selectedValue === o.label);
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => { if (!o.disabled) onPick(o.label); }}
+            disabled={o.disabled}
+            aria-disabled={o.disabled}
+            title={o.disabled ? "Coming soon" : undefined}
+            className={
+              o.disabled
+                ? "text-xs px-3 py-1.5 rounded-full border bg-muted/30 text-muted-foreground/60 cursor-not-allowed opacity-60"
+                : isSelected
+                  ? "text-xs px-3 py-1.5 rounded-full border bg-primary text-primary-foreground border-primary"
+                  : "text-xs px-3 py-1.5 rounded-full border bg-muted/30 hover:bg-muted/60 transition-colors"
+            }
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -451,7 +782,7 @@ function FreeTextInput({
       <div className="flex justify-end">
         <Button onClick={onSend} disabled={!value.trim()} size="sm" className="gap-1.5">
           <ArrowRight className="w-3.5 h-3.5" />
-          Send
+          Continue
         </Button>
       </div>
     </div>
@@ -509,6 +840,16 @@ function SwapCard({
       </div>
     </div>
   );
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function lastAssistantContent(history: FlowMessage[]): string {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m && m.role === "assistant") return m.content;
+  }
+  return "";
 }
 
 function asErrorMessage(e: unknown): string {

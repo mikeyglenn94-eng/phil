@@ -164,6 +164,7 @@ async function handleStart(
     state,
     assistantMessage: message,
     options: slotOptions(slotDef, state),
+    stepInfo: stepInfoFor(state),
   });
 }
 
@@ -208,6 +209,7 @@ async function handleAdvance(
     state: stateOut,
     assistantMessage: message,
     options: slotOptions(slotDef, stateOut),
+    stepInfo: stepInfoFor(stateOut),
   });
 }
 
@@ -356,6 +358,20 @@ function slotOptions(slot: SlotDef | null, state: FlowState<unknown>) {
     kind: slot.kind,
     options: slot.options,
     allowOther: slot.allowOther ?? false,
+  };
+}
+
+/** Step indicator for the wizard UI. Filters slots by their `applies()` gate
+ *  given the current state so the count reflects only the slots the user
+ *  will actually see (e.g. session-flow's "focus" only counts when
+ *  session_type === "strength"). */
+function stepInfoFor(state: FlowState<unknown>): { currentStepNumber: number; totalSteps: number } {
+  const allSlots = getSlotList(state.type);
+  const applicable = allSlots.filter((d: SlotDef) => !d.applies || d.applies(state.slots));
+  const idx = applicable.findIndex((d: SlotDef) => d.name === state.currentSlot);
+  return {
+    currentStepNumber: idx >= 0 ? idx + 1 : applicable.length + 1, // +1 = "done"
+    totalSteps: applicable.length,
   };
 }
 

@@ -5458,8 +5458,33 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             </div>
           )}
 
+          {/* ── Wizard mode — replaces the chat surface while a flow is active.
+                The wizard owns its own header (back / step indicator / cancel)
+                and renders one slot per screen. The bubble area, the composer,
+                and the chip soft-escape are all hidden. */}
+          {activeFlowType && activeFlowContext && (
+            <div className="h-[300px] flex flex-col">
+              <GenerationFlowChat
+                // Keying on flow type forces a clean remount when the user
+                // bounces between flows (e.g. taps "Build my plan" mid-
+                // modification). Without it the same instance would carry
+                // stale internal state into the new flow type.
+                key={activeFlowType}
+                ref={flowRef}
+                type={activeFlowType}
+                context={activeFlowContext}
+                embedded
+                onCancel={() => {
+                  clearActiveFlow();
+                  addPhilMsg("Right. Moving on.");
+                }}
+                onComplete={(result) => void handleFlowComplete(result)}
+              />
+            </div>
+          )}
+
           {/* ── Expanded panel (non-training expanded, or training open, or team mode) ── */}
-          {(philExpanded || activeTab === "training" || isTeamMode) && (
+          {!activeFlowType && (philExpanded || activeTab === "training" || isTeamMode) && (
             <div className="h-[300px] flex flex-col">
               {/* Header */}
               <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between bg-muted/20">
@@ -5562,29 +5587,9 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   </div>
                 )}
 
-                {/* Embedded state-machine flow — chip row inline beneath the most recent Phil bubble.
-                    The flow's transcript is suppressed (embedded mode); chip rows / swap cards
-                    render directly. User input arrives via the top "Ask Phil" composer (or the
-                    panel composer on Dashboard) AND via chip taps inside the flow component.
-                    Both go through flowRef.send() — the flow's optimistic-commit emits the user
-                    message via onMessage, so this host appends it to philMessages. That gives
-                    each slot a clean user-pick bubble and leaves only the current slot's chip
-                    row visible (the row tracks state.currentSlot's options, single instance). */}
-                {activeFlowType && activeFlowContext ? (
-                  <div className="ml-8 pr-2">
-                    <GenerationFlowChat
-                      ref={flowRef}
-                      type={activeFlowType}
-                      context={activeFlowContext}
-                      embedded
-                      onMessage={(m) => {
-                        if (m.role === "user") addUserMsg(m.content);
-                        else addPhilMsg(m.content);
-                      }}
-                      onComplete={(result) => void handleFlowComplete(result)}
-                    />
-                  </div>
-                ) : null}
+                {/* While a flow is active the wizard above replaces this whole
+                    panel — see the activeFlowType branch outside this block.
+                    No embedded chat-history flow rendering needed here. */}
               </div>
               {/* Composer — hidden on Training (the top "Ask Phil" input is the
                   single composer for that tab). Visible on Dashboard / non-Training
