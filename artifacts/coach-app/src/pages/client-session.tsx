@@ -1874,7 +1874,8 @@ export default function ClientSession() {
       // 4) Clear the session-start stamp so reopening starts a fresh clock.
       if (sessionStartKey) { try { localStorage.removeItem(sessionStartKey); } catch { /* noop */ } }
       setFinishOpen(false);
-      setLocation("/chat");
+      // /chat route removed — return to /client where Phil chat now lives.
+      setLocation("/client");
     } catch (e) {
       console.error("[finish-session] failed", e);
       toast({ title: "Couldn't finish session — try again", variant: "destructive" });

@@ -72,7 +72,8 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { AskPhilDock } from "@/components/ask-phil-dock";
+// AskPhilDock removed — the floating Phil drawer is now the single chat
+// surface (rendered below). The launcher pill that navigated to /chat is gone.
 
 type Tab = "dashboard" | "training" | "nutrition" | "irl";
 
@@ -4456,9 +4457,7 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           )}
         </div>
       )}
-      {!isTeamMode && mode === "client" && activeTab === "dashboard" && (
-        <AskPhilDock context="dashboard" />
-      )}
+      {/* Dashboard Phil entry: the floating drawer below is the composer. */}
 
       {/* IRL Sessions Tab */}
       {!isTeamMode && activeTab === "irl" && mode === "client" && isIrlEnabled && (
@@ -4618,9 +4617,8 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         </div>
       )}
 
-      {!isTeamMode && mode === "client" && activeTab === "training" && (
-        <AskPhilDock context="calendar" />
-      )}
+      {/* Training Phil entry: the top "Ask Phil" input inside the calendar
+          toolbar is the composer; the floating drawer below shows Phil's bubbles. */}
 
       {/* Training Tab */}
       {(isTeamMode || activeTab === "training") && (
@@ -5278,12 +5276,17 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
         </div>
       )}
 
-      {/* Legacy bottom-pinned Phil drawer was removed. The chat now lives at /chat
-          and is launched from the AskPhilDock launcher pinned above the bottom edge. */}
-      {false && (
+      {/* Floating Phil drawer — single chat surface across tabs.
+          Training: top "Ask Phil" input is the composer; this drawer's input
+          is hidden but its avatar + bubble area still render so users see
+          Phil's responses.
+          Dashboard: this drawer's input IS the composer (no top input there).
+          The wrapping `false && (...)` gate that disabled the drawer in
+          90102ab is removed — the drawer is the single Phil chat surface now. */}
+      {(
         <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${
           (activeTab === "training" || isTeamMode)
-            ? (philOpen ? "h-[300px]" : "h-0")
+            ? (philOpen ? "h-[300px]" : "h-14")
             : (philExpanded ? "h-[300px]" : "h-14")
         }`}>
 

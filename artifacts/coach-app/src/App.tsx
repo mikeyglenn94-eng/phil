@@ -25,7 +25,8 @@ import { ClientProvider, useClientContext } from "./contexts/client-context";
 import { AuthProvider, useAuth } from "./contexts/auth-context";
 import { ChatProvider } from "./contexts/chat-context";
 import { RestTimerProvider } from "./contexts/rest-timer-context";
-import ChatPage from "./pages/chat";
+// ChatPage removed — Phil chat is unified into the floating drawer in client-area.
+// /chat route deleted; the launcher pill that targeted it is gone.
 import DevParser from "./pages/dev-parser";
 import DevGenerationFlow from "./pages/dev-generation-flow";
 import BestEffortsPage from "./pages/best-efforts";
@@ -245,13 +246,7 @@ function App() {
               </Route>
 
               {/* Athlete portal */}
-              <Route path="/chat">
-                <RequireAuth roles={["athlete", "coach", "admin"]}>
-                  <ClientProvider>
-                    <ClientPortalWrapper><ChatPage /></ClientPortalWrapper>
-                  </ClientProvider>
-                </RequireAuth>
-              </Route>
+              {/* /chat route removed — Phil chat unified into the floating drawer in /client. */}
               <Route path="/client/nutrition">
                 <RequireAuth roles={["athlete", "coach", "admin"]}>
                   <ClientProvider>
