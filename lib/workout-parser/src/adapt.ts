@@ -61,6 +61,8 @@ interface LegacyRunSession {
   duration: number | null;
   distanceKm: number | null;
   intensity: string;
+  /** Average pace string like "4:33/km" — used by the calendar card subtitle. */
+  avgPace: string | null;
   runBlocks: LegacyRunBlock[];
   exercises: LegacyExercise[];
 }
@@ -182,6 +184,10 @@ export function adaptToRunSession(workout: ParsedWorkout): LegacyRunSession {
     weight: null,
   }));
 
+  // Surface the first non-empty exercise pace as the session-level avgPace
+  // so calendar / dashboard summaries can read it without digging into runBlocks.
+  const avgPace = workout.exercises.find((ex) => ex.pace)?.pace ?? null;
+
   return {
     name: workout.name,
     source: "run_brain",
@@ -190,6 +196,7 @@ export function adaptToRunSession(workout: ParsedWorkout): LegacyRunSession {
     duration: null,
     distanceKm,
     intensity,
+    avgPace,
     runBlocks,
     exercises,
   };

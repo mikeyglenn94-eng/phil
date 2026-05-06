@@ -40,6 +40,7 @@ function enduranceSubtitle(session: Session): string {
     duration?: number | null;
     intensity?: string | null;
     structure?: string | null;
+    avgPace?: string | null;
   };
 
   const parts: string[] = [];
@@ -48,6 +49,10 @@ function enduranceSubtitle(session: Session): string {
     parts.push(`${formatDistance(s.distanceKm)}`);
   } else if (typeof s.duration === "number" && s.duration > 0) {
     parts.push(`${s.duration} min`);
+  }
+
+  if (s.avgPace && s.avgPace.trim().length > 0) {
+    parts.push(s.avgPace.trim());
   }
 
   if (s.intensity) {

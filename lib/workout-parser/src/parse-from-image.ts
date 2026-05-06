@@ -30,15 +30,19 @@ export interface ParseFromImageOptions {
 }
 
 function buildSystemPrompt(sport: EnduranceSport): string {
-  const paceUnit = sport === "swim" ? "MM:SS per 100m" : "MM:SS per km";
+  const paceFormat = sport === "swim" ? `"M:SS/100m" (e.g. "1:42/100m")` : `"M:SS/km" (e.g. "4:33/km")`;
+  const paceConvert =
+    sport === "swim"
+      ? "If shown as min/100yd, convert to min/100m (multiply by 1.0936)."
+      : "If shown as min/mile, convert to min/km (divide by 1.609). Always include the /km suffix.";
   return `You read totals off endurance-activity screenshots. The sport is ${sport}. The user has uploaded one or more images that are different views of the SAME activity.
 
 You have NO personality. You ONLY produce JSON.
 
 ## Extract
-- distanceKm: total distance in kilometres (convert miles to km if shown).
+- distanceKm: total distance in kilometres (convert miles to km if shown — multiply by 1.609).
 - durationSeconds: total or moving time, in seconds.
-- avgPace: average pace as ${paceUnit}. Convert if shown in different units.
+- avgPace: average pace as a string in the format ${paceFormat}. ${paceConvert} ALWAYS include the unit suffix in the string. Examples: "4:33/km", "5:12/km", "1:42/100m". Never return a bare "4:33" without the suffix.
 - date: ISO date string (YYYY-MM-DD) if visible, else null.
 - name: activity title from the screenshot if visible, else null.
 
@@ -47,7 +51,7 @@ If the images clearly show DIFFERENT activities (different distance, different t
 { "ok": false, "reason": "images_appear_to_be_different_activities", "message": "<short explanation>" }
 
 ## Success
-{ "ok": true, "distanceKm": <number>, "durationSeconds": <number>, "avgPace": "<MM:SS>" | null, "date": "<YYYY-MM-DD>" | null, "name": "<string>" | null }
+{ "ok": true, "distanceKm": <number>, "durationSeconds": <number>, "avgPace": ${paceFormat} | null, "date": "<YYYY-MM-DD>" | null, "name": "<string>" | null }
 
 Return ONLY the JSON object. No markdown fences. No commentary.`;
 }
@@ -158,7 +162,7 @@ export async function parseWorkoutFromImage(
     typeof parsed.durationSeconds === "number" ? parsed.durationSeconds : null;
   const avgPace =
     typeof parsed.avgPace === "string" && parsed.avgPace.trim().length > 0
-      ? parsed.avgPace.trim()
+      ? normalisePaceSuffix(parsed.avgPace.trim(), opts.sport)
       : null;
   const date =
     typeof parsed.date === "string" && parsed.date.trim().length > 0 ? parsed.date.trim() : null;
@@ -174,15 +178,9 @@ export async function parseWorkoutFromImage(
     };
   }
 
-  const notes = [
-    distanceKm != null ? `${distanceKm} km` : null,
-    durationSeconds != null ? formatDuration(durationSeconds) : null,
-    avgPace ? `@ ${avgPace}` : null,
-    date ? date : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
+  // Notes carry only the date — distance / duration / pace each have their
+  // own ParsedExercise field, and adapt.ts's composeNotes will append pace.
+  // Putting them in notes would duplicate them in the saved session.
   const exercise: ParsedExercise = {
     name: defaultExerciseName(opts.sport),
     sets: 1,
@@ -191,7 +189,7 @@ export async function parseWorkoutFromImage(
     rpe: null,
     tempo: null,
     rest: null,
-    notes: notes || null,
+    notes: date,
     distance: distanceKm != null ? `${distanceKm}km` : null,
     duration: durationSeconds != null ? formatDuration(durationSeconds) : null,
     pace: avgPace,
@@ -234,6 +232,14 @@ function autoName(sport: EnduranceSport): string {
     case "swim":
       return "Swim Session";
   }
+}
+
+/** Defensive: if the model returns a bare "4:33" we tack on the unit suffix
+ *  so downstream rendering shows the expected "4:33/km" form. */
+function normalisePaceSuffix(pace: string, sport: EnduranceSport): string {
+  if (/\/(km|100m|100yd|mi|mile)\b/i.test(pace)) return pace;
+  const suffix = sport === "swim" ? "/100m" : "/km";
+  return `${pace}${suffix}`;
 }
 
 function formatDuration(seconds: number): string {

@@ -195,10 +195,12 @@ export function parseRunToEditable(session: any): EditableSession {
           };
         }
         // rowType === "run" (general block content)
+        // Surface pace via name so editableSessionToSession's round-trip
+        // (which reads pace from name when it starts with "@") preserves it.
         return {
           ...blankRow(`rb-${bi}-${ri}`),
           value: row.distance ?? row.duration ?? "",
-          name: row.description ?? "",
+          name: row.pace ? `@ ${row.pace}` : (row.description ?? ""),
           notes: row.effort ?? "",
         };
       }),
