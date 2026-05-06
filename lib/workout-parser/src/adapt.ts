@@ -63,7 +63,6 @@ interface LegacyRunSession {
   intensity: string;
   runBlocks: LegacyRunBlock[];
   exercises: LegacyExercise[];
-  runLog?: { distance: number | null; pace: string | null; hr: number | null }[];
 }
 
 const idForIndex = (i: number): string => `ex-${Date.now()}-${i}`;
@@ -193,7 +192,6 @@ export function adaptToRunSession(workout: ParsedWorkout): LegacyRunSession {
     intensity,
     runBlocks,
     exercises,
-    ...(workout.runLog ? { runLog: workout.runLog } : {}),
   };
 }
 

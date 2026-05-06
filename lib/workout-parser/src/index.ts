@@ -1,7 +1,7 @@
 export { parseWorkout } from "./parse.js";
 export { parseWorkoutFromImage } from "./parse-from-image.js";
 export { adaptToStrengthSession, adaptToRunSession } from "./adapt.js";
-export type { ImageInput, ParseFromImageOptions } from "./parse-from-image.js";
+export type { ImageInput, ParseFromImageOptions, EnduranceSport } from "./parse-from-image.js";
 export type {
   Sport,
   ParsedExercise,
@@ -12,5 +12,4 @@ export type {
   ParseOptions,
   Confidence,
   ModelUsage,
-  RunLogInterval,
 } from "./types.js";

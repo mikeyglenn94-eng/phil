@@ -6398,24 +6398,13 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                 {screenshotError && (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs space-y-2">
                     <p className="text-amber-900 dark:text-amber-100 leading-snug">{screenshotError.message}</p>
-                    <div className="flex gap-2">
-                      {screenshotError.reason === "appears_to_be_strength_session" && (
-                        <button
-                          type="button"
-                          onClick={() => { setQuickAddType("strength"); setScreenshotError(null); }}
-                          className="px-2 py-1 rounded-md border border-amber-400 bg-background text-foreground hover:bg-muted/50 transition-colors"
-                        >
-                          Switch to strength
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setScreenshotError(null)}
-                        className="px-2 py-1 text-amber-700 dark:text-amber-300 hover:underline"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setScreenshotError(null)}
+                      className="px-2 py-1 text-amber-700 dark:text-amber-300 hover:underline"
+                    >
+                      Dismiss
+                    </button>
                   </div>
                 )}
               </>

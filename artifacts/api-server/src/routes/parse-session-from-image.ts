@@ -2,19 +2,20 @@
  * POST /parse-session-from-image
  *
  * Vision-based parser for endurance session screenshots (Strava, Garmin,
- * Apple Fitness, Coros, treadmill consoles). Accepts 1+ base64-encoded images
- * of a single activity, returns the same shape as /parse-run-session so the
- * existing preview/save UI can consume it.
+ * Apple Fitness, Coros, treadmill consoles). The user has already chosen
+ * the sport via the modal tab they're on, so sport is required.
  *
- * Body shape: { imageBase64Array: string[], imageMimeTypes: string[], sport?: Sport, name?: string }
+ * Body shape: { imageBase64Array: string[], imageMimeTypes: string[], sport: "run"|"cycle"|"swim", name?: string }
+ * Returns the same LegacyRunSession shape as /parse-run-session so the
+ * existing preview/save UI can consume it unchanged.
  */
 
 import { Router, type IRouter } from "express";
 import {
   adaptToRunSession,
   parseWorkoutFromImage,
+  type EnduranceSport,
   type ImageInput,
-  type Sport,
 } from "@workspace/workout-parser";
 import { logApiCost } from "../lib/log-api-cost";
 
@@ -23,13 +24,17 @@ const router: IRouter = Router();
 interface RequestBody {
   imageBase64Array?: string[];
   imageMimeTypes?: string[];
-  sport?: Sport;
+  sport?: EnduranceSport;
   name?: string;
 }
 
 router.post("/parse-session-from-image", async (req, res): Promise<void> => {
   const { imageBase64Array, imageMimeTypes, sport, name } = (req.body ?? {}) as RequestBody;
 
+  if (sport !== "run" && sport !== "cycle" && sport !== "swim") {
+    res.status(400).json({ error: "sport must be one of run, cycle, swim." });
+    return;
+  }
   if (!Array.isArray(imageBase64Array) || imageBase64Array.length === 0) {
     res.status(400).json({ error: "At least one image is required." });
     return;
@@ -45,7 +50,7 @@ router.post("/parse-session-from-image", async (req, res): Promise<void> => {
   }));
 
   const result = await parseWorkoutFromImage(images, {
-    sport: sport === "cycle" || sport === "swim" || sport === "run" ? sport : undefined,
+    sport,
     sessionName: name,
   });
 
@@ -58,9 +63,7 @@ router.post("/parse-session-from-image", async (req, res): Promise<void> => {
 
   if (!result.ok) {
     const status =
-      result.reason === "appears_to_be_strength_session" ||
       result.reason === "images_appear_to_be_different_activities" ||
-      result.reason === "sport_unclear" ||
       result.reason === "no_exercises_found"
         ? 422
         : 500;
@@ -71,9 +74,6 @@ router.post("/parse-session-from-image", async (req, res): Promise<void> => {
     return;
   }
 
-  // Adapt to LegacyRunSession (shared with /parse-run-session) so the existing
-  // preview/save UI just works. Cycle/swim sessions get the run_brain shape;
-  // the client stamps source: "cycle_brain" / "swim_brain" before saving.
   res.json(adaptToRunSession(result));
 });
 
