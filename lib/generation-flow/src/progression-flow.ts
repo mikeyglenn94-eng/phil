@@ -149,7 +149,9 @@ function coerceProgressedSession(
   const sourceSession = sources.find((s) => s.id === progressedFromSessionId) ?? sources[0];
   if (!sourceSession) return null;
 
-  const computedDate = addDays(sourceSession.date, 7 * (progressionWeek - 1));
+  // progressionWeek is 1-indexed; week 1 lands ONE week after the source
+  // (not on the source week itself). week N lands N weeks after.
+  const computedDate = addDays(sourceSession.date, 7 * progressionWeek);
 
   const id = `session-prog-${randomId(8)}-${index}`;
   const dayNumber = sourceSession.dayNumber ?? null;
@@ -158,8 +160,22 @@ function coerceProgressedSession(
       ? r.name.trim()
       : sourceSession.name;
 
+  // Fall back to the source session's exercises when the LLM omits them or
+  // returns only empty-name entries. Without this, malformed model output
+  // silently produces empty session cards on the calendar.
   const exercisesRaw = Array.isArray(r.exercises) ? r.exercises : [];
-  const exercises: GeneratedExercise[] = exercisesRaw.map((ex, i) => coerceExercise(ex, i));
+  const llmExercises: GeneratedExercise[] = exercisesRaw
+    .map((ex, i) => coerceExercise(ex, i))
+    .filter((ex) => ex.name.trim().length > 0);
+  const exercises: GeneratedExercise[] =
+    llmExercises.length > 0
+      ? llmExercises
+      : sourceSession.exercises.map((ex, i) => ({
+          ...ex,
+          id: `ex-prog-${randomId(6)}-${i}`,
+          rawText: "",
+          weekProgression: [],
+        }));
 
   return {
     id,

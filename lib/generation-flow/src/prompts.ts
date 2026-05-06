@@ -285,7 +285,7 @@ Return ONLY valid JSON:
 - Preserve dayNumber from the source so progressed copies land on the same weekday in their week.
 - Set source: "progression_block" on every generated session.
 - Set progressedFromSessionId to the original session.id and progressionWeek to the 1-indexed week.
-- Date computation is done in code, not by you. Do NOT output a "date" field — the server fills it as sourceDate + 7 × (progressionWeek - 1).
+- Date computation is done in code, not by you. Do NOT output a "date" field — the server fills it as sourceDate + 7 × progressionWeek (so progressionWeek=1 lands one week after the source, progressionWeek=N lands N weeks after).
 - Return ONLY the JSON object. No markdown fences. No commentary.`;
 
 // ── Confirmation writer (used after modifications applied) ─────────────────

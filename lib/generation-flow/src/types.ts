@@ -479,11 +479,8 @@ export const PROGRESSION_SLOTS: SlotDef[] = [
     // wave is dropped if weeks < 3.
     hint: "Progression style. The route filters this list based on weeks + session-type breakdown.",
   },
-  {
-    name: "confirm",
-    kind: "bool",
-    hint: "User has reviewed the summary and approved generating the block.",
-  },
+  // No confirm slot: progression auto-generates and drops onto the calendar
+  // with a toast. There is no preview UI to confirm against.
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
