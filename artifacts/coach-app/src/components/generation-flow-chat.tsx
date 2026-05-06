@@ -26,6 +26,8 @@ type FlowType = "programme" | "session" | "modification" | "progression";
 interface SlotOption {
   value: string;
   label: string;
+  /** "Coming soon" — chip renders but is non-interactive. */
+  disabled?: boolean;
 }
 
 interface OptionsBlock {
@@ -401,8 +403,15 @@ function OptionsRow({
         <button
           key={o.value}
           type="button"
-          onClick={() => onPick(o.label)}
-          className="text-xs px-3 py-1.5 rounded-full border bg-muted/30 hover:bg-muted/60 transition-colors"
+          onClick={() => { if (!o.disabled) onPick(o.label); }}
+          disabled={o.disabled}
+          aria-disabled={o.disabled}
+          title={o.disabled ? "Coming soon" : undefined}
+          className={
+            o.disabled
+              ? "text-xs px-3 py-1.5 rounded-full border bg-muted/30 text-muted-foreground/60 cursor-not-allowed opacity-60"
+              : "text-xs px-3 py-1.5 rounded-full border bg-muted/30 hover:bg-muted/60 transition-colors"
+          }
         >
           {o.label}
         </button>

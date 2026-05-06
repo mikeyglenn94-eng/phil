@@ -54,7 +54,12 @@ function slotToSpec(def: SlotDef) {
   return {
     name: def.name,
     kind: def.kind,
-    options: def.options?.map((o) => o.value),
+    // Only enabled options are sent to the LLM as valid extractables. Disabled
+    // values are listed separately so the LLM knows to route those answers to
+    // "other" with a free-text note instead of selecting a value the
+    // validator will reject.
+    options: def.options?.filter((o) => !o.disabled).map((o) => o.value),
+    disabledOptions: def.options?.filter((o) => o.disabled).map((o) => o.value),
     allowOther: def.allowOther ?? false,
     hint: def.hint,
   };
@@ -98,10 +103,29 @@ function coerceSlot(def: SlotDef, raw: unknown): CoerceResult {
 }
 
 function coerceSingleSelect(def: SlotDef, raw: unknown): CoerceResult {
-  const validValues = new Set(def.options?.map((o) => o.value) ?? []);
+  // Build the set of accepted values: enabled options + "other" if allowed.
+  // Disabled options are dropped from the validator so the model / user can't
+  // route the flow into a coming-soon path.
+  const enabledValues = new Set(
+    (def.options ?? []).filter((o) => !o.disabled).map((o) => o.value),
+  );
+  const disabledValues = new Set(
+    (def.options ?? []).filter((o) => o.disabled).map((o) => o.value),
+  );
+  const validValues = new Set(enabledValues);
   if (def.allowOther) validValues.add("other");
 
+  const rejectIfDisabled = (v: string): CoerceResult | null =>
+    disabledValues.has(v)
+      ? {
+          ok: false,
+          reason: `value "${v}" is currently disabled (coming soon). Pick one of: ${[...enabledValues].join(", ")}`,
+        }
+      : null;
+
   if (typeof raw === "string") {
+    const disabledReject = rejectIfDisabled(raw);
+    if (disabledReject) return disabledReject;
     if (validValues.has(raw)) return { ok: true, value: raw };
     return {
       ok: false,
@@ -111,7 +135,10 @@ function coerceSingleSelect(def: SlotDef, raw: unknown): CoerceResult {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     const obj = raw as { value?: unknown; note?: unknown };
     const v = typeof obj.value === "string" ? obj.value : null;
-    if (v && validValues.has(v)) {
+    if (!v) return { ok: false, reason: "object value missing valid 'value' field" };
+    const disabledReject = rejectIfDisabled(v);
+    if (disabledReject) return disabledReject;
+    if (validValues.has(v)) {
       const note = typeof obj.note === "string" ? obj.note.trim() : "";
       return { ok: true, value: { value: v, note: note || null } };
     }

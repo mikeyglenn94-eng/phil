@@ -44,7 +44,8 @@ export const SLOT_PARSER_SYSTEM = `You are a slot extraction function. You recei
 You do NOT have a personality. You do NOT respond to the user. You ONLY produce JSON.
 
 Rules:
-- For single_select slots: return the canonical value (snake_case) from the slot's options. If the user said something close to "other" or none of the options fit but they answered the question, return "other" with a free-text note in the same entry.
+- For single_select slots: return the canonical value (snake_case) from the slot's "options" list. If the user said something close to "other" or none of the options fit but they answered the question, return "other" with a free-text note in the same entry.
+- A slot may also list "disabledOptions" — these are values that will be rejected by validation (they're "coming soon"). NEVER return a value from disabledOptions. If the user's answer maps to a disabled value (e.g. they say "marathon" and "race_prep" is disabled), return value: "other" with the user's phrasing in the note instead.
 - For multi_select slots: return an array of canonical values. If the user mentioned an option not on the list (e.g. "kettlebells") and the slot allows "other", include "other" plus a note.
 - For free_text slots: return the user's answer trimmed. If the user said "none" / "skip" / "no" for an optional slot, set value to "none".
 - For bool slots: return true for affirmative ("yes", "do it", "go", "build it", "looks good"), false for negative ("no", "tweak it", "not yet"). If unclear, return null.

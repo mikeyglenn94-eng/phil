@@ -9,6 +9,11 @@ export type SlotKind = "single_select" | "multi_select" | "free_text" | "bool";
 export interface SlotOption {
   value: string;
   label: string;
+  /** When true, the option is shown but not selectable. Used for "coming soon"
+   *  values where the philosophy doesn't yet support good generation (e.g.
+   *  race_prep without per-distance templates). The OptionsRow renderer dims
+   *  the chip and the slot parser rejects the value. */
+  disabled?: boolean;
 }
 
 export interface SlotDef {
@@ -219,11 +224,15 @@ export const PROGRAMME_SLOTS: SlotDef[] = [
     options: [
       { value: "strength", label: "Strength" },
       { value: "hypertrophy", label: "Hypertrophy" },
-      { value: "fat_loss", label: "Fat loss" },
+      { value: "endurance", label: "Endurance" },
+      { value: "hybrid", label: "Hybrid (lift + endurance)" },
+      // Race prep is gated until the philosophy adds per-distance templates
+      // (5K / 10K / half / full / ultra). Hyrox is the only race the
+      // generator handles well today via the Hyrox-specific section.
+      { value: "race_prep", label: "Race prep (coming soon)", disabled: true },
       { value: "general_fitness", label: "General fitness" },
-      { value: "sport_specific", label: "Sport-specific" },
     ],
-    hint: "What the client is training for. If they say a sport or event, set sport_specific and capture the detail in the note.",
+    hint: "What the user is training for. Phil's audience is hybrid (run + lift), so the options reflect that. Fat-loss as a primary goal is removed — it surfaces via context if relevant. If a user says race-prep or names a specific distance other than Hyrox, treat it as 'other' with a note and let the question writer prompt for clarification rather than driving the flow into a disabled value.",
   },
   {
     name: "experience",
