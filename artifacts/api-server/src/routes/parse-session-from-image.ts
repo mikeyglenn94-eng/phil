@@ -74,7 +74,18 @@ router.post("/parse-session-from-image", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(adaptToRunSession(result));
+  const adapted = adaptToRunSession(result);
+  // Debug: confirm pace survives adapt.ts. Visible in server stdout / pino.
+  // Remove once pace extraction is confirmed working end-to-end.
+  req.log.info(
+    {
+      avgPace: adapted.avgPace,
+      distanceKm: adapted.distanceKm,
+      firstRowPace: adapted.runBlocks?.[0]?.rows?.[0]?.pace ?? null,
+    },
+    "[parse-session-from-image] adapted",
+  );
+  res.json(adapted);
 });
 
 export default router;

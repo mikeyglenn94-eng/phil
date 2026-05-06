@@ -51,7 +51,7 @@ If the images clearly show DIFFERENT activities (different distance, different t
 { "ok": false, "reason": "images_appear_to_be_different_activities", "message": "<short explanation>" }
 
 ## Success
-{ "ok": true, "distanceKm": <number>, "durationSeconds": <number>, "avgPace": ${paceFormat} | null, "date": "<YYYY-MM-DD>" | null, "name": "<string>" | null }
+{ "ok": true, "distanceKm": <number>, "durationSeconds": <number>, "avgPace": "<string e.g. 4:33/km>" | null, "date": "<YYYY-MM-DD>" | null, "name": "<string>" | null }
 
 Return ONLY the JSON object. No markdown fences. No commentary.`;
 }
@@ -107,6 +107,11 @@ export async function parseWorkoutFromImage(
           total_tokens: completion.usage.total_tokens,
         }
       : null;
+    // Debug: surface the raw vision response so we can verify the model is
+    // actually returning avgPace. Remove once pace extraction is confirmed
+    // working in production.
+    // eslint-disable-next-line no-console
+    console.log("[parse-from-image] raw model output:", rawModelOutput);
   } catch (err) {
     return {
       ok: false,
@@ -164,6 +169,10 @@ export async function parseWorkoutFromImage(
     typeof parsed.avgPace === "string" && parsed.avgPace.trim().length > 0
       ? normalisePaceSuffix(parsed.avgPace.trim(), opts.sport)
       : null;
+  // Debug: log the avgPace extraction so we can see whether the LLM omitted
+  // the field or it was lost in mapping. Remove once confirmed.
+  // eslint-disable-next-line no-console
+  console.log("[parse-from-image] parsed.avgPace:", parsed.avgPace, "→ normalised:", avgPace);
   const date =
     typeof parsed.date === "string" && parsed.date.trim().length > 0 ? parsed.date.trim() : null;
 
