@@ -5287,8 +5287,14 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
             : (philExpanded ? "h-[300px]" : "h-14")
         }`}>
 
-          {/* ── Slim bar (non-training, collapsed) ── */}
-          {activeTab !== "training" && !isTeamMode && !philExpanded && (
+          {/* ── Slim bar (collapsed) ──
+              Avatar button always renders so users can still expand the panel.
+              The inline input + send button render only on surfaces without a
+              dedicated composer — i.e. NOT Training (top "Ask Phil" is the
+              composer there) and NOT team mode (same). On Dashboard etc., the
+              slim bar's input is the only Phil composer until the panel
+              expands. */}
+          {!philExpanded && (
             <div className="h-14 flex items-center gap-2.5 px-3">
               <button
                 type="button"
@@ -5301,23 +5307,27 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
                   <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-background" />
                 )}
               </button>
-              <input
-                ref={philInputRef}
-                value={philPanelInput}
-                onChange={e => setPhilPanelInput(e.target.value)}
-                onFocus={() => { setPhilExpanded(true); setPhilUnread(false); }}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
-                placeholder="Message Phil…"
-                className="flex-1 min-w-0 h-9 rounded-xl border bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
-              />
-              <Button
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                onClick={() => void handlePhilPanelSubmit()}
-                disabled={!philPanelInput.trim() || cmdParsing}
-              >
-                <Send className="w-3.5 h-3.5" />
-              </Button>
+              {(activeTab !== "training" && !isTeamMode) && (
+                <>
+                  <input
+                    ref={philInputRef}
+                    value={philPanelInput}
+                    onChange={e => setPhilPanelInput(e.target.value)}
+                    onFocus={() => { setPhilExpanded(true); setPhilUnread(false); }}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handlePhilPanelSubmit(); } }}
+                    placeholder="Message Phil…"
+                    className="flex-1 min-w-0 h-9 rounded-xl border bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                  />
+                  <Button
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => void handlePhilPanelSubmit()}
+                    disabled={!philPanelInput.trim() || cmdParsing}
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </Button>
+                </>
+              )}
             </div>
           )}
 
