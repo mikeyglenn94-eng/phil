@@ -5296,9 +5296,16 @@ export default function ClientArea({ clientIdOverride, mode = "coach", calendarC
           90102ab is removed — the drawer is the single Phil chat surface now. */}
       {(
         <div className={`shrink-0 overflow-hidden border-t bg-background transition-all duration-300 ease-in-out ${
-          (activeTab === "training" || isTeamMode)
-            ? (philOpen ? "h-[300px]" : "h-14")
-            : (philExpanded ? "h-[300px]" : "h-14")
+          // When a state-machine flow is active, force the drawer to its full
+          // height regardless of philOpen/philExpanded so the current chip
+          // row and Phil's question are always in view. When the flow ends
+          // (clearActiveFlow on completion or cancel), the drawer drops back
+          // to whatever philOpen/philExpanded say.
+          activeFlowType
+            ? "h-[300px]"
+            : (activeTab === "training" || isTeamMode)
+              ? (philOpen ? "h-[300px]" : "h-14")
+              : (philExpanded ? "h-[300px]" : "h-14")
         }`}>
 
           {/* ── Slim bar (collapsed) ──
